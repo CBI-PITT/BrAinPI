@@ -1,4 +1,4 @@
-# bil-api
+# bil_api
 
 The goal of this project is to create a flask-based API for public access to Brain Image Library (BIL) datasets in many forms
 
