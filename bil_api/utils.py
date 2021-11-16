@@ -183,7 +183,10 @@ def loadDataset(selection: int):
         
     
     
-    
+def prettyPrintDict(aDict):
+    print('{}{}{}'.format('Number'.ljust(10),'Name'.ljust(20),'File'))
+    for k,v in aDict.items():
+        print('{}{}{}'.format(k.ljust(10),v[0].ljust(20),v[1]))
     
     
     

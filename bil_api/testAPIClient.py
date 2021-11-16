@@ -122,7 +122,7 @@ def get(location):
 
 print('Available datasets \n')
 available = get('available-datasets')
-print(available)
+utils.prettyPrintDict(available)
 
 selectedDataset = input('Enter the number of the dataset do you wish to view? \n')
 
