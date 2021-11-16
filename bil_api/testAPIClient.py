@@ -7,7 +7,7 @@ Created on Wed Nov  3 20:24:42 2021
 
 import numpy as np
 import os,io, zlib, requests
-import urllib, json 
+import urllib, json, copy
 
 import utils
 import napari
@@ -32,8 +32,8 @@ class dataWrapper:
     resolution level.
     
     The only optional parameter is 'ResolutionLock' which forces the class to adopt
-    the metadata spefigic that resoiltion level and always request data from 
-    that specoific resoltution level
+    the metadata specific to that resolution level and forces the class to always 
+    requests data from that specoific resoltution level.
     '''
     def __init__(self,selectedDataset,ResolutionLock=0):
         
@@ -46,12 +46,22 @@ class dataWrapper:
         self.TimePoints = int(self.metadata['TimePoints'])
         self.Channels = int(self.metadata['Channels'])
         
-        self.ResolutionLock=ResolutionLock
+        self.changeResolutionLock(ResolutionLock)
         
+    def changeResolutionLock(self, ResolutionLock=0):
+        self.ResolutionLock=ResolutionLock
         self.shape = tuple([self.TimePoints,self.Channels] + list(self.metadata[(self.ResolutionLock,0,0,'shape')][-3::]))
         self.chunks = tuple(self.metadata[(self.ResolutionLock,0,0,'chunks')])
         self.dtype = np.dtype(self.metadata[(self.ResolutionLock,0,0,'dtype')])
         self.ndim = len(self.metadata[(self.ResolutionLock,0,0,'shape')])
+        
+    def makeNewArray(self, ResolutionLock=None):
+        ResolutionLock = self.ResolutionLock if ResolutionLock is None else ResolutionLock
+        newArray = copy.deepcopy(self)
+        newArray.changeResolutionLock(ResolutionLock)
+        return newArray
+
+        
         
     # @functools.lru_cache(maxsize=128, typed=False)   
     def __getitem__(self,key):
@@ -121,17 +131,9 @@ data = dataWrapper(selectedDataset)
 imagePyramid = []
 channel_axis = 1
 for ii in range(data.ResolutionLevels):
-    imagePyramid.append(dataWrapper(selectedDataset=selectedDataset,ResolutionLock=ii))
+    imagePyramid.append(data.makeNewArray(ResolutionLock=ii))
     imagePyramid[-1] = da.from_array(imagePyramid[-1],chunks=imagePyramid[-1].chunks,fancy=False)
-    # if os.environ["NAPARI_ASYNC"] == '1' or os.environ["NAPARI_OCTREE"] == "1":
-    #     while imagePyramid[-1].shape[0] == 1:
-    #         imagePyramid[-1] = imagePyramid[-1][0]
-    # print(imagePyramid[-1].shape)
-    # imagePyramid[-1] = imagePyramid[-1]*100
-    # imagePyramid[-1] = da.from_array(imagePyramid[-1],chunks=(1,1,1,1000,1000),fancy=False)
 print(imagePyramid)
-
-# imagePyramid = imagePyramid[0:-4]
 
 
 
