@@ -9,8 +9,11 @@ import flask, json, zarr, zlib, io, os, ast, functools
 from flask import request, Response
 import numpy as np
 
-from dataset_info import dataset_info
-import utils, ims, config, zarrLoader
+from bil_api.dataset_info import dataset_info
+from bil_api import config
+from bil_api import utils
+from bil_api import zarrLoader
+import imaris_ims_file_reader as ims
 
 
 config.opendata = {}
@@ -241,12 +244,15 @@ def fmostCompress():
 
 
 
-def launchAPI():
-    app.run(threaded=True,host='0.0.0.0')
+# def launchAPI():
+#     app.run(threaded=True,host='0.0.0.0')
+
+
 
 if __name__ == '__main__':
     app.run(threaded=True,host='0.0.0.0')
-    
+
+
     
     
     

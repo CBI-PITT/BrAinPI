@@ -19,10 +19,10 @@ def dataset_info():
         3:('HooksBrain','h:/Acquire/Hooks/BrainA.ims')
                }
     
-    choices = {
-        1:('fmost','/CBI_Hive/globus/pitt/bil/t00_c00_0.zarr'),
-        2:('testIMS','/CBI_FastStore/testData/bitplaneConverter.ims'),
-        3:('HooksBrain','/CBI_Hive/Acquire/Hooks/BrainA.ims')
-               }
+    # choices = {
+    #     1:('fmost','/CBI_Hive/globus/pitt/bil/t00_c00_0.zarr'),
+    #     2:('testIMS','/CBI_FastStore/testData/bitplaneConverter.ims'),
+    #     3:('HooksBrain','/CBI_Hive/Acquire/Hooks/BrainA.ims')
+    #            }
     
     return choices

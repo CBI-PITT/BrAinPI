@@ -9,9 +9,10 @@ Created on Thu Nov  4 10:05:34 2021
 import numpy as np
 import io,zlib,ast,os
 
-from dataset_info import dataset_info
-import ims, zarrLoader
-import config
+import imaris_ims_file_reader as ims
+from bil_api.dataset_info import dataset_info
+from bil_api import zarrLoader
+from bil_api import config
 from numcodecs import Blosc
 
 
