@@ -5,7 +5,7 @@ Created on Wed Nov  3 11:06:07 2021
 @author: alpha
 """
 
-import flask, json, zarr, zlib, io, os, ast, functools
+import flask, json, zarr, os, ast, functools
 from flask import request, Response
 import numpy as np
 
@@ -88,72 +88,6 @@ def meta():
         return "Error: No dataset id provided"
     
 
-
-
-
-# # A route to return specific dataset chunks.
-# @app.route('/api/fmostCompress', methods=['GET'])
-# def fmostCompress():
-#     '''
-#     Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
-    
-#     tstart,tstop,tstep
-#     cstart,cstop,cstep
-#     zstart,zstop,zstep
-#     ystart,ystop,ystep
-#     xstart,xstop,xstep
-
-#     Returns
-#     -------
-#     Bytestring of compresed numpy array
-
-#     '''
-    
-#     requiredParam = (
-#         'dset',
-#         'res',
-#         'tstart','tstop','tstep',
-#         'cstart','cstop','cstep',
-#         'zstart','zstop','zstep',
-#         'ystart','ystop','ystep',
-#         'xstart','xstop','xstep'
-#         )
-    
-#     print(request.args)
-#     if all((x in request.args for x in requiredParam)):
-#         pass
-#     else:
-#         return 'A required data set, resolution level or (t,c,z,y,x) start/stop/step parameter is missing'
-    
-#     intArgs = {}
-#     for x in request.args:
-#         intArgs[x] = ast.literal_eval(request.args[x])
-#     print(intArgs)
-    
-#     utils.loadDataset(intArgs['dset'])
-    
-    
-#     # dataPath = dataset_info()[intArgs['dset']][1]
-#     datapath = utils.loadDataset(intArgs['dset'])
-#     globals()[datapath]
-    
-#     # if os.path.splitext(dataPath)[1] == '.ims':
-#     #     z = ims.ims(dataPath)
-    
-#     tslice = slice(intArgs['tstart'],intArgs['tstop'],intArgs['tstep'])
-#     cslice = slice(intArgs['cstart'],intArgs['cstop'],intArgs['cstep'])
-#     zslice = slice(intArgs['zstart'],intArgs['zstop'],intArgs['zstep'])
-#     yslice = slice(intArgs['ystart'],intArgs['ystop'],intArgs['ystep'])
-#     xslice = slice(intArgs['xstart'],intArgs['xstop'],intArgs['xstep'])
-    
-#     # print(z.shape)
-#     out = globals()[datapath][intArgs['res'],tslice,cslice,zslice,yslice,xslice]
-#     # out = z[intArgs['res'],tslice,cslice,zslice,yslice,xslice]
-#     # print(out.max())
-#     # out = np.zeros((5,5,5))
-#     out,_,_ = utils.compress_np(out)
-#     return Response(response=out, status=200,
-#                     mimetype="application/octet_stream")
 
 
 @functools.lru_cache(maxsize=10000, typed=False)

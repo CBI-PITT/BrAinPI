@@ -106,14 +106,8 @@ class dataWrapper:
         key[3].start,key[3].stop,key[3].step,
         key[4].start,key[4].stop,key[4].step
         )
-    
-    
         
-        test = self.getArrayFromAPI(location)
-        # with urllib.request.urlopen(location) as url:
-        #     test = utils.uncompress_np(url.read())
-        
-        return test
+        return self.getArrayFromAPI(location)
 
 def get(location):
     with urllib.request.urlopen(baseURL + location, timeout=5) as url:

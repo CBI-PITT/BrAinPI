@@ -7,36 +7,13 @@ Created on Thu Nov  4 10:05:34 2021
 
 
 import numpy as np
-import io,zlib,ast,os
+import io,ast,os
 
 import imaris_ims_file_reader as ims
 from bil_api.dataset_info import dataset_info
 from bil_api import zarrLoader
 from bil_api import config
 from numcodecs import Blosc
-
-
-# def compress_np(nparr):
-#     """
-#     Receives a numpy array,
-#     Returns a compressed bytestring, uncompressed and the compressed byte size.
-#     """
-#     bytestream = io.BytesIO()
-#     np.save(bytestream, nparr)
-#     uncompressed = bytestream.getvalue()
-#     compressed = zlib.compress(uncompressed)
-#     return compressed, len(uncompressed), len(compressed)
-
-# def uncompress_np(bytestring):
-#     """
-#     Receives a compressed bytestring,
-#     Returns a numpy array.
-#     """
-#     array = zlib.decompress(bytestring)
-#     array = io.BytesIO(array)
-    
-    # return np.load(array)
-
 
 
 
@@ -73,41 +50,6 @@ def uncompress_np(bytestring):
         return np.load(array)
 
 
-
-
-# a = np.zeros((10,10,10), dtype=np.uint16)
-
-# bytestream = io.BytesIO()
-# np.save(bytestream, a)
-# uncompressed = bytestream.getvalue()
-
-
-# comp = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-
-# x = comp.encode(uncompressed)
-
-# c = comp.decode(x)
-# array = io.BytesIO(c)
-# np.load(array)
-
-# a = np.zeros((10,10,10), dtype=np.uint16)
-# z,_,_ = compress_np(a)
-# x = uncompress_np(z)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def convertMetaDataDict(meta):
     
     '''
@@ -133,20 +75,6 @@ def convertMetaDataDict(meta):
     
     return newMeta
 
-# def loadDataset(selection: int):
-    
-#     dataPath = dataset_info()[selection][1]
-       
-#     if os.path.splitext(dataPath)[1] == '.ims':
-        
-#         if dataPath in globals() == False:
-#             globals()[dataPath] = ims.ims(dataPath)
-        
-#         if globals()[dataPath].hf is None or globals()[dataPath].dataset is None:
-#             globals()[dataPath].open()
-        
-#         return dataPath
-    
     
 def loadDataset(selection: int):
 
