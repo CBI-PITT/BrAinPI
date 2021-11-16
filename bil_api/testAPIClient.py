@@ -81,39 +81,39 @@ class dataWrapper:
         print(key)
         
         
-        return getArray(datasetNum=self.datasetNum,res=self.ResolutionLock,key=key)
+        return self.getArray(datasetNum=self.datasetNum,res=self.ResolutionLock,key=key)
         
+    @staticmethod
+    @functools.lru_cache(maxsize=10000, typed=False)
+    def getArrayFromAPI(url):
+        with urllib.request.urlopen(url) as url:
+            return utils.uncompress_np(url.read())
     
-@functools.lru_cache(maxsize=10000, typed=False)
-def getArrayFromAPI(url):
-    with urllib.request.urlopen(url) as url:
-        return utils.uncompress_np(url.read())
-
-# @functools.cache
-# @functools.lru_cache(maxsize=128, typed=False)
-def getArray(datasetNum,res,key):
+    # @functools.cache
+    # @functools.lru_cache(maxsize=128, typed=False)
+    def getArray(self,datasetNum,res,key):
+        
+        '''
+        axes = (t,c,z,y,x)
+        '''
+        
+        location = baseURL + 'fmostCompress?dset={}&res={}&tstart={}&tstop={}&tstep={}&cstart={}&cstop={}&cstep={}&zstart={}&zstop={}&zstep={}&ystart={}&ystop={}&ystep={}&xstart={}&xstop={}&xstep={}'.format(
+        datasetNum,
+        res,
+        key[0].start,key[0].stop,key[0].step,
+        key[1].start,key[1].stop,key[1].step,
+        key[2].start,key[2].stop,key[2].step,
+        key[3].start,key[3].stop,key[3].step,
+        key[4].start,key[4].stop,key[4].step
+        )
     
-    '''
-    axes = (t,c,z,y,x)
-    '''
     
-    location = baseURL + 'fmostCompress?dset={}&res={}&tstart={}&tstop={}&tstep={}&cstart={}&cstop={}&cstep={}&zstart={}&zstop={}&zstep={}&ystart={}&ystop={}&ystep={}&xstart={}&xstop={}&xstep={}'.format(
-    datasetNum,
-    res,
-    key[0].start,key[0].stop,key[0].step,
-    key[1].start,key[1].stop,key[1].step,
-    key[2].start,key[2].stop,key[2].step,
-    key[3].start,key[3].stop,key[3].step,
-    key[4].start,key[4].stop,key[4].step
-    )
-
-
-    
-    test = getArrayFromAPI(location)
-    # with urllib.request.urlopen(location) as url:
-    #     test = utils.uncompress_np(url.read())
-    
-    return test
+        
+        test = self.getArrayFromAPI(location)
+        # with urllib.request.urlopen(location) as url:
+        #     test = utils.uncompress_np(url.read())
+        
+        return test
 
 def get(location):
     with urllib.request.urlopen(baseURL + location, timeout=5) as url:
