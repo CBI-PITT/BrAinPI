@@ -64,6 +64,9 @@ def meta():
             z = ims.ims(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.zarr':
             z = zarrLoader.zarrSeries(dsetPath)
+        else:
+            print('API can currently only load Zarr and IMS datasets')
+            return
             
         metadata = {'shape':z.shape,
                            'chunks':z.chunks,
@@ -85,7 +88,7 @@ def meta():
         
         return json.dumps(metadata) 
     else:
-        return "Error: No dataset id provided"
+        return "No dataset id was provided"
     
 
 
