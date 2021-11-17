@@ -62,7 +62,7 @@ class zarrSeries:
         
         for r,t,c in itertools.product(range(self.ResolutionLevels), range(self.TimePoints), range(self.Channels)):
             
-            currentFile = locationGenerator(self,r,t,c)
+            currentFile = self.locationGenerator(r,t,c)
             # currentFile = os.path.join(os.path.split(self.fileSeries[0])[0],currentFile)
             print(currentFile)
             zarrStore = zarr.NestedDirectoryStore(currentFile)
@@ -128,7 +128,7 @@ class zarrSeries:
         print(key)
         
         
-        return getSlice(self,
+        return self.getSlice(
                         r=res,
                         t = key[0],
                         c = key[1],
@@ -139,46 +139,46 @@ class zarrSeries:
         
 
 
-def getSlice(self,r,t,c,z,y,x):
+    def getSlice(self,r,t,c,z,y,x):
+        
+        '''
+        IMS stores 3D datasets ONLY with Resolution, Time, and Color as 'directory'
+        structure witing HDF5.  Thus, data access can only happen accross dims XYZ
+        for a specific RTC.  
+        '''
+        
+        incomingSlices = (r,t,c,z,y,x)
+        print(incomingSlices)
+        tSize = list(range(self.TimePoints)[t])
+        cSize = list(range(self.Channels)[c])
+        zSize = len(range(self.metaData[(r,0,0,'shape')][-3])[z])
+        ySize = len(range(self.metaData[(r,0,0,'shape')][-2])[y])
+        xSize = len(range(self.metaData[(r,0,0,'shape')][-1])[x])
+        
+        # Casting zeros to specific dtype signifigantly speeds up data retrieval
+        outputArray = np.zeros((len(tSize),len(cSize),zSize,ySize,xSize), dtype=self.dtype)
+        # chunkRequested = outputArray.shape
+        
+        for idxt, t in enumerate(tSize):
+            for idxc, c in enumerate(cSize):
+                print('r{},t{},c{}'.format(r,t,c))
+                print(self.locationGenerator(r,t,c))
+                zarrStore = zarr.NestedDirectoryStore(self.locationGenerator(r,t,c))
+                zarrFile = zarr.open(zarrStore)
+                print(zarrFile.shape)
+                outputArray[idxt,idxc,:,:,:] = zarrFile[z,y,x]
+        
+        # print('Incoming Slices: {} / Slice Requested: {} / Slice Output {}'.format(incomingSlices,chunkRequested,sliceOutput))
+        # return np.squeeze(outputArray)
+        return outputArray
     
-    '''
-    IMS stores 3D datasets ONLY with Resolution, Time, and Color as 'directory'
-    structure witing HDF5.  Thus, data access can only happen accross dims XYZ
-    for a specific RTC.  
-    '''
     
-    incomingSlices = (r,t,c,z,y,x)
-    print(incomingSlices)
-    tSize = list(range(self.TimePoints)[t])
-    cSize = list(range(self.Channels)[c])
-    zSize = len(range(self.metaData[(r,0,0,'shape')][-3])[z])
-    ySize = len(range(self.metaData[(r,0,0,'shape')][-2])[y])
-    xSize = len(range(self.metaData[(r,0,0,'shape')][-1])[x])
-    
-    # Casting zeros to specific dtype signifigantly speeds up data retrieval
-    outputArray = np.zeros((len(tSize),len(cSize),zSize,ySize,xSize), dtype=self.dtype)
-    # chunkRequested = outputArray.shape
-    
-    for idxt, t in enumerate(tSize):
-        for idxc, c in enumerate(cSize):
-            print('r{},t{},c{}'.format(r,t,c))
-            print(locationGenerator(self,r,t,c))
-            zarrStore = zarr.NestedDirectoryStore(locationGenerator(self,r,t,c))
-            zarrFile = zarr.open(zarrStore)
-            print(zarrFile.shape)
-            outputArray[idxt,idxc,:,:,:] = zarrFile[z,y,x]
-    
-    # print('Incoming Slices: {} / Slice Requested: {} / Slice Output {}'.format(incomingSlices,chunkRequested,sliceOutput))
-    # return np.squeeze(outputArray)
-    return outputArray
-
-
-def locationGenerator(self,r,t,c):
-    
-    currentFile = 't{}_c{}_{}.zarr'.format(str(t).zfill(2),
-                             str(c).zfill(2),
-                             str(r)
-                             )
-    currentFile = os.path.join(os.path.split(self.fileSeries[0])[0],currentFile)
-    
-    return currentFile    
+    def locationGenerator(self,r,t,c):
+        
+        currentFile = 't{}_c{}_{}.zarr'.format(str(t).zfill(2),
+                                 str(c).zfill(2),
+                                 str(r)
+                                 )
+        currentFile = os.path.join(os.path.split(self.fileSeries[0])[0],currentFile)
+        
+        return currentFile    

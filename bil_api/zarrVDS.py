@@ -192,7 +192,7 @@ class zarrVDS:
         
     def initArray(self,r,t,c):
         if os.path.exists(self.location(r,t,c)) == False:
-            store = zarr.ZipStore(self.location(self, r,t,c))
+            store = zarr.ZipStore(self.location(r,t,c))
             zarr.zeros(shape=self.shape[-2::], chunks=self.chunks[-2::], store=store, dtype=np.uint16,compressor=compressor)
             store.close()
     
