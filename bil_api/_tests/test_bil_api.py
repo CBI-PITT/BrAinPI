@@ -1,4 +1,4 @@
-assert True
+###  NO TESTS CURRENTLY RUNNING  ###
 
 # import os
 # from tiff_utils import tiff
