@@ -168,6 +168,8 @@ while all([x//2 > minPixelShape for x in currentShape]):
 
 
 ###  Setup zarr layout
+## Force a 5D array (t,c,z,y,x)
+
 os.makedirs(outputLocation,exist_ok=True)
 
 for r in resolutions:
@@ -177,7 +179,10 @@ for r in resolutions:
         root = zarr.group(store=store, overwrite=True)
     else:
         root = zarr.group(store=store, overwrite=False)
-    root.zeros(str(r).zfill(2), shape=resolutions[r][1],chunks=resolutions[r][2], dtype=sampleImage.dtype)
+    root.zeros(str(r).zfill(2), 
+               shape=(1,1,resolutions[r][1][0],resolutions[r][1][1],resolutions[r][1][2]),
+               chunks=(1,1,resolutions[r][2][0],resolutions[r][2][1],resolutions[r][2][2]),
+               dtype=sampleImage.dtype)
     
     del root
     del store
