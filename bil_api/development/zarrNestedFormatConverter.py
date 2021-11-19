@@ -90,6 +90,8 @@ this requires knowing the origional z,y,x scale
 
 Fit to exactly iostropic with reductions in resolution no greater than 2x
 
+Chunks will change every 2 levels. (z*2,y//2,x//2)
+
 RLevel:  Resolution            Pixel Shape         Chunks
 
 resolutions = {
@@ -106,7 +108,6 @@ resolutions = {
  10: ((256.0, 256.0, 256.0), (44, 42, 28), (32, 32, 32))
  }
 
-Reworked code to converge on isotropic and then continue 2x decrase in resolition
 '''
 
 
@@ -119,34 +120,6 @@ currentResolution = scale
 currentChunks = maxChunkSize
 
 resolutions = {0:(currentResolution,currentShape, currentChunks)} # Key is resolution number, value = (resolution, pixels, chunks)
-
-# level = 1
-# while all([x//2 > minPixelShape for x in currentShape]):
-    
-#     if currentResolution[1]*2 <= currentResolution[0] and currentResolution[2]*2 <= currentResolution[0]:
-#         currentResolution = (currentResolution[0],currentResolution[1]*2,currentResolution[2]*2)
-#         currentShape = (currentShape[0],currentShape[1]//2,currentShape[2]//2)
-#         resolutions[level] = (
-#             currentResolution,
-#             currentShape,
-#             currentChunks
-#             )
-#     else:
-#         resolutions[level] = (
-#             tuple([x*2 for x in currentResolution]),
-#             tuple([x//2 for x in currentShape]),
-#             currentChunks
-#             )
-    
-#         currentResolution = resolutions[level][0]
-#         currentShape = resolutions[level][1]
-    
-#     level += 1
-    
-#     if level%2 == 0:
-#         currentChunks = (currentChunks[0]*2,currentChunks[1]//2,currentChunks[2]//2)
-    
-
 
 
 level = 1
