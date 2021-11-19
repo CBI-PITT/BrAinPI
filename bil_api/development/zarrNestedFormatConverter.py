@@ -72,13 +72,10 @@ dims=(t,c,z,y,x).  Less than 5 dims will remove the left-most dim.
 for example stack.shape == (2, 11464, 30801, 20821) is assumed to be (c,z,y,x) with no time dim
 
 
-multi resolution zarr arrays will be stored in a single directory:
-Resolution, time and channel will have separate dirs.
+multi resolution zarr arrays will be stored in a single directory ir each resolution series:
+a single array t,c,z,y,x will be stored in each resoltion dir.
 
-    r[0-9][0-9]
-        t[0-9][0-9]
-            c[0-9][0-9]
-                'data' = 3D_zarr_array_NestedDirectoryStore
+    r[0-9][0-9] = 5D array (t,c,z,y,x)
             
 '''
 
@@ -173,23 +170,25 @@ while all([x//2 > minPixelShape for x in currentShape]):
 ###  Setup zarr layout
 os.makedirs(outputLocation,exist_ok=True)
 
-def locationGenerator(r,t,c):
-    return '{}/{}/{}'.format(str(r).zfill(2),
-                            str(t).zfill(2),
-                            str(c).zfill(2)
-                            )
-
-for r,t,c, in itertools.product(
-        resolutions,
-        range(stack.shape[0]),
-        range(stack.shape[1])
-        ):
+for r in resolutions:
     
     store = zarr.NestedDirectoryStore(outputLocation)
-    root = zarr.group(store=store, overwrite=True)
-    foo = root.create_group(locationGenerator(r,t,c))
-    foo.zeros('data', shape=resolutions[r][1],chunks)
+    if r == 0:
+        root = zarr.group(store=store, overwrite=True)
+    else:
+        root = zarr.group(store=store, overwrite=False)
+    root.zeros(str(r).zfill(2), shape=resolutions[r][1],chunks=resolutions[r][2], dtype=sampleImage.dtype)
     
+    del root
+    del store
+
+
+## For writing arrays we will split them by color
+toWrite = []
+for dd in range(stack.shape[1]):
+    toWrite.append(stack[:,dd])
+    
+
 
 
 
