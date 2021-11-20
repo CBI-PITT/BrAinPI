@@ -5,10 +5,12 @@ Created on Fri Nov 19 12:18:24 2021
 @author: alpha
 """
 
-import os, glob, zarr
+import os, glob, zarr, math
 import dask.array as da
 from dask.delayed import delayed
 from skimage import io
+from skimage.filters import gaussian
+from skimage import img_as_float32, img_as_uint16, img_as_ubyte
 import itertools
 
 
@@ -118,7 +120,7 @@ currentChunks = maxChunkSize
 
 resolutions = {0:(currentResolution,currentShape, currentChunks)} # Key is resolution number, value = (resolution, pixels, chunks)
 
-
+print('Calculating Resolution Levels')
 level = 1
 while all([x//2 > minPixelShape for x in currentShape]):
     
@@ -162,7 +164,7 @@ while all([x//2 > minPixelShape for x in currentShape]):
     if level%2 == 0:
         currentChunks = (currentChunks[0]*2,currentChunks[1]//2,currentChunks[2]//2)
     
-    
+print(resolutions)
     
 
 
@@ -174,28 +176,78 @@ os.makedirs(outputLocation,exist_ok=True)
 
 for r in resolutions:
     
+    print('Making zarr dataset resolution level {}'.format(r))
     store = zarr.NestedDirectoryStore(outputLocation)
     if r == 0:
         root = zarr.group(store=store, overwrite=True)
     else:
         root = zarr.group(store=store, overwrite=False)
     root.zeros(str(r).zfill(2), 
-               shape=(1,1,resolutions[r][1][0],resolutions[r][1][1],resolutions[r][1][2]),
+               shape=(stack.shape[0],stack.shape[1],resolutions[r][1][0],resolutions[r][1][1],resolutions[r][1][2]),
                chunks=(1,1,resolutions[r][2][0],resolutions[r][2][1],resolutions[r][2][2]),
                dtype=sampleImage.dtype)
     
     del root
     del store
 
+## Mount dask arrays from zarr
+zarr_arrays = {}
+for r in resolutions:
+    print('Opening zarr arrays {}'.format(str(r).zfill(2)))
+    location=os.path.join(outputLocation,str(r).zfill(2))
+    zarr_arrays[r] = zarr.open(
+        zarr.NestedDirectoryStore(location),
+        mode='a'
+        )
+
 
 ## For writing arrays we will split them by color
 toWrite = []
 for dd in range(stack.shape[1]):
-    toWrite.append(stack[:,dd])
+    toWrite.append(stack[:,[dd]])
     
 
+def smooth(image, sigma=(0,0,0)):
+    '''A function for delayed gaussian blur'''
+    if sigma == (0,0,0):
+        return image
+    
+    dtype = image.dtype
+    workingImg = img_as_float32(image)
+    workingImg = gaussian(workingImg,sigma)
+    
+    if dtype == 'uint16':
+        workingImg = img_as_uint16(workingImg)
+    elif dtype == 'uint8':
+        workingImg = img_as_ubyte(workingImg)
+    
+    return workingImg
 
 
+
+## Form downsample series
+downSample = {}
+for r in resolutions:
+    print('Staging downsample of resolution {}'.format(r))
+    if r == 0:
+        downSample[r] = stack.rechunk(chunks=(1,
+                                              1,
+                                              resolutions[r][2][0],
+                                              resolutions[r][2][1],
+                                              resolutions[r][2][2]))
+    else:
+        blured = downSample[r-1]
+        
+        downSampleFactor = tuple([x/y for x,y in zip(resolutions[r-1][1],resolutions[r][1])])
+        sigma = tuple([(x - 1) / 2 for x in downSampleFactor])
+        depth = tuple([math.ceil(2*x) for x in sigma])
+        blured = blured.map_overlap(smooth,
+                                    sigma=sigma, 
+                                    depth=depth, 
+                                    boundry='reflect')
+        
+        ## HOW TO DEAL WITH NON INT DOWNSAMPLES
+        subSampled = blured[1::2,]
 
 
 
