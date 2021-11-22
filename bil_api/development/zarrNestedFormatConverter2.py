@@ -7,12 +7,15 @@ Created on Fri Nov 19 12:18:24 2021
 
 import os, glob, zarr, math
 import numpy as np
+import dask
 import dask.array as da
 from dask.delayed import delayed
 from skimage import io
 from skimage.filters import gaussian
 from skimage import img_as_float32, img_as_uint, img_as_ubyte
 import itertools
+
+from distributed import Client
 
 
 '''
@@ -28,7 +31,7 @@ Expect data to be ordered as:
 dataToConvert = r"H:\globus\pitt\bil"
 dataToConvert = r"H:\globus\pitt\bil\TEST"
 
-
+processingChunks = (5,1024,1024)
 scale = (1.0, 0.35, 0.35)  ## (z,y,x) arbitraty units but is probably microns
 
 outputLocation = os.path.join(dataToConvert,'fMOST.zarr')
@@ -248,25 +251,60 @@ for t,c in itertools.product(
         if r == 0:
             single_color_stack = stack[t,c]
             downSample[r] = single_color_stack.rechunk(chunks=(
-                                                  10,
+                                                  processingChunks[0],
+                                                  processingChunks[1],
+                                                  processingChunks[2]
                                                   # resolutions[r][2][0],
-                                                  resolutions[r][2][1],
-                                                  resolutions[r][2][2]))
+                                                  # resolutions[r][2][1],
+                                                  # resolutions[r][2][2]
+                                                  ))
         else:
-            blured = downSample[r-1]
+            single_color_stack = downSample[r-1]
             
+            previousPixels = resolutions[r-1][1]
+            pixels = resolutions[r][1]
+            previousDownsampleFactor = resolutions[r-1][3]
             downSampleFactor = resolutions[r][3]
             # downSampleFactor = tuple([x/y for x,y in zip(resolutions[r-1][1],resolutions[r][1])])
             sigma = tuple([(x - 1) / 2 for x in downSampleFactor])
             depth = tuple([math.ceil(2*x) for x in sigma])
             blured = da.map_overlap(smooth, single_color_stack,sigma=sigma,depth=depth,boundary='reflect',trim=True,dtype=sampleImage.dtype)
             
-            ## HOW TO DEAL WITH NON INT DOWNSAMPLES
-            z = list(np.round(np.linspace(0, resolutions[r-1][1][0] - 1, resolutions[r][1][0])).astype(int))
-            y = list(np.round(np.linspace(0, resolutions[r-1][1][1] - 1, resolutions[r][1][1])).astype(int))
-            x = list(np.round(np.linspace(0, resolutions[r-1][1][2] - 1, resolutions[r][1][2])).astype(int))
-    
-            downSample[r] = blured[z,y,x]
+            
+            if all([isinstance(x, int) for x in downSampleFactor]):
+                print('Single INT index')
+                a = blured[1::downSampleFactor[0], 1::downSampleFactor[1], 1::downSampleFactor[2]]
+            else:
+                with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+                    print('First index')
+                    if isinstance(downSampleFactor[0],int):
+                        z = downSampleFactor[0]
+                        a = blured[1::z]
+                    else:
+                        z = list(np.round(np.linspace(0, previousPixels[0] - 1, pixels[0])).astype(int))
+                        a = blured[z]
+                    
+                    print('Second index')
+                    if isinstance(downSampleFactor[1],int):
+                        y = downSampleFactor[1]
+                        a = a[:,1::y]
+                    else:
+                        y = list(np.round(np.linspace(0, previousPixels[1] - 1, pixels[1])).astype(int))
+                        a = a[:,y]
+                    
+                    print('Third index')
+                    if isinstance(downSampleFactor[2],int):
+                        x = downSampleFactor[2]
+                        a = a[:,:,1::x]
+                    else:
+                        x = list(np.round(np.linspace(0, previousPixels[2] - 1, pixels[2])).astype(int))
+                        a = a[:,:,x]
+                    
+                # with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+            
+            
+            
+            downSample[r] = a.rechunk(processingChunks)
 
 
 
