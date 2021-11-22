@@ -12,6 +12,7 @@ from dask.delayed import delayed
 from skimage import io
 from skimage.filters import gaussian
 from skimage import img_as_float32, img_as_uint, img_as_ubyte
+import itertools
 
 
 '''
@@ -233,55 +234,58 @@ def smooth(image, sigma=(0,0,0)):
 
 
 
-## Form downsample series
-downSample = {}
-for r in resolutions:
-    print('Staging downsample of resolution {}'.format(r))
-    if r == 0:
-        downSample[r] = stack.rechunk(chunks=(1,
-                                              1,
-                                              10,
-                                              # resolutions[r][2][0],
-                                              resolutions[r][2][1],
-                                              resolutions[r][2][2]))
-    else:
-        blured = downSample[r-1]
-        
-        downSampleFactor = resolutions[r][3]
-        # downSampleFactor = tuple([x/y for x,y in zip(resolutions[r-1][1],resolutions[r][1])])
-        sigma = tuple([(x - 1) / 2 for x in downSampleFactor])
-        depth = tuple([math.ceil(2*x) for x in sigma])
-        blured = blured.map_overlap(smooth,
-                                    sigma=sigma, 
-                                    depth=depth, 
-                                    boundry='reflect',
-                                    dtype=sampleImage.dtype)
-        
-        ## HOW TO DEAL WITH NON INT DOWNSAMPLES
-        z = list(np.round(np.linspace(0, resolutions[r-1][1][0] - 1, resolutions[r][1][0])).astype(int))
-        y = list(np.round(np.linspace(0, resolutions[r-1][1][1] - 1, resolutions[r][1][1])).astype(int))
-        x = list(np.round(np.linspace(0, resolutions[r-1][1][2] - 1, resolutions[r][1][2])).astype(int))
-
-        downSample[r] = blured[z,y,x]
 
 
+for t,c in itertools.product(
+        range(stack.shape[0]),
+        range(stack.shape[1])
+        ):
+    
+    ## Form downsample series
+    downSample = {}
+    for r in resolutions:
+        print('Staging downsample of resolution {}'.format(r))
+        if r == 0:
+            single_color_stack = stack[t,c]
+            downSample[r] = single_color_stack.rechunk(chunks=(
+                                                  10,
+                                                  # resolutions[r][2][0],
+                                                  resolutions[r][2][1],
+                                                  resolutions[r][2][2]))
+        else:
+            blured = downSample[r-1]
+            
+            downSampleFactor = resolutions[r][3]
+            # downSampleFactor = tuple([x/y for x,y in zip(resolutions[r-1][1],resolutions[r][1])])
+            sigma = tuple([(x - 1) / 2 for x in downSampleFactor])
+            depth = tuple([math.ceil(2*x) for x in sigma])
+            blured = da.map_overlap(smooth, single_color_stack,sigma=sigma,depth=depth,boundary='reflect',trim=True,dtype=sampleImage.dtype)
+            
+            ## HOW TO DEAL WITH NON INT DOWNSAMPLES
+            z = list(np.round(np.linspace(0, resolutions[r-1][1][0] - 1, resolutions[r][1][0])).astype(int))
+            y = list(np.round(np.linspace(0, resolutions[r-1][1][1] - 1, resolutions[r][1][1])).astype(int))
+            x = list(np.round(np.linspace(0, resolutions[r-1][1][2] - 1, resolutions[r][1][2])).astype(int))
+    
+            downSample[r] = blured[z,y,x]
 
 
-## Create delayed da.to_zarr in a list that can be used to call compute
-zarr_arrays = []
-for r in resolutions:
-    print('Create delayed da.to_zarr resolution {}'.format(str(r).zfill(2)))
-    location=os.path.join(outputLocation,str(r).zfill(2))
-    zarr_arrays.append(
-        da.to_zarr
-        (
-        downSample[r],
-        zarr.NestedDirectoryStore(location),
-        compute=False
-        )
-        )
 
-da.compute(zarr_arrays)
+
+# ## Create delayed da.to_zarr in a list that can be used to call compute
+# zarr_arrays = []
+# for r in resolutions:
+#     print('Create delayed da.to_zarr resolution {}'.format(str(r).zfill(2)))
+#     location=os.path.join(outputLocation,str(r).zfill(2))
+#     zarr_arrays.append(
+#         da.to_zarr
+#         (
+#         downSample[r],
+#         zarr.NestedDirectoryStore(location),
+#         compute=False
+#         )
+#         )
+
+# da.compute(zarr_arrays)
 
 
 
