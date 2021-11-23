@@ -237,6 +237,52 @@ def smooth(image, sigma=(0,0,0)):
 
 
 
+# def saveToZarr(array,zarr_store,block_info=None):
+#     block_location = block_info[None]['array-location']
+#     d0_start = block_location[0][0]
+#     d0_stop = block_location[0][1]
+#     d1_start = block_location[1][0]
+#     d1_stop = block_location[1][1]
+#     d2_start = block_location[2][0]
+#     d2_stop = block_location[2][1]
+#     d3_start = block_location[3][0]
+#     d3_stop = block_location[3][1]
+#     d4_start = block_location[4][0]
+#     d4_stop = block_location[4][1]
+    
+#     a = zarr.open(zarr_store)
+#     a[
+#       d0_start:d0_stop,
+#       d1_start:d1_stop,
+#       d2_start:d2_stop,
+#       d3_start:d3_stop,
+#       d4_start:d4_stop
+#       ]
+#     return np.zeros((1),dtype=bool)
+
+
+def saveToZarr(array,t,c,zarr_store,block_info=None):
+    block_location = block_info[None]['array-location']
+    d0_start = block_location[0][0]
+    d0_stop = block_location[0][1]
+    d1_start = block_location[1][0]
+    d1_stop = block_location[1][1]
+    d2_start = block_location[2][0]
+    d2_stop = block_location[2][1]
+    
+    a = zarr.open(zarr_store)
+    a[t,
+      c,
+      d0_start:d0_stop,
+      d1_start:d1_stop,
+      d2_start:d2_stop
+      ]
+    return np.zeros((1),dtype=bool)
+
+
+
+
+
 
 
 for t,c in itertools.product(
@@ -305,6 +351,20 @@ for t,c in itertools.product(
             
             
             downSample[r] = a.rechunk(processingChunks)
+    
+    toMake = []
+    for r in resolutions:
+        
+        location=os.path.join(outputLocation,str(r).zfill(2))
+        make = da.map_blocks(saveToZarr,
+                      downSample[r],
+                      t,
+                      c,
+                      zarr.NestedDirectoryStore(location), 
+                      chunks=(1,),
+                      dtype=bool
+                      )
+        toMake.append(make)
 
 
 
