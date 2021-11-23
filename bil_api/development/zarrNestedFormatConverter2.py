@@ -30,6 +30,8 @@ Expect data to be ordered as:
 
 dataToConvert = r"H:\globus\pitt\bil"
 dataToConvert = r"H:\globus\pitt\bil\TEST"
+dataToConvert = "//136.142.29.160/CBI_Hive/globus/pitt/bil/TEST"
+
 
 processingChunks = (5,1024,1024)
 scale = (1.0, 0.35, 0.35)  ## (z,y,x) arbitraty units but is probably microns
@@ -262,6 +264,7 @@ def smooth(image, sigma=(0,0,0)):
 
 
 def saveToZarr(array,t,c,zarr_store,block_info=None):
+    print('In saveToZarr')
     block_location = block_info[None]['array-location']
     d0_start = block_location[0][0]
     d0_stop = block_location[0][1]
@@ -270,14 +273,15 @@ def saveToZarr(array,t,c,zarr_store,block_info=None):
     d2_start = block_location[2][0]
     d2_stop = block_location[2][1]
     
-    a = zarr.open(zarr_store)
+    print(array.shape)
+    a = zarr.open(zarr_store, mode='r+')
     a[t,
       c,
       d0_start:d0_stop,
       d1_start:d1_stop,
       d2_start:d2_stop
-      ]
-    return np.zeros((1),dtype=bool)
+      ] = array
+    return np.zeros(array.shape,dtype=bool)
 
 
 
@@ -361,10 +365,24 @@ for t,c in itertools.product(
                       t,
                       c,
                       zarr.NestedDirectoryStore(location), 
-                      chunks=(1,),
-                      dtype=bool
+                      # chunks=(1,1,1),
+                      dtype=bool,
+                      meta=np.array((), dtype=bool)
                       )
         toMake.append(make)
+    client = Client()
+    # client = Client(processes=False)
+    print('Computing')
+    # z = client.compute(toMake)
+    # z = client.compute(toMake, scheduler='threads')
+    # z = client.compute(toMake, scheduler='processes')
+    z = client.compute(toMake, scheduler='distributed')
+
+    
+    # z = da.compute(toMake,processes=True)
+
+    break
+
 
 
 
