@@ -31,6 +31,7 @@ Expect data to be ordered as:
 dataToConvert = r"H:\globus\pitt\bil"
 dataToConvert = r"H:\globus\pitt\bil\TEST"
 dataToConvert = "//136.142.29.160/CBI_Hive/globus/pitt/bil/TEST"
+dataToConvert = "/CBI_Hive/globus/pitt/bil/TEST"
 
 
 processingChunks = (5,1024,1024)
@@ -369,17 +370,18 @@ for t,c in itertools.product(
                       dtype=bool,
                       meta=np.array((), dtype=bool)
                       )
+        make = make.sum()
         toMake.append(make)
     client = Client()
     # client = Client(processes=False)
     print('Computing')
-    # z = client.compute(toMake)
+    z = client.compute(toMake)
     # z = client.compute(toMake, scheduler='threads')
     # z = client.compute(toMake, scheduler='processes')
-    z = client.compute(toMake, scheduler='distributed')
+    # z = client.compute(toMake, scheduler='distributed')
 
     
-    # z = da.compute(toMake,processes=True)
+    z = da.compute(toMake,processes=True)
 
     break
 
