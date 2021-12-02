@@ -14,6 +14,8 @@ import napari
 import dask.array as da
 import functools
 
+import cProfile, pstats
+from pstats import SortKey
 
 baseURL = 'http://127.0.0.1:5000/api/'
 # baseURL = 'http://awatson.duckdns.org:5000/api/'
@@ -22,6 +24,25 @@ baseURL = 'http://136.142.29.160:5000/api/'
 os.environ["NAPARI_ASYNC"] = "1"
 os.environ["NAPARI_OCTREE"] = "1"
 
+
+
+def profile(func):
+    def wrapper(*args, **kwargs):
+        pr = cProfile.Profile()
+        pr.enable()
+        retval = func(*args, **kwargs)
+        pr.disable()
+        s = io.StringIO()
+        sortby = SortKey.CUMULATIVE  # 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        print(s.getvalue())
+        return retval
+
+    return wrapper
+
+
+@profile
 class dataWrapper:
     '''
     A wrapper to describe a specific dataset at a specific resolution level as
@@ -63,6 +84,7 @@ class dataWrapper:
 
         
         
+    @profile
     # @functools.lru_cache(maxsize=128, typed=False)   
     def __getitem__(self,key):
         
@@ -78,7 +100,7 @@ class dataWrapper:
                 key.append(slice(None))
             key = tuple(key)
         
-        print(key)
+        # print(key)
         
         
         return self.getArray(datasetNum=self.datasetNum,res=self.ResolutionLock,key=key)
