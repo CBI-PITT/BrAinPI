@@ -14,6 +14,8 @@ import napari
 import dask.array as da
 import functools
 
+import urllib3
+
 import cProfile, pstats
 from pstats import SortKey
 
@@ -42,7 +44,7 @@ def profile(func):
     return wrapper
 
 
-@profile
+# @profile
 class dataWrapper:
     '''
     A wrapper to describe a specific dataset at a specific resolution level as
@@ -84,7 +86,7 @@ class dataWrapper:
 
         
         
-    @profile
+    # @profile
     # @functools.lru_cache(maxsize=128, typed=False)   
     def __getitem__(self,key):
         
@@ -105,11 +107,22 @@ class dataWrapper:
         
         return self.getArray(datasetNum=self.datasetNum,res=self.ResolutionLock,key=key)
         
+    # @staticmethod
+    # @functools.lru_cache(maxsize=10000, typed=False)
+    # def getArrayFromAPI(url):
+    #     with urllib.request.urlopen(url) as url:
+    #         return utils.uncompress_np(url.read())
+    
+    
     @staticmethod
     @functools.lru_cache(maxsize=10000, typed=False)
     def getArrayFromAPI(url):
-        with urllib.request.urlopen(url) as url:
-            return utils.uncompress_np(url.read())
+        http = urllib3.PoolManager()
+        # r = http.request('GET', url)
+        r = http.request('GET', url,headers={'Connection':'close'})
+        # print(r.data)
+        return utils.uncompress_np(r.data)
+    
     
     # @functools.cache
     # @functools.lru_cache(maxsize=128, typed=False)
@@ -119,7 +132,8 @@ class dataWrapper:
         axes = (t,c,z,y,x)
         '''
         
-        location = baseURL + 'fmostCompress?dset={}&res={}&tstart={}&tstop={}&tstep={}&cstart={}&cstop={}&cstep={}&zstart={}&zstop={}&zstep={}&ystart={}&ystop={}&ystep={}&xstart={}&xstop={}&xstep={}'.format(
+        location = '{}fmostCompress?dset={}&res={}&tstart={}&tstop={}&tstep={}&cstart={}&cstop={}&cstep={}&zstart={}&zstop={}&zstep={}&ystart={}&ystop={}&ystep={}&xstart={}&xstop={}&xstep={}'.format(
+        baseURL,
         datasetNum,
         res,
         key[0].start,key[0].stop,key[0].step,

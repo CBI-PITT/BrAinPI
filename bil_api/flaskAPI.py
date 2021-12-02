@@ -160,7 +160,7 @@ def fmostCompress():
         'xstart','xstop','xstep'
         )
     
-    print(request.args)
+    # print(request.args)
     if all((x in request.args for x in requiredParam)):
         pass
     else:
@@ -169,7 +169,7 @@ def fmostCompress():
     intArgs = {}
     for x in request.args:
         intArgs[x] = ast.literal_eval(request.args[x])
-    print(intArgs)
+    # print(intArgs)
     
     
     
