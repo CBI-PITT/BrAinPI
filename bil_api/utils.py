@@ -41,13 +41,13 @@ def uncompress_np(bytestring):
     array = comp.decode(bytestring)
     array = io.BytesIO(array)
     
-    sequeeze = False
-    if "NAPARI_ASYNC" in os.environ or "NAPARI_OCTREE" in os.environ:
-        sequeeze = True
-    if sequeeze == True and (os.environ["NAPARI_ASYNC"] == '1' or os.environ["NAPARI_OCTREE"] == "1"):
-        return np.squeeze(np.load(array))
-    else:
-        return np.load(array)
+    # sequeeze = False
+    # if "NAPARI_ASYNC" in os.environ or "NAPARI_OCTREE" in os.environ:
+    #     sequeeze = False
+    # if sequeeze == True and (os.environ["NAPARI_ASYNC"] == '1' or os.environ["NAPARI_OCTREE"] == "1"):
+    #     return np.squeeze(np.load(array))
+    # else:
+    return np.load(array)
 
 
 def convertMetaDataDict(meta):

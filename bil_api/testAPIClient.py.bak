@@ -23,8 +23,8 @@ baseURL = 'http://127.0.0.1:5000/api/'
 # baseURL = 'http://awatson.duckdns.org:5000/api/'
 baseURL = 'http://136.142.29.160:5000/api/'
 
-# os.environ["NAPARI_ASYNC"] = "1"
-# os.environ["NAPARI_OCTREE"] = "1"
+os.environ["NAPARI_ASYNC"] = "0"
+os.environ["NAPARI_OCTREE"] = "0"
 
 
 
@@ -158,8 +158,7 @@ class dataWrapper:
         
         # location = f'{baseURL}fmostCompress?dset={datasetNum}&res={res}&tstart={key[0].start}&tstop={key[0].stop}&tstep={key[0].step}&cstart={key[1].start}&cstop={key[1].stop}&cstep={key[1].step}&zstart={key[2].start}&zstop={key[2].stop}&zstep={key[2].step}&ystart={key[3].start}&ystop={key[3].stop}&ystep={key[3].step}&xstart={key[4].start}&xstop={key[4].stop}&xstep={key[4].step}'
         array = self.getArrayFromAPI(location)
-        # print('Shape of returned array = {}'.format(array.shape))
-        # print(array)
+        print('Shape of returned array = {}'.format(array.shape))
         return array
 
 def get(location):

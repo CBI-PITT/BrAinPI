@@ -15,6 +15,8 @@ from bil_api import utils
 from bil_api import zarrLoader
 import imaris_ims_file_reader as ims
 
+from weave.weave_read import weave_read
+
 
 # import cProfile, pstats, io
 # from pstats import SortKey
@@ -81,12 +83,17 @@ def meta():
         print(dsetPath)
         print(os.path.split(dsetPath)[1])
         
+        load = True
         if os.path.splitext(dsetPath)[1] == '.ims':
             z = ims.ims(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.zarr':
             z = zarrLoader.zarrSeries(dsetPath)
+        elif os.path.exists(os.path.join(dsetPath,'weave.json')):
+            z = weave_read(dsetPath)
+            z.metaData = z.meta
         else:
             print('API can currently only load Zarr and IMS datasets')
+            load = False
             return
             
         metadata = {'shape':z.shape,
@@ -99,7 +106,8 @@ def meta():
                            }
         
         if os.path.splitext(dsetPath)[1] == '.ims' or \
-        os.path.splitext(dsetPath)[1] == '.zarr':
+        os.path.splitext(dsetPath)[1] == '.zarr' or \
+        os.path.exists(os.path.join(dsetPath,'weave.json')):
             
             newMetaDict = {}
             for key in z.metaData:
@@ -192,6 +200,7 @@ def fmostCompress():
         
         ## Cache
         out = grabArrayCache(datapath,str(intArgs))
+        # print(out)
     
     # out = z[intArgs['res'],tslice,cslice,zslice,yslice,xslice]
     # print(out.max())
