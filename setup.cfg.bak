@@ -1,5 +1,5 @@
 [metadata]
-name = tiff_utils
+name = bil_api
 
 author = Alan M Watson
 author_email = alan.watson@pitt.edu
@@ -42,5 +42,5 @@ install_requires =
 	h5py
 	hdf5plugin
 	imagecodecs
-	#imaris-ims-file-reader
+	imaris-ims-file-reader
 	
