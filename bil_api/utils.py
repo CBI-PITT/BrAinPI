@@ -12,8 +12,10 @@ import io,ast,os
 import imaris_ims_file_reader as ims
 from bil_api.dataset_info import dataset_info
 from bil_api import zarrLoader
-from bil_api import config
+# from bil_api import config
 from numcodecs import Blosc
+
+from diskcache import FanoutCache
 
 
 
@@ -75,39 +77,63 @@ def convertMetaDataDict(meta):
     
     return newMeta
 
-    
-def loadDataset(selection: int):
+
+class config:
+    '''
+    This class will be used to manage open datasets and persistant cache
+    '''
+    def __init__(self, 
+                 cacheLocation=None, cacheSizeGB=100, 
+                 evictionPolicy='least-recently-used', timeout=0.100
+                 ):
+        '''
+        evictionPolicy Options:
+            "least-recently-stored" #R only
+            "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
+        '''
+        self.opendata = {}
+        self.cacheLocation = cacheLocation
+        self.cacheSizeGB = cacheSizeGB
+        self.evictionPolicy = evictionPolicy
+        self.timeout = timeout
+        
+        self.cacheSizeBytes = self.cacheSizeGB * (1024**3)
+        
+        if self.cacheLocation is not None:
+            # Init cache
+            self.cache = FanoutCache(self.cacheLocation,shards=16)
+            # self.cache = FanoutCache(self.cacheLocation,shards=16,timeout=self.timeout, size_limit = self.cacheSizeBytes)
+            ## Consider removing this and always leaving open to improve performance
+            self.cache.close()
+        else:
+            self.cache = None
 
     
-    dataPath = dataset_info()[selection][1]
-    print(dataPath)
+    def loadDataset(self, selection: int):
     
-    if 'config' in globals() and hasattr(globals()['config'], 'opendata') == False:
-        print('Creating opendata')
-        globals()['config'].opendata = {}
-    
-    
-    if os.path.splitext(dataPath)[-1] == '.ims':
-        print('Is IMS')
+        dataPath = dataset_info()[selection][1]
+        print(dataPath)
         
-        if (dataPath in globals()['config'].opendata) == False:
+        if dataPath in self.opendata:
+            return dataPath
+        
+        if os.path.splitext(dataPath)[-1] == '.ims':
+            print('Is IMS')
+            
             print('Creating ims object')
-            globals()['config'].opendata[dataPath] = ims.ims(dataPath)
+            self.opendata[dataPath] = ims.ims(dataPath)
+            
+            if self.opendata[dataPath].hf is None or self.opendata[dataPath].dataset is None:
+                print('opening ims object')
+                self.opendata[dataPath].open()
         
-        if globals()['config'].opendata[dataPath].hf is None or globals()['config'].opendata[dataPath].dataset is None:
-            print('opening ims object')
-            globals()['config'].opendata[dataPath].open()
-    
-    
-    elif os.path.splitext(dataPath)[-1] == '.zarr':
-        print('Is Zarr')
         
-        if (dataPath in globals()['config'].opendata) == False:
-            for _ in range(100):
-                print('Creating zarrSeries object')
-            globals()['config'].opendata[dataPath] = zarrLoader.zarrSeries(dataPath)
-        
-    return dataPath
+        elif os.path.splitext(dataPath)[-1] == '.zarr':
+            print('Is Zarr')
+            print('Creating zarrSeries object')
+            self.opendata[dataPath] = zarrLoader.zarrSeries(dataPath)
+            
+        return dataPath
         
     
     
