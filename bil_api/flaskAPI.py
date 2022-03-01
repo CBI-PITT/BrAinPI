@@ -10,7 +10,7 @@ from flask import request, Response
 import numpy as np
 
 from bil_api.dataset_info import dataset_info
-from bil_api import config
+#from bil_api import config
 from bil_api import utils
 from bil_api import zarrLoader
 import imaris_ims_file_reader as ims
