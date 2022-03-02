@@ -5,7 +5,7 @@ Created on Wed Nov  3 11:06:07 2021
 @author: alpha
 """
 
-import flask, json, zarr, os, ast, functools
+import flask, json, zarr, os, ast
 from flask import request, Response
 import numpy as np
 
@@ -15,13 +15,25 @@ from bil_api import utils
 from bil_api import zarrLoader
 import imaris_ims_file_reader as ims
 
-# from weave.weave_read import weave_read
+from weave.weave_read import weave_read
+
+'''
+To run w/ gunicorn:  gunicorn -w 1 -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app
+To run w/ gunicorn:  gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app -w 1 --threads 12
+To run w/ gunicorn:  gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app -w 2 --threads 12
+To run w/ gunicorn:  gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app -w 4 --threads 6
+
+To run development:  python -i /CBI_FastStore/cbiPythonTools/bil_api/bil_api/flaskAPI_gunicorn.py
+'''
 
 cacheLocation = r'c:\code\testCache'
-cacheSizeGB=100, 
+cacheLocation = '/CBI_FastStore/tmpCache/bil_api'
+cacheSizeGB=100
 evictionPolicy='least-recently-used'
-timeout=0.100
+timeout=0.010
 
+# Instantiate class that will manage all open datasets
+# This will remain in the global env and be accessed by multiple route methods
 config = utils.config(
     cacheLocation=cacheLocation,
     cacheSizeGB=cacheSizeGB,
@@ -29,8 +41,9 @@ config = utils.config(
     timeout=timeout
     )
 
+
 app = flask.Flask(__name__)
-app.config["DEBUG"] = True
+# app.config["DEBUG"] = True
 
 
 @app.route('/', methods=['GET'])
@@ -38,30 +51,15 @@ def home():
     return '''<h1>Brain Image Library Archive API</h1>
 <p>A prototype API for chunked loading of large Brain Image Library datasets.</p>'''
 
-
+##############################################################################
 
 @app.route('/api/available-datasets', methods=['GET'])
 def datasets():
-    
     return json.dumps(dataset_info())
 
+##############################################################################
 
-
-
-def mountDataset(name,storeType):
-    
-    dataSets = {
-        'fmost':(r'H:\globus\pitt\bil\c01_0.zarr','zarrNested'),
-        }
-    
-    if dataSets[name][1] == 'zarrNested':
-        store = zarr.NestedDirectoryStore(dataSets[name][0])
-        return zarr.open(store, mode='r')
-
-
-
-
-# Return crucial information about a given dataset
+# Return descriptive information about a given dataset
 @app.route('/api/metadata', methods=['GET'])
 def meta():
     print(request.args)
@@ -105,22 +103,8 @@ def meta():
     else:
         return "No dataset id was provided"
     
-def makesSlices(intArgs):
-    tslice = slice(intArgs['tstart'],intArgs['tstop'],intArgs['tstep'])
-    cslice = slice(intArgs['cstart'],intArgs['cstop'],intArgs['cstep'])
-    zslice = slice(intArgs['zstart'],intArgs['zstop'],intArgs['zstep'])
-    yslice = slice(intArgs['ystart'],intArgs['ystop'],intArgs['ystep'])
-    xslice = slice(intArgs['xstart'],intArgs['xstop'],intArgs['xstep'])
-    
-    return tslice, cslice, zslice, yslice, xslice
 
-if config.cache is not None:
-    @config.cache.memoize()
-    def grabArrayCache(datapath,intArgs):
-        intArgs = eval(intArgs)
-        t,c,z,y,x = makesSlices(intArgs)
-        out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
-        return out
+###############################################################################
 
 # A route to return specific dataset chunks.
 @app.route('/api/fmostCompress', methods=['GET'])
@@ -150,7 +134,7 @@ def fmostCompress():
         'xstart','xstop','xstep'
         )
     
-    # print(request.args)
+    print(request.args)
     if all((x in request.args for x in requiredParam)):
         pass
     else:
@@ -175,7 +159,8 @@ def fmostCompress():
         out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
     else:
         # Cache
-        out = grabArrayCache(datapath,str(intArgs))
+        # out = grabArrayCache(datapath,str(intArgs)) #use when using lru_cache
+        out = grabArrayCache(datapath,intArgs)
         # print(out)
     
     # out = z[intArgs['res'],tslice,cslice,zslice,yslice,xslice]
@@ -187,13 +172,99 @@ def fmostCompress():
 
 
 
+##############################################################################
+
+
+
+# A route to return specific dataset chunks.
+@app.route('/api/img', methods=['GET'])
+def fmostCompress():
+    '''
+    Retrieve an image file for a specified array
+    
+    tstart,tstop,tstep
+    cstart,cstop,cstep
+    zstart,zstop,zstep
+    ystart,ystop,ystep
+    xstart,xstop,xstep
+
+    Returns
+    -------
+    Image file of the specified array
+
+    '''
+    
+    requiredParam = (
+        'dset',
+        'res',
+        'tstart','tstop','tstep',
+        'cstart','cstop','cstep',
+        'zstart','zstop','zstep',
+        'ystart','ystop','ystep',
+        'xstart','xstop','xstep'
+        )
+    
+    print(request.args)
+    if all((x in request.args for x in requiredParam)):
+        pass
+    else:
+        return 'A required data set, resolution level or (t,c,z,y,x) start/stop/step parameter is missing'
+    
+    intArgs = {}
+    for x in request.args:
+        intArgs[x] = ast.literal_eval(request.args[x])
+    # print(intArgs)
+    
+    
+    
+    # dataPath = dataset_info()[intArgs['dset']][1]
+    datapath = config.loadDataset(intArgs['dset'])
+    
+    # if os.path.splitext(dataPath)[1] == '.ims':
+    #     z = ims.ims(dataPath)
+
+
+
+
+
+##############################################################################
+
+def makesSlices(intArgs):
+    tslice = slice(intArgs['tstart'],intArgs['tstop'],intArgs['tstep'])
+    cslice = slice(intArgs['cstart'],intArgs['cstop'],intArgs['cstep'])
+    zslice = slice(intArgs['zstart'],intArgs['zstop'],intArgs['zstep'])
+    yslice = slice(intArgs['ystart'],intArgs['ystop'],intArgs['ystep'])
+    xslice = slice(intArgs['xstart'],intArgs['xstop'],intArgs['xstep'])
+    
+    return tslice, cslice, zslice, yslice, xslice
+
+##############################################################################
+
+if config.cache is not None:
+    @config.cache.memoize()
+    def grabArrayCache(datapath,intArgs):
+        
+        # intArgs = eval(intArgs)
+        '''
+        intArgs = eval(intArgs) was used to deal with lru_cache which did not 
+        like tuples as arguments.  However, diskcache.memorize() works fine.
+        '''
+        t,c,z,y,x = makesSlices(intArgs)
+        out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
+        return out
+
+
+
 # def launchAPI():
 #     app.run(threaded=True,host='0.0.0.0')
 
 
 
+# if __name__ == '__main__':
+#     app.run(threaded=True,host='0.0.0.0')
+    
 if __name__ == '__main__':
-    app.run(threaded=True,host='0.0.0.0')
+    app.run()
 
 
     

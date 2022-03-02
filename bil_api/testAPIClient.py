@@ -19,11 +19,15 @@ import urllib3
 import cProfile, pstats
 from pstats import SortKey
 
+'''
+Run: python -i  z:\cbiPythonTools\bil_api\bil_api\testAPIClient.py
+'''
+
 baseURL = 'http://127.0.0.1:5000/api/'
 # baseURL = 'http://awatson.duckdns.org:5000/api/'
 baseURL = 'http://136.142.29.160:5000/api/'
 
-# os.environ["NAPARI_ASYNC"] = "1"
+os.environ["NAPARI_ASYNC"] = "1"
 # os.environ["NAPARI_OCTREE"] = "1"
 
 
@@ -84,6 +88,7 @@ class dataWrapper:
         ResolutionLock = self.ResolutionLock if ResolutionLock is None else ResolutionLock
         newArray = copy.deepcopy(self)
         newArray.changeResolutionLock(ResolutionLock)
+        print(self.chunks)
         return newArray
 
         
@@ -117,7 +122,7 @@ class dataWrapper:
     
     
     @staticmethod
-    @functools.lru_cache(maxsize=10000, typed=False)
+    # @functools.lru_cache(maxsize=10000, typed=False)
     def getArrayFromAPI(url):
         http = urllib3.PoolManager()
         # r = http.request('GET', url)
@@ -183,7 +188,7 @@ for ii in range(data.ResolutionLevels):
 print(imagePyramid)
 
 
-print(imagePyramid)
+# print(imagePyramid)
 
 napari.view_image(imagePyramid,contrast_limits=[0,65534],channel_axis=1)
 # napari.view_image(imagePyramid,contrast_limits=[0,65534],channel_axis=0)

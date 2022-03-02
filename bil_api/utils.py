@@ -25,7 +25,7 @@ def compress_np(nparr):
     Returns a compressed bytestring, uncompressed and the compressed byte size.
     """
     
-    comp = Blosc(cname='zstd', clevel=9, shuffle=Blosc.SHUFFLE)
+    comp = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
     bytestream = io.BytesIO()
     np.save(bytestream, nparr)
     uncompressed = bytestream.getvalue()
@@ -39,7 +39,7 @@ def uncompress_np(bytestring):
     Returns a numpy array.
     """
     
-    comp = Blosc(cname='zstd', clevel=9, shuffle=Blosc.SHUFFLE)
+    comp = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
     array = comp.decode(bytestring)
     array = io.BytesIO(array)
     
@@ -101,8 +101,8 @@ class config:
         
         if self.cacheLocation is not None:
             # Init cache
-            self.cache = FanoutCache(self.cacheLocation,shards=16)
-            # self.cache = FanoutCache(self.cacheLocation,shards=16,timeout=self.timeout, size_limit = self.cacheSizeBytes)
+            # self.cache = FanoutCache(self.cacheLocation,shards=16)
+            self.cache = FanoutCache(self.cacheLocation,shards=16,timeout=self.timeout, size_limit = self.cacheSizeBytes)
             ## Consider removing this and always leaving open to improve performance
             self.cache.close()
         else:
@@ -145,7 +145,20 @@ def prettyPrintDict(aDict):
     
     
     
+#################################
+## Depreciated code?  ###########
+#################################
+
+def mountDataset(name,storeType):
     
+    dataSets = {
+        'fmost':(r'H:\globus\pitt\bil\c01_0.zarr','zarrNested'),
+        }
+    
+    if dataSets[name][1] == 'zarrNested':
+        store = zarr.NestedDirectoryStore(dataSets[name][0])
+        return zarr.open(store, mode='r')
+
     
     
     
