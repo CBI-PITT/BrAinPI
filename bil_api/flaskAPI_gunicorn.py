@@ -213,18 +213,12 @@ def fmostCompress():
     intArgs = {}
     for x in request.args:
         intArgs[x] = ast.literal_eval(request.args[x])
-    # print(intArgs)
     
     
     
     # dataPath = dataset_info()[intArgs['dset']][1]
     datapath = config.loadDataset(intArgs['dset'])
     
-    # if os.path.splitext(dataPath)[1] == '.ims':
-    #     z = ims.ims(dataPath)
-
-
-
 
 
 ##############################################################################
@@ -254,9 +248,6 @@ if config.cache is not None:
         return out
 
 
-
-# def launchAPI():
-#     app.run(threaded=True,host='0.0.0.0')
 
 
 
