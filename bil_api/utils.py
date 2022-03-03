@@ -83,8 +83,11 @@ class config:
     This class will be used to manage open datasets and persistant cache
     '''
     def __init__(self, 
-                 cacheLocation=None, cacheSizeGB=100, 
-                 evictionPolicy='least-recently-used', timeout=0.100
+                 cacheLocation=None, 
+                 cacheSizeGB=100, 
+                 evictionPolicy='least-recently-used',
+                 timeout=0.100, 
+                 shards=16
                  ):
         '''
         evictionPolicy Options:
@@ -95,6 +98,7 @@ class config:
         self.cacheLocation = cacheLocation
         self.cacheSizeGB = cacheSizeGB
         self.evictionPolicy = evictionPolicy
+        self.shards = shards
         self.timeout = timeout
         
         self.cacheSizeBytes = self.cacheSizeGB * (1024**3)
@@ -102,7 +106,7 @@ class config:
         if self.cacheLocation is not None:
             # Init cache
             # self.cache = FanoutCache(self.cacheLocation,shards=16)
-            self.cache = FanoutCache(self.cacheLocation,shards=16,timeout=self.timeout, size_limit = self.cacheSizeBytes)
+            self.cache = FanoutCache(self.cacheLocation, shards=self.shards, timeout=self.timeout, size_limit=self.cacheSizeBytes)
             ## Consider removing this and always leaving open to improve performance
             self.cache.close()
         else:

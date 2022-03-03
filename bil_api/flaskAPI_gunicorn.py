@@ -8,6 +8,7 @@ Created on Wed Nov  3 11:06:07 2021
 import flask, json, zarr, os, ast
 from flask import request, Response, send_file
 import numpy as np
+import dask.array as da
 
 from bil_api.dataset_info import dataset_info
 # from bil_api import config
@@ -19,6 +20,7 @@ import io
 
 from bil_api import zarrLoader
 import imaris_ims_file_reader as ims
+
 # from weave.weave_read import weave_read
 
 '''
@@ -30,10 +32,14 @@ To run w/ gunicorn:  gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTo
 To run development:  python -i /CBI_FastStore/cbiPythonTools/bil_api/bil_api/flaskAPI_gunicorn.py
 '''
 
-cacheLocation = r'c:\code\testCache'
-cacheLocation = '/CBI_FastStore/tmpCache/bil_api'
+if os.name == 'nt':
+    cacheLocation = r'c:\code\testCache'
+else:
+    cacheLocation = '/CBI_FastStore/tmpCache/bil_api'
+
 cacheSizeGB=100
 evictionPolicy='least-recently-used'
+shards = 16
 timeout=0.010
 
 # Instantiate class that will manage all open datasets
@@ -42,6 +48,7 @@ config = utils.config(
     cacheLocation=cacheLocation,
     cacheSizeGB=cacheSizeGB,
     evictionPolicy=evictionPolicy,
+    shards=shards,
     timeout=timeout
     )
 
@@ -103,7 +110,7 @@ def meta():
             print(newMetaDict)
             metadata.update(newMetaDict)
         
-        return json.dumps(metadata) 
+        return json.dumps(metadata)
     else:
         return "No dataset id was provided"
     
@@ -184,7 +191,7 @@ def fmostCompress():
 @app.route('/api/img/tiff', methods=['GET'])
 def tiff():
     '''
-    Retrieve an image file for a specified array
+    Retrieve a tiff file for a specified array
     
     tstart,tstop,tstep
     cstart,cstop,cstep
@@ -199,9 +206,11 @@ def tiff():
     TEST:
         1000x1000px image
         http://127.0.0.1:5000/api/img/tiff?dset=5&res=0&tstart=0&tstop=1&tstep=1&cstart=0&cstop=1&cstep=1&zstart=0&zstop=1&zstep=1&ystart=0&ystop=1000&ystep=1&xstart=0&xstop=1000&xstep=1
+        http://136.142.29.160:5000/api/img/tiff?dset=3&res=0&tstart=0&tstop=1&tstep=1&cstart=0&cstop=1&cstep=1&zstart=200&zstop=201&zstep=1&ystart=1000&ystop=2000&ystep=1&xstart=1000&xstop=2000&xstep=1
         
         Pretty large test:
         http://127.0.0.1:5000/api/img/tiff?dset=5&res=0&tstart=0&tstop=1&tstep=1&cstart=1&cstop=2&cstep=1&zstart=0&zstop=1&zstep=1&ystart=0&ystop=15000&ystep=1&xstart=0&xstop=15000&xstep=1
+        http://136.142.29.160:5000/api/img/tiff?dset=3&res=0&tstart=0&tstop=1&tstep=1&cstart=1&cstop=2&cstep=1&zstart=200&zstop=201&zstep=1&ystart=0&ystop=15000&ystep=1&xstart=0&xstop=15000&xstep=1
     '''
     
     requiredParam = (
@@ -227,11 +236,23 @@ def tiff():
     # dataPath = dataset_info()[intArgs['dset']][1]
     datapath = config.loadDataset(intArgs['dset'])
     
-    out = grabArrayCache(datapath,intArgs)
+    # Attempt to convert to dask array for parallel read
+    # May need to do a deep copy so not to alter main class
     
+    # tmpArray = config.opendata[datapath]
+    # tmpArray.change_resolution_lock(intArgs['res'])
+    # tmpArray = da.from_array(tmpArray, chunks=tmpArray.chunks)
+    
+    # t,c,z,y,x = makesSlices(intArgs)
+    # out = tmpArray[t,c,z,y,x].compute()
+    
+    ###  End dask attempt
+    
+    out = grabArrayCache(datapath,intArgs)
     print(out)
     
     img_ram = io.BytesIO()
+    ## TODO: Build to include metadata into TIFF file
     tf.imwrite(img_ram,out)
     img_ram.seek(0)
     
@@ -244,6 +265,7 @@ def tiff():
     return send_file(
         img_ram,
         as_attachment=True,
+        ## TODO: dynamic naming of file (specifc request or based on region of request)
         download_name='out.tiff',
         mimetype='image/tiff'
     )
