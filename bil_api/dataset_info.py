@@ -19,7 +19,8 @@ def dataset_info():
             1:('fmost_zarr','h:/globus/pitt/bil/t00_c00_0.zarr'),
             2:('testIMS','z:/testData/bitplaneConverter.ims'),
             3:('HooksBrain','h:/Acquire/Hooks/BrainA.ims'),
-            4:('fmost_weave', 'h:/globus/pitt/bil/weave')
+            4:('fmost_weave', 'h:/globus/pitt/bil/weave'),
+            5:('home_testIMS', 'c:/code/testData/bitplaneConverter.ims')
                    }
         
     else:

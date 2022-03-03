@@ -6,16 +6,20 @@ Created on Wed Nov  3 11:06:07 2021
 """
 
 import flask, json, zarr, os, ast
-from flask import request, Response
+from flask import request, Response, send_file
 import numpy as np
 
 from bil_api.dataset_info import dataset_info
 # from bil_api import config
 from bil_api import utils
+
+import tifffile as tf
+import io
+
+
 from bil_api import zarrLoader
 import imaris_ims_file_reader as ims
-
-from weave.weave_read import weave_read
+# from weave.weave_read import weave_read
 
 '''
 To run w/ gunicorn:  gunicorn -w 1 -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app
@@ -43,7 +47,7 @@ config = utils.config(
 
 
 app = flask.Flask(__name__)
-# app.config["DEBUG"] = True
+app.config["DEBUG"] = True
 
 
 @app.route('/', methods=['GET'])
@@ -177,8 +181,8 @@ def fmostCompress():
 
 
 # A route to return specific dataset chunks.
-@app.route('/api/img', methods=['GET'])
-def fmostCompress():
+@app.route('/api/img/tiff', methods=['GET'])
+def tiff():
     '''
     Retrieve an image file for a specified array
     
@@ -191,7 +195,13 @@ def fmostCompress():
     Returns
     -------
     Image file of the specified array
-
+    
+    TEST:
+        1000x1000px image
+        http://127.0.0.1:5000/api/img/tiff?dset=5&res=0&tstart=0&tstop=1&tstep=1&cstart=0&cstop=1&cstep=1&zstart=0&zstop=1&zstep=1&ystart=0&ystop=1000&ystep=1&xstart=0&xstop=1000&xstep=1
+        
+        Pretty large test:
+        http://127.0.0.1:5000/api/img/tiff?dset=5&res=0&tstart=0&tstop=1&tstep=1&cstart=1&cstop=2&cstep=1&zstart=0&zstop=1&zstep=1&ystart=0&ystop=15000&ystep=1&xstart=0&xstop=15000&xstep=1
     '''
     
     requiredParam = (
@@ -214,12 +224,29 @@ def fmostCompress():
     for x in request.args:
         intArgs[x] = ast.literal_eval(request.args[x])
     
-    
-    
     # dataPath = dataset_info()[intArgs['dset']][1]
     datapath = config.loadDataset(intArgs['dset'])
     
+    out = grabArrayCache(datapath,intArgs)
+    
+    print(out)
+    
+    img_ram = io.BytesIO()
+    tf.imwrite(img_ram,out)
+    img_ram.seek(0)
+    
+    # img_ram = bytearray(img_ram.getvalue())
+    # img_ram = io.BytesIO(img_ram)
+    # tf.imread(img_ram)
+    
+    
 
+    return send_file(
+        img_ram,
+        as_attachment=True,
+        download_name='out.tiff',
+        mimetype='image/tiff'
+    )
 
 ##############################################################################
 
