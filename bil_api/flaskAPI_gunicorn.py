@@ -34,6 +34,8 @@ To run development:  python -i /CBI_FastStore/cbiPythonTools/bil_api/bil_api/fla
 
 if os.name == 'nt':
     cacheLocation = r'c:\code\testCache'
+elif 'c00' in os.uname()[1]:
+    cacheLocation = None
 else:
     cacheLocation = '/CBI_FastStore/tmpCache/bil_api'
 
