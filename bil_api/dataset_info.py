@@ -29,7 +29,9 @@ def dataset_info():
             
             choices = {
                 1:('fmost','/bil/proj/bil/zarr/zarr/t00_c00_0.zarr'),
-                2:('testIMS','/bil/proj/bil/zarr/ims_test/bitplaneConverter.ims')
+                2:('testIMS','/bil/proj/bil/zarr/ims_test/bitplaneConverter.ims'),
+                3:('andor1a','/bil/a4/0e/a40eac7d32a2df23/TME10-1_Lvl1_Stitched/30x/Camk2a-MORF3-D1Tom_TME10-1_30x_Str_01A.ims'),
+                4:('andor1b','/bil/a4/0e/a40eac7d32a2df23/TME10-1_Lvl1_Stitched/30x/Camk2a-MORF3-D1Tom_TME10-1_30x_Str_01B.ims')
                        }
         else:
             
