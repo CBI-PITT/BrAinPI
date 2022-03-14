@@ -7,9 +7,14 @@ Created on Thu Nov  4 10:05:34 2021
 
 
 import numpy as np
-import io,ast,os
+import io
+import ast
+import os
+import urllib
+import json
 
 import imaris_ims_file_reader as ims
+import zarr
 from bil_api.dataset_info import dataset_info
 from bil_api import zarrLoader
 # from bil_api import config
@@ -18,6 +23,10 @@ from numcodecs import Blosc
 from diskcache import FanoutCache
 
 
+def get(location,baseURL):
+    with urllib.request.urlopen(baseURL + location, timeout=5) as url:
+        data = dict(json.loads(url.read().decode()))
+    return data
 
 def compress_np(nparr):
     """
@@ -50,32 +59,6 @@ def uncompress_np(bytestring):
     #     return np.squeeze(np.load(array))
     # else:
     return np.load(array)
-
-
-def convertMetaDataDict(meta):
-    
-    '''
-    json serialized dict can not have tuple as key.
-    This assumes that any key value that 'literal_eval's to tuple 
-    will be converted.  Tuples are used to designate (r,t,c) information.
-    
-    Example: a key for the shape of an array at resolution level 2, 
-    timepoint 3, channel 4 = (2,3,4,'shape')
-    '''
-    
-    newMeta = {}
-    for idx in meta:
-        
-        try:
-            if isinstance(ast.literal_eval(idx),tuple):
-                newMeta[ast.literal_eval(idx)] = meta[idx]
-            else:
-                newMeta[idx] = meta[idx]
-        
-        except ValueError:
-            newMeta[idx] = meta[idx]
-    
-    return newMeta
 
 
 class config:
@@ -164,7 +147,21 @@ def mountDataset(name,storeType):
         return zarr.open(store, mode='r')
 
     
-    
+
+def profile(func):
+    def wrapper(*args, **kwargs):
+        pr = cProfile.Profile()
+        pr.enable()
+        retval = func(*args, **kwargs)
+        pr.disable()
+        s = io.StringIO()
+        sortby = SortKey.CUMULATIVE  # 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        print(s.getvalue())
+        return retval
+
+    return wrapper
     
     
     
