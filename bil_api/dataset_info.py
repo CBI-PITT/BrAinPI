@@ -25,12 +25,20 @@ def dataset_info():
         
     else:
         
-        choices = {
-            1:('fmost','/CBI_Hive/globus/pitt/bil/t00_c00_0.zarr'),
-            2:('testIMS','/CBI_FastStore/testData/bitplaneConverter.ims'),
-            3:('HooksBrain','/CBI_Hive/Acquire/Hooks/BrainA.ims'),
-            4:('fmost_weave', '/CBI_Hive/globus/pitt/bil/weave')
-                   }
+        if 'c00' in os.uname()[1]:
+            
+            choices = {
+                1:('fmost','/bil/proj/bil/zarr/zarr/t00_c00_0.zarr'),
+                2:('testIMS','/bil/proj/bil/zarr/ims_test/bitplaneConverter.ims')
+                       }
+        else:
+            
+            choices = {
+                1:('fmost','/CBI_Hive/globus/pitt/bil/t00_c00_0.zarr'),
+                2:('testIMS','/CBI_FastStore/testData/bitplaneConverter.ims'),
+                3:('HooksBrain','/CBI_Hive/Acquire/Hooks/BrainA.ims'),
+                4:('fmost_weave', '/CBI_Hive/globus/pitt/bil/weave')
+                       }
         
     
     return choices
