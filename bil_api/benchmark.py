@@ -87,7 +87,9 @@ for ii in range(1000000):
         a = getIt(choice)
     elif delay == True:
         a = delayed(getIt)(choice)
-        toProcess.append(client.compute(a))
+        a = client.compute(a)
+        toProcess.append(a)
+        del a
     print('Working on request {}'.format(ii))
 
 if delay == True:
