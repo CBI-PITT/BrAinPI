@@ -4,35 +4,35 @@ Created on Mon Mar 14 19:11:09 2022
 
 @author: alpha
 """
-import numpy as np
-import os
-import io
-import zlib
+# import numpy as np
+# import os
+# import io
+# import zlib
 import time
-import requests
-import urllib
-import json
-import copy
-import functools
-import urllib3
+# import requests
+# import urllib
+# import json
+# import copy
+# import functools
+# import urllib3
 import itertools
 import random
 
 import dask
 from dask.delayed import delayed
-from distributed import Client
+# from distributed import Client
 
 # bil_api imports
-import utils
+# import utils
 from bil_api.remote_array import dataWrapper
 
 # Vis and helper imports
-import napari
+# import napari
 import dask.array as da
 
 # Benchmarking imports
-import cProfile, pstats
-from pstats import SortKey
+# import cProfile, pstats
+# from pstats import SortKey
 
 baseURL = 'http://c00.bil.psc.edu:5001/api/'
 
