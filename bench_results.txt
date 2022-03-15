@@ -2,7 +2,9 @@
 
 Alan Home wifi (75 megabit)
 
-1000 fMOST tiles (NO Cacheing, one-by-one)
+1000*1000*1000*16/8/1024/1024/1024 = Gigabytes
+
+1000 fMOST tiles (NO Cacheing, one-by-one,1000x1000)
 seed(42)
 
 Run 1
@@ -12,7 +14,7 @@ Run 2
 Run 3
 8.778 Min
 
-1000 fMOST tiles (NO Cacheing, parallel)
+1000 fMOST tiles (NO Cacheing, parallel,1000x1000)
 seed(42)
 
 Run 1
@@ -21,3 +23,46 @@ Run 2
 2.721
 Run 3
 2.854
+
+
+1000 fMOST tiles (Cacheing, parallel,1000x1000)
+seed(42)
+
+First Run
+2.279 Min
+2nd Run
+2.423 Min
+3rd Run
+2.321 Min
+
+1000 IMS (dragon) tiles (Cacheing, parallel, 8x256x256)
+seed(42)
+
+First Run
+1.955 Min
+Second
+1.930 Min
+Third
+1.866
+
+1000 IMS (ims converter test) tiles (Cacheing, parallel, 3x256x256)
+seed(42)
+
+First Run
+1.465 Min
+Second
+1.385 Min
+Third
+1.366 Min
+
+
+1000 IMS (dragon) tiles (Cacheing, parallel, 8x256x256)
+seed(42)
+
+First Run
+2.082 Min
+Second
+1.766 Min
+Third
+1.829 Min
+

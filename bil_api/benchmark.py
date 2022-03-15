@@ -42,7 +42,7 @@ baseURL = 'http://c00.bil.psc.edu:5001/api/'
 # selectedDataset = input('Enter the number of the dataset do you wish to view? \n')
 
 
-selectedDataset = 1
+selectedDataset = 4
 
 # Take the selected dataset and describe it as a numpy-like array
 data = dataWrapper(baseURL,selectedDataset)
@@ -60,14 +60,14 @@ chunkMap = (
 allChunks = [x for x in itertools.product(*chunkMap)]
 
 def getIt(choice):
-    data[
+    a = data[
         slice(choice[0],choice[0]+data_dask.chunksize[0]),
         slice(choice[1],choice[1]+data_dask.chunksize[1]),
         slice(choice[2],choice[2]+data_dask.chunksize[2]),
         slice(choice[3],choice[3]+data_dask.chunksize[3]),
         slice(choice[4],choice[4]+data_dask.chunksize[4])
         ]
-    return True
+    return a
 
 delay = True
 random.seed(42)
@@ -76,6 +76,9 @@ toProcess = []
 start = time.time()
 for ii in range(1000):
     choice = random.choice(allChunks)
+    while all([x+data_dask.chunksize[idx]<=data.shape[idx] for idx,x in enumerate(choice)]) == False:
+        choice = random.choice(allChunks)
+    
     if delay == False:
         a = getIt(choice)
     elif delay == True:
