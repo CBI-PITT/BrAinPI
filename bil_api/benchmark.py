@@ -20,6 +20,7 @@ import random
 
 import dask
 from dask.delayed import delayed
+from distribuited import Client
 
 # bil_api imports
 import utils
@@ -72,6 +73,9 @@ def getIt(choice):
 delay = True
 random.seed(42)
 
+if delay == True:
+    client = Client()
+
 toProcess = []
 start = time.time()
 for ii in range(1000):
@@ -83,10 +87,12 @@ for ii in range(1000):
         a = getIt(choice)
     elif delay == True:
         a = delayed(getIt)(choice)
-        toProcess.append(a)
+        toProcess.append(client.compute(a))
     print('Working on request {}'.format(ii))
 
 if delay == True:
-    toProcess = dask.compute(toProcess)
+    print('Waiting for jobs to complete')
+    toProcess = client.gather(toProcess)
+    client.close()
 stop = time.time()
 print('{} minutes to complete {} requests'.format((stop-start)/60,ii))
