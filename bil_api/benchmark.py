@@ -74,11 +74,12 @@ delay = True
 random.seed(42)
 
 if delay == True:
-    client = Client()
+    # client = Client()
+    pass
 
 toProcess = []
 start = time.time()
-for ii in range(1000000):
+for ii in range(1000):
     choice = random.choice(allChunks)
     while all([x+data_dask.chunksize[idx]<=data.shape[idx] for idx,x in enumerate(choice)]) == False:
         choice = random.choice(allChunks)
@@ -87,14 +88,16 @@ for ii in range(1000000):
         a = getIt(choice)
     elif delay == True:
         a = delayed(getIt)(choice)
-        a = client.compute(a)
+        # a = client.compute(a)
         toProcess.append(a)
         del a
     print('Working on request {}'.format(ii))
 
 if delay == True:
     print('Waiting for jobs to complete')
-    toProcess = client.gather(toProcess)
-    client.close()
+    start = time.time()
+    toProcess = dask.compute(toProcess)
+    # toProcess = client.gather(toProcess)
+    # client.close()
 stop = time.time()
 print('{} minutes to complete {} requests'.format((stop-start)/60,ii))
