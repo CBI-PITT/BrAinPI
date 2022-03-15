@@ -48,7 +48,7 @@ utils.prettyPrintDict(available)
 selectedDataset = input('Enter the number of the dataset do you wish to view? \n')
 
 # Take the selected dataset and describe it as a numpy-like array
-data = dataWrapper(selectedDataset, baseURL=baseURL)
+data = dataWrapper(baseURL,selectedDataset)
 
 # Build a list of the datasets for each resolution level from Highest to Lowest
 imagePyramid = []

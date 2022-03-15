@@ -36,7 +36,7 @@ class dataWrapper:
         self.baseURL = baseURL if baseURL[-1] == '/' else baseURL + '/'
         self.datasetNum = selectedDataset
         self.metadata = self.get('metadata?id={}'.format(self.datasetNum))
-        self.metadata = utils.convertMetaDataDict(self.metadata)
+        self.metadata = self.convertMetaDataDict(self.metadata)
         
         self.ResolutionLevels = int(self.metadata['ResolutionLevels'])
         self.TimePoints = int(self.metadata['TimePoints'])

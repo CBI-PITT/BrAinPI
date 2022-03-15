@@ -1,0 +1,23 @@
+
+
+Alan Home wifi (75 megabit)
+
+1000 fMOST tiles (NO Cacheing, one-by-one)
+seed(42)
+
+Run 1
+10.492 Min
+Run 2
+8.846 Min
+Run 3
+8.778 Min
+
+1000 fMOST tiles (NO Cacheing, parallel)
+seed(42)
+
+Run 1
+2.608 Min
+Run 2
+2.721
+Run 3
+2.854
