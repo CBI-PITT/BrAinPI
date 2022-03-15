@@ -79,7 +79,7 @@ if delay == True:
 
 toProcess = []
 start = time.time()
-for ii in range(1000):
+for ii in range(1000000):
     choice = random.choice(allChunks)
     while all([x+data_dask.chunksize[idx]<=data.shape[idx] for idx,x in enumerate(choice)]) == False:
         choice = random.choice(allChunks)
