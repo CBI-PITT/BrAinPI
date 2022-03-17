@@ -79,7 +79,7 @@ if delay == True:
 
 toProcess = []
 start = time.time()
-for ii in range(1000000):
+for ii in range(10000):
     choice = random.choice(allChunks)
     while all([x+data_dask.chunksize[idx]<=data.shape[idx] for idx,x in enumerate(choice)]) == False:
         choice = random.choice(allChunks)
@@ -96,7 +96,7 @@ for ii in range(1000000):
 if delay == True:
     print('Waiting for jobs to complete')
     start = time.time()
-    toProcess = dask.compute(toProcess)
+    toProcess = dask.compute(toProcess,num_workers=60)
     # toProcess = client.gather(toProcess)
     # client.close()
 stop = time.time()
