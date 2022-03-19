@@ -6,6 +6,7 @@ Created on Thu Mar 17 16:39:55 2022
 """
 # bil_api imports
 import utils
+from itertools import product
 
 
 #metadata extracted from dataset
@@ -145,6 +146,49 @@ neuro_info['type'] = 'image'
 
 
 
+
+
+'''
+File name convention by chunk = [x,y,z] <-- note: opposite from numpy (z,y,x)
+chunks == [10,15,2]
+size == [18,35,1]
+
+Files:
+    0-10_0-15_0-1
+    0-10_15-30_0-1
+    0-10_30-35_0-1
+    10-18_0-15_0-1
+    10-18_15-30_0-1
+    10-18_30-35_0-1
+    
+'''
+
+name_template = '{}-{}_{}-{}_{}-{}'
+fileLists = {}
+## Make file list
+for res in range(metadata['ResolutionLevels']):
+    chunks = metadata[(res,0,0,'chunks')]
+    shape = metadata[(res,0,0,'shape')]
+    
+    fileLists[res] = []
+    for x,y,z in product(
+            range(0,shape[-1],chunks[-1]), #X-axis
+            range(0,shape[-2],chunks[-2]), #Y-axis
+            range(0,shape[-3],chunks[-3])  #Z-axis
+            ):
+        
+        
+        currentName = name_template.format(
+            x,
+            x + chunks[-1] if x + chunks[-1] <= shape[-1] else shape[-1],
+            y,
+            y + chunks[-2] if y + chunks[-2] <= shape[-2] else shape[-2],
+            z,
+            z + chunks[-3] if z + chunks[-3] <= shape[-3] else shape[-3],
+            
+            )
+        fileLists[res].append(currentName)
+        print(currentName)
 
 
 

@@ -288,10 +288,23 @@ from flask import render_template
 fakePaths = ['/test/test/test.txt', '/test/test/test2.txt','/test.txt','/test/test']
 
 # @app.route('/', defaults={'req_path': ''})
-@app.route('/api/vfs', defaults={'req_path': ''})
-@app.route('/api/vfs/<path:req_path>')
+@app.route('/ng', defaults={'req_path': ''})
+@app.route('/ng/<path:req_path>')
 def dir_listing(req_path):
     print(req_path)
+    
+    ## Show available datasets in /ng
+    if req_path == '':
+        dsetNums = []
+        dsetNames = []
+        for items in dataset_info():
+            dsetNums.append(str(items))
+            dsetNames.append(dataset_info()[items][0])
+        return render_template('ns_datasets.html', dsets=zip(dsetNums,dsetNames))
+    
+    
+    datapath = config.loadDataset(int(req_path))
+    
 
     # Show directory contents
     path = [os.path.split(x)[0] for x in fakePaths]
@@ -303,8 +316,8 @@ def dir_listing(req_path):
 # if __name__ == '__main__':
 #     app.run(threaded=True,host='0.0.0.0')
     
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0',port=5001)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0',port=5001)
 
 
     

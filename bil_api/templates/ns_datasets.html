@@ -1,0 +1,8 @@
+<!doctype html>
+<html>
+<head><title>Available Neuroglancer Datasets</title></head>
+<body>
+<h1>Available Neuroglancer Datasets</h1><hr><pre><a href="../">../</a>
+{% for dset in dsets %}<a href="{{ (dset[0] + '/' if request.path != '/' else '') }}">{{ (dset[1] + '/' if request.path != '/' else '') }}</a>
+{% endfor %}</pre><hr></body>
+</html>
