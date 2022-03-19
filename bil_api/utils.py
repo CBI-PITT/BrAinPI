@@ -130,7 +130,42 @@ def prettyPrintDict(aDict):
         print('{}{}{}'.format(k.ljust(10),v[0].ljust(20),v[1]))
     
     
+def metaDataExtraction(numpy_like_object,strKey=False):
+    '''
+    Function take a 5D numpy_like_object that includes the parameters
+    'chunks','ResolutionLevels','TimePoints','Channels','metaData'
     
+    metaData is a dict with tuple keys of types (int,int,int,str) 
+    specifying (resolution_level,TimePoint,Channel,information_type)
+    '''
+    metadata = {
+        'shape':numpy_like_object.shape,
+        'chunks':numpy_like_object.chunks,
+        'dtype':str(numpy_like_object.dtype),
+        'ndim':numpy_like_object.ndim,
+        'ResolutionLevels':numpy_like_object.ResolutionLevels,
+        'TimePoints':numpy_like_object.TimePoints,
+        'Channels':numpy_like_object.Channels
+        }
+    
+    try:
+        newMetaDict = {}
+        for key in numpy_like_object.metaData:
+            if strKey == False:
+                newMetaDict[key] = numpy_like_object.metaData[key] \
+                    if isinstance(numpy_like_object.metaData[key],np.dtype) == False \
+                        else str(numpy_like_object.metaData[key])
+            else:
+                newMetaDict[str(key)] = numpy_like_object.metaData[key] \
+                    if isinstance(numpy_like_object.metaData[key],np.dtype) == False \
+                        else str(numpy_like_object.metaData[key])
+        print(newMetaDict)
+        metadata.update(newMetaDict)
+    
+    except Exception:
+        pass
+    
+    return metadata
     
 #################################
 ## Depreciated code?  ###########

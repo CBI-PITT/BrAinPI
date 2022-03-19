@@ -1,0 +1,8 @@
+<!doctype html>
+<html>
+<head><title>Index of {{ path[0] }}</title></head>
+<body>
+<h1>Index of {{ path[0] }}</h1><hr><pre><a href="../">../</a>
+{% for file in files %}<a href="{{ (file+ '/' if request.path != '/' else '') }}">{{ (file+ '/' if request.path != '/' else '') }}</a>
+{% endfor %}</pre><hr></body>
+</html>

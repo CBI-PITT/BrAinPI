@@ -36,6 +36,7 @@ Run: python -i  z:\cbiPythonTools\bil_api\bil_api\testAPIClient.py
 # baseURL = 'http://awatson.duckdns.org:5000/api/'
 # baseURL = 'http://136.142.29.160:5000/api/'
 baseURL = 'http://c00.bil.psc.edu:5001/api/'
+baseURL = 'https://brain-api.cbi.pitt.edu/api/'
 
 os.environ["NAPARI_ASYNC"] = "1"
 # os.environ["NAPARI_OCTREE"] = "1"

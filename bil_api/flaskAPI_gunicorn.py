@@ -93,24 +93,7 @@ def meta():
             print('API can currently only load Zarr and IMS datasets')
             return
             
-        metadata = {'shape':z.shape,
-                           'chunks':z.chunks,
-                           'dtype':str(z.dtype),
-                           'ndim':z.ndim,
-                           'ResolutionLevels':z.ResolutionLevels,
-                           'TimePoints':z.TimePoints,
-                           'Channels':z.Channels
-                           }
-        
-        if os.path.splitext(dsetPath)[1] == '.ims' or \
-        os.path.splitext(dsetPath)[1] == '.zarr' or \
-        os.path.exists(os.path.join(dsetPath,'weave.json')):
-            
-            newMetaDict = {}
-            for key in z.metaData:
-                newMetaDict[str(key)] = z.metaData[key] if isinstance(z.metaData[key],np.dtype) == False else str(z.metaData[key])
-            print(newMetaDict)
-            metadata.update(newMetaDict)
+        metadata = utils.metaDataExtraction(z,strKey=True)
         
         return json.dumps(metadata)
     else:
@@ -300,13 +283,28 @@ if config.cache is not None:
 
 
 
+from flask import render_template
+
+fakePaths = ['/test/test/test.txt', '/test/test/test2.txt','/test.txt','/test/test']
+
+# @app.route('/', defaults={'req_path': ''})
+@app.route('/api/vfs', defaults={'req_path': ''})
+@app.route('/api/vfs/<path:req_path>')
+def dir_listing(req_path):
+    print(req_path)
+
+    # Show directory contents
+    path = [os.path.split(x)[0] for x in fakePaths]
+    files = [os.path.split(x)[1] for x in fakePaths]
+    return render_template('vfs_bil.html', path=path, files=files)
+
 
 
 # if __name__ == '__main__':
 #     app.run(threaded=True,host='0.0.0.0')
     
-if __name__ == '__main__':
-    app.run(host='0.0.0.0',port=5001)
+# if __name__ == '__main__':
+#     app.run(host='0.0.0.0',port=5001)
 
 
     
