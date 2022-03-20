@@ -102,9 +102,9 @@ class config:
         print(dataPath)
         
         if dataPath in self.opendata:
-            return dataPath
+            pass
         
-        if os.path.splitext(dataPath)[-1] == '.ims':
+        elif os.path.splitext(dataPath)[-1] == '.ims':
             print('Is IMS')
             
             print('Creating ims object')

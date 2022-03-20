@@ -5,7 +5,7 @@ Created on Wed Nov  3 11:06:07 2021
 @author: alpha
 """
 
-import flask, json, zarr, os, ast
+import flask, json, zarr, os, ast, re
 from flask import request, Response, send_file
 import numpy as np
 import dask.array as da
@@ -19,7 +19,9 @@ import io
 
 
 from bil_api import zarrLoader
+from bil_api import neuroGlancer
 import imaris_ims_file_reader as ims
+
 
 # from weave.weave_read import weave_read
 
@@ -286,14 +288,13 @@ if config.cache is not None:
 from flask import render_template
 
 fakePaths = ['/test/test/test.txt', '/test/test/test2.txt','/test.txt','/test/test']
-
-# @app.route('/', defaults={'req_path': ''})
-@app.route('/ng', defaults={'req_path': ''})
-@app.route('/ng/<path:req_path>')
+ngPath = '/api/ng/' #<--- final slash is required for proper navigation through dir tree
+@app.route(ngPath, defaults={'req_path': ''})
+@app.route(ngPath + '<path:req_path>')
 def dir_listing(req_path):
-    print(req_path)
+    # return str(request.url.split('/')[-2])
     
-    ## Show available datasets in /ng
+    ## Show / select available datasets in /ng
     if req_path == '':
         dsetNums = []
         dsetNames = []
@@ -303,13 +304,38 @@ def dir_listing(req_path):
         return render_template('ns_datasets.html', dsets=zip(dsetNums,dsetNames))
     
     
-    datapath = config.loadDataset(int(req_path))
+    # Display base path of specifc /ng dataset
+    url_split = request.url.split(ngPath)
+    if url_split[-1] != '':
+        if len(url_split[-1].split('/')) == 1 and isinstance(re.match('[0-9]',url_split[-1]),re.Match):
+            dsetNum = int(url_split[-1])
+        elif len(url_split[-1].split('/')) == 2 and isinstance(re.match('[0-9]',url_split[-1].split('/')[-2]),re.Match):
+            dsetNum = int(url_split[-1].split('/')[-2])
+        else:
+            return 'Path must be of style {}{} where {} refers to a specific dataset found at {}'.format(ngPath,'integer','integer',ngPath)
+        
+        datapath = config.loadDataset(dsetNum)
+        
+        if hasattr(config.opendata[datapath],'ng_files') == False or \
+            hasattr(config.opendata[datapath],'ng_json') == False:
+                
+                config.opendata[datapath].ng_files = \
+                    neuroGlancer.ng_files(config.opendata[datapath])
+                    
+                config.opendata[datapath].ng_json = \
+                    neuroGlancer.ng_json(config.opendata[datapath],file='dict')
+        
+        
+        
+        
+        # return str(config.opendata[datapath].ng_files[0][0:10])
+        return str(config.opendata[datapath].ng_json)
     
 
     # Show directory contents
-    path = [os.path.split(x)[0] for x in fakePaths]
-    files = [os.path.split(x)[1] for x in fakePaths]
-    return render_template('vfs_bil.html', path=path, files=files)
+    # path = [os.path.split(x)[0] for x in fakePaths]
+    # files = [os.path.split(x)[1] for x in fakePaths]
+    # return render_template('vfs_bil.html', path=path, files=files)
 
 
 
@@ -323,8 +349,13 @@ if __name__ == '__main__':
     
     
     
-    
-    
+    # Request parameters
+    # path             /foo/page.html
+    # full_path        /foo/page.html?x=y
+    # script_root      /myapplication
+    # base_url         http://www.example.com/myapplication/foo/page.html
+    # url              http://www.example.com/myapplication/foo/page.html?x=y
+    # url_root         http://www.example.com/myapplication/
     
     
     
