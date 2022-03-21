@@ -5,8 +5,9 @@ Created on Wed Nov  3 11:06:07 2021
 @author: alpha
 """
 
-import flask, json, zarr, os, ast, re
+import flask, json, zarr, os, ast, re, io,sys
 from flask import request, Response, send_file
+from flask_cors import CORS,cross_origin
 import numpy as np
 import dask.array as da
 
@@ -58,7 +59,9 @@ config = utils.config(
 
 
 app = flask.Flask(__name__)
-app.config["DEBUG"] = True
+# app.config["DEBUG"] = True
+
+CORS(app)
 
 
 @app.route('/', methods=['GET'])
@@ -305,12 +308,12 @@ def dir_listing(req_path):
     
     
     # Display base path of specifc /ng dataset
-    url_split = request.url.split(ngPath)
+    url_split = request.url.split(ngPath)[-1]
+    url_path_split = url_split.split('/')
+    url_path_split = [x for x in url_path_split if x != '']
     if url_split[-1] != '':
-        if len(url_split[-1].split('/')) == 1 and isinstance(re.match('[0-9]',url_split[-1]),re.Match):
-            dsetNum = int(url_split[-1])
-        elif len(url_split[-1].split('/')) == 2 and isinstance(re.match('[0-9]',url_split[-1].split('/')[-2]),re.Match):
-            dsetNum = int(url_split[-1].split('/')[-2])
+        if isinstance(re.match('[0-9]',url_path_split[0]),re.Match):
+            dsetNum = int(url_path_split[0])
         else:
             return 'Path must be of style {}{} where {} refers to a specific dataset found at {}'.format(ngPath,'integer','integer',ngPath)
         
@@ -325,11 +328,97 @@ def dir_listing(req_path):
                 config.opendata[datapath].ng_json = \
                     neuroGlancer.ng_json(config.opendata[datapath],file='dict')
         
+        # Build appropriate File List in base path
+        if len(url_path_split) == 1:
+            res_files = list(config.opendata[datapath].ng_files.keys())
+            # return str(res_files)
+            files = ['info', *res_files]
+            files = [str(x) for x in files]
+            path = [request.script_root]
+            return render_template('vfs_bil.html', path=path, files=files)
+        
+        # Return 'info' json
+        if len(url_path_split) == 2 and url_path_split[-1] == 'info':
+            # return 'in'
+            b = io.BytesIO()
+            b.write(json.dumps(config.opendata[datapath].ng_json, indent=2, sort_keys=False).encode())
+            b.seek(0)
+            
+            # resp = flask.Response(send_file(
+            #         b,
+            #         as_attachment=True,
+            #         download_name='info',
+            #         mimetype='application/json'
+            #     ))
+            # resp.headers['Access-Control-Allow-Origin'] = '*'
+            # return resp
+            return send_file(
+                b,
+                as_attachment=False,
+                download_name='info',
+                mimetype='application/json'
+            )
+            
+        if len(url_path_split) == 2 and isinstance(re.match('[0-9]+',url_path_split[-1]),re.Match):
+            res = int(url_path_split[-1])
+            files = config.opendata[datapath].ng_files[res]
+            path = [request.script_root]
+            return render_template('vfs_bil.html', path=path, files=files)
+        
+        file_name_template = '{}-{}_{}-{}_{}-{}'
+        file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
+        if len(url_path_split) == 3 and isinstance(re.match(file_pattern,url_path_split[-1]),re.Match):
+            
+            print(request.path + '\n')
+            # print(url_path_split[-1] + '\n')
+            
+            x,y,z = url_path_split[-1].split('_')
+            x = x.split('-')
+            y = y.split('-')
+            z = z.split('-')
+            x = [int(x) for x in x]
+            y = [int(x) for x in y]
+            z = [int(x) for x in z]
+            print(x)
+            print(y)
+            print(z)
+            img = config.opendata[datapath][
+                int(url_path_split[-2]),
+                slice(0),
+                slice(None),
+                slice(z[0],z[1]),
+                slice(y[0],y[1]),
+                slice(x[0],x[1])
+                ]
+            
+            # img = np.squeeze(img)
+            # print(img.shape, file=sys.stderr)
+            
+            img = neuroGlancer.encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
+            # Flask return of bytesIO as file
+            
+            # resp = flask.Response(send_file(
+            #     img,
+            #     as_attachment=True,
+            #     ## TODO: dynamic naming of file (specifc request or based on region of request)
+            #     download_name=url_path_split[-1], # name needs to match chunk
+            #     mimetype='application/octet-stream'
+            # ))
+            # resp.headers['Access-Control-Allow-Origin'] = '*'
+            # return resp
+            return send_file(
+                img,
+                as_attachment=True,
+                ## TODO: dynamic naming of file (specifc request or based on region of request)
+                download_name=url_path_split[-1], # name needs to match chunk
+                mimetype='application/octet-stream'
+            )
         
         
+            
         
         # return str(config.opendata[datapath].ng_files[0][0:10])
-        return str(config.opendata[datapath].ng_json)
+        # return str(config.opendata[datapath].ng_json)
     
 
     # Show directory contents

@@ -9,6 +9,23 @@ import utils
 from itertools import product
 import io
 import json
+from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
+
+
+def encode_ng_file(numpy_array,channels):
+    encoder = RawChunkEncoder(numpy_array.dtype, channels)
+    img_ram = io.BytesIO()
+    img_ram.write(encoder.encode(numpy_array))
+    img_ram.seek(0)
+
+
+    # # Write numpy to NG raw chunk to IO buffer
+    # img_ram = io.BytesIO()
+    # img_ram.write(encoder.encode(numpy_array))
+    # img_ram.seek(0)
+    return img_ram
+
+
 
 
 #metadata extracted from datasetimport json
@@ -34,11 +51,27 @@ def ng_json(numpy_like_object,file=None):
     scales = []
     current_scale = {}
     for res in range(metadata['ResolutionLevels']):
-        current_scale["chunk_sizes"] = [list(metadata[(res,0,0,'chunks')][-3:])]
-        current_scale["encoding"] = 'jpeg'
+        current_scale["chunk_sizes"] = [
+            list(
+                reversed(
+                    list(metadata[(res,0,0,'chunks')][-3:])
+                    )
+                )
+            ]
+        
+        current_scale["encoding"] = 'raw'
         current_scale["key"] = str(res)
-        current_scale["resolution"] = list(metadata[(res,0,0,'resolution')])
-        current_scale["size"] = list(metadata[(res,0,0,'shape')][-3:])
+        current_scale["resolution"] = [x*1000 for x in list(
+            reversed(
+                list(metadata[(res,0,0,'resolution')])
+                )
+            )
+            ]
+        current_scale["size"] = list(
+            reversed(
+                list(metadata[(res,0,0,'shape')][-3:])
+                )
+            )
         current_scale["voxel_offset"] = [0, 0, 0]
         
         scales.append(current_scale)
