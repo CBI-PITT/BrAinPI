@@ -61,7 +61,8 @@ config = utils.config(
 app = flask.Flask(__name__)
 # app.config["DEBUG"] = True
 
-CORS(app)
+# cors = CORS(app, resources={r"/api/ng/*": {"origins": "*"}})
+# app.config['CORS_HEADERS'] = 'Content-Type'
 
 
 @app.route('/', methods=['GET'])
@@ -294,6 +295,7 @@ fakePaths = ['/test/test/test.txt', '/test/test/test2.txt','/test.txt','/test/te
 ngPath = '/api/ng/' #<--- final slash is required for proper navigation through dir tree
 @app.route(ngPath, defaults={'req_path': ''})
 @app.route(ngPath + '<path:req_path>')
+@cross_origin(allow_headers=['Content-Type'])
 def dir_listing(req_path):
     # return str(request.url.split('/')[-2])
     
@@ -322,20 +324,20 @@ def dir_listing(req_path):
         if hasattr(config.opendata[datapath],'ng_files') == False or \
             hasattr(config.opendata[datapath],'ng_json') == False:
                 
-                config.opendata[datapath].ng_files = \
-                    neuroGlancer.ng_files(config.opendata[datapath])
+                # config.opendata[datapath].ng_files = \
+                #     neuroGlancer.ng_files(config.opendata[datapath])
                     
                 config.opendata[datapath].ng_json = \
                     neuroGlancer.ng_json(config.opendata[datapath],file='dict')
         
-        # Build appropriate File List in base path
-        if len(url_path_split) == 1:
-            res_files = list(config.opendata[datapath].ng_files.keys())
-            # return str(res_files)
-            files = ['info', *res_files]
-            files = [str(x) for x in files]
-            path = [request.script_root]
-            return render_template('vfs_bil.html', path=path, files=files)
+        # # Build appropriate File List in base path
+        # if len(url_path_split) == 1:
+        #     res_files = list(config.opendata[datapath].ng_files.keys())
+        #     # return str(res_files)
+        #     files = ['info', *res_files]
+        #     files = [str(x) for x in files]
+        #     path = [request.script_root]
+        #     return render_template('vfs_bil.html', path=path, files=files)
         
         # Return 'info' json
         if len(url_path_split) == 2 and url_path_split[-1] == 'info':
@@ -346,11 +348,12 @@ def dir_listing(req_path):
             
             # resp = flask.Response(send_file(
             #         b,
-            #         as_attachment=True,
+            #         as_attachment=False,
             #         download_name='info',
             #         mimetype='application/json'
             #     ))
             # resp.headers['Access-Control-Allow-Origin'] = '*'
+            # resp.headers['Access-Control-Allow-Headers']='Content-Type' 
             # return resp
             return send_file(
                 b,
@@ -379,9 +382,9 @@ def dir_listing(req_path):
             x = [int(x) for x in x]
             y = [int(x) for x in y]
             z = [int(x) for x in z]
-            print(x)
-            print(y)
-            print(z)
+            # print(x)
+            # print(y)
+            # print(z)
             img = config.opendata[datapath][
                 int(url_path_split[-2]),
                 slice(0),
@@ -391,8 +394,10 @@ def dir_listing(req_path):
                 slice(x[0],x[1])
                 ]
             
-            # img = np.squeeze(img)
-            # print(img.shape, file=sys.stderr)
+            while img.ndim > 4:
+                img = np.squeeze(img,axis=0)
+                
+            print(img.shape, file=sys.stderr)
             
             img = neuroGlancer.encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
             # Flask return of bytesIO as file

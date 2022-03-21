@@ -75,8 +75,8 @@ class zarrSeries:
                                             zarrFile.shape[1],
                                             zarrFile.shape[2]
                                        )
-            ## Need to extract resolution by some other means.  For now, default to 1,1,1
-            self.metaData[r,t,c,'resolution'] = (1,1,1)
+            ## Need to extract resolution by some other means.  For now, default to 1,1,1 and divide by 2 for each series
+            self.metaData[r,t,c,'resolution'] = tuple([x*(2**r) for x in (1,0.3,0.3)])#(1,1,1)
                      
             # Collect dataset info
             self.metaData[r,t,c,'chunks'] = (1,1,zarrFile.chunks[0],zarrFile.chunks[1],zarrFile.chunks[2])
