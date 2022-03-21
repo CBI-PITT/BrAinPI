@@ -324,50 +324,20 @@ def dir_listing(req_path):
         if hasattr(config.opendata[datapath],'ng_files') == False or \
             hasattr(config.opendata[datapath],'ng_json') == False:
                 
+                ## Forms a comrehensive file list for all chunks
+                ## Not necessary for neuroglancer to function and take a long time
                 # config.opendata[datapath].ng_files = \
                 #     neuroGlancer.ng_files(config.opendata[datapath])
-                    
+                
+                ## Temp ignoring of ng_files
+                ## Add attribute so this constantly repeated
+                config.opendata[datapath].ng_files = True
+                
                 config.opendata[datapath].ng_json = \
                     neuroGlancer.ng_json(config.opendata[datapath],file='dict')
         
-        # # Build appropriate File List in base path
-        # if len(url_path_split) == 1:
-        #     res_files = list(config.opendata[datapath].ng_files.keys())
-        #     # return str(res_files)
-        #     files = ['info', *res_files]
-        #     files = [str(x) for x in files]
-        #     path = [request.script_root]
-        #     return render_template('vfs_bil.html', path=path, files=files)
         
-        # Return 'info' json
-        if len(url_path_split) == 2 and url_path_split[-1] == 'info':
-            # return 'in'
-            b = io.BytesIO()
-            b.write(json.dumps(config.opendata[datapath].ng_json, indent=2, sort_keys=False).encode())
-            b.seek(0)
-            
-            # resp = flask.Response(send_file(
-            #         b,
-            #         as_attachment=False,
-            #         download_name='info',
-            #         mimetype='application/json'
-            #     ))
-            # resp.headers['Access-Control-Allow-Origin'] = '*'
-            # resp.headers['Access-Control-Allow-Headers']='Content-Type' 
-            # return resp
-            return send_file(
-                b,
-                as_attachment=False,
-                download_name='info',
-                mimetype='application/json'
-            )
-            
-        if len(url_path_split) == 2 and isinstance(re.match('[0-9]+',url_path_split[-1]),re.Match):
-            res = int(url_path_split[-1])
-            files = config.opendata[datapath].ng_files[res]
-            path = [request.script_root]
-            return render_template('vfs_bil.html', path=path, files=files)
-        
+        ## Serve neuroglancer raw-format files
         file_name_template = '{}-{}_{}-{}_{}-{}'
         file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
         if len(url_path_split) == 3 and isinstance(re.match(file_pattern,url_path_split[-1]),re.Match):
@@ -397,20 +367,11 @@ def dir_listing(req_path):
             while img.ndim > 4:
                 img = np.squeeze(img,axis=0)
                 
-            print(img.shape, file=sys.stderr)
+            print(img.shape)
             
             img = neuroGlancer.encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
-            # Flask return of bytesIO as file
             
-            # resp = flask.Response(send_file(
-            #     img,
-            #     as_attachment=True,
-            #     ## TODO: dynamic naming of file (specifc request or based on region of request)
-            #     download_name=url_path_split[-1], # name needs to match chunk
-            #     mimetype='application/octet-stream'
-            # ))
-            # resp.headers['Access-Control-Allow-Origin'] = '*'
-            # return resp
+            # Flask return of bytesIO as file
             return send_file(
                 img,
                 as_attachment=True,
@@ -419,8 +380,43 @@ def dir_listing(req_path):
                 mimetype='application/octet-stream'
             )
         
+        # # Not necessary with config.opendata[datapath].ng_files not being built
+        # # Build appropriate File List in base path
+        # if len(url_path_split) == 1:
+        #     res_files = list(config.opendata[datapath].ng_files.keys())
+        #     # return str(res_files)
+        #     files = ['info', *res_files]
+        #     files = [str(x) for x in files]
+        #     path = [request.script_root]
+        #     return render_template('vfs_bil.html', path=path, files=files)
         
+        # # Not necessary with config.opendata[datapath].ng_files not being built
+        # # Build html to display all ng_files chunks
+        # if len(url_path_split) == 2 and isinstance(re.match('[0-9]+',url_path_split[-1]),re.Match):
+        #     res = int(url_path_split[-1])
+        #     files = config.opendata[datapath].ng_files[res]
+        #     path = [request.script_root]
+        #     return render_template('vfs_bil.html', path=path, files=files)
+        
+        # Return 'info' json
+        if len(url_path_split) == 2 and url_path_split[-1] == 'info':
+            # return 'in'
+            b = io.BytesIO()
+            b.write(json.dumps(config.opendata[datapath].ng_json, indent=2, sort_keys=False).encode())
+            b.seek(0)
             
+            return send_file(
+                b,
+                as_attachment=False,
+                download_name='info',
+                mimetype='application/json'
+            )
+            
+        
+        
+        
+        
+        return 'Path not accessable'
         
         # return str(config.opendata[datapath].ng_files[0][0:10])
         # return str(config.opendata[datapath].ng_json)
