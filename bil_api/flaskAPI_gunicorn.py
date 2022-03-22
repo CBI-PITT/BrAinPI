@@ -453,7 +453,14 @@ neuro_glancer_entry = app.route(ngPath, defaults={'req_path': ''})(neuro_glancer
 #     app.run(threaded=True,host='0.0.0.0')
     
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',port=5000)
+    if os.name == 'nt':
+        app.run(host='0.0.0.0',port=5000)
+    elif 'c00' in os.uname()[1]:
+        app.run(host='0.0.0.0',port=5001)
+    else:
+        app.run(host='0.0.0.0',port=5000)
+
+    
 
 
     
