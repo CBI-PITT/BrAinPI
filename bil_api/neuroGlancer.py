@@ -309,3 +309,57 @@ def ng_files(numpy_like_object):
 #    "size": [100, 103, 126],
 #    "voxel_offset": [0, 0, 0]}],
 #  "type": "image"}
+
+## n-tracer info
+
+# {'data_type': 'uint16',
+#  'num_channels': 1,
+#  'type': 'image',
+#  'scales': [{'chunk_sizes': [[128, 128, 1], [128, 1, 128], [1, 128, 128]],
+#    'encoding': 'raw',
+#    'key': '1',
+#    'resolution': [350, 350, 1000],
+#    'size': [32768, 20480, 13312],
+#    'voxel_offset': [0, 0, 0]},
+#   {'chunk_sizes': [[128, 128, 1], [128, 1, 128], [1, 128, 128]],
+#    'encoding': 'raw',
+#    'key': '2',
+#    'resolution': [700, 700, 2000],
+#    'size': [16384, 10240, 6656],
+#    'voxel_offset': [0, 0, 0]},
+#   {'chunk_sizes': [[128, 128, 1], [128, 1, 128], [1, 128, 128]],
+#    'encoding': 'raw',
+#    'key': '4',
+#    'resolution': [1400, 1400, 4000],
+#    'size': [8192, 5120, 3328],
+#    'voxel_offset': [0, 0, 0]},
+#   {'chunk_sizes': [[128, 128, 1], [128, 1, 128], [1, 128, 128]],
+#    'encoding': 'raw',
+#    'key': '8',
+#    'resolution': [2800, 2800, 8000],
+#    'size': [4096, 2560, 1664],
+#    'voxel_offset': [0, 0, 0]},
+#   {'chunk_sizes': [[128, 128, 1], [128, 1, 128], [1, 128, 128]],
+#    'encoding': 'raw',
+#    'key': '16',
+#    'resolution': [5600, 5600, 16000],
+#    'size': [2048, 1280, 832],
+#    'voxel_offset': [0, 0, 0]},
+#   {'chunk_sizes': [[128, 128, 1], [128, 1, 128], [1, 128, 128]],
+#    'encoding': 'raw',
+#    'key': '32',
+#    'resolution': [11200, 11200, 32000],
+#    'size': [1024, 640, 416],
+#    'voxel_offset': [0, 0, 0]}]}
+
+####  ng_docs
+'''
+https://github.com/google/neuroglancer/blob/master/src/neuroglancer/sliceview/README.md
+
+Neuroglancer also supports multiple (anisotropic) chunk sizes to be used 
+simultaneously with a single volume, in which case each SliceView selects 
+the chunk size (at each resolution) that is most efficient. For example, 
+to support XY, XZ, and YZ cross-sectional views, chunk sizes of 
+(512, 512, 1), (512, 1, 512) and (1, 512, 512) could be used. This does have 
+the disadvantage, however, that chunk data is not shared at all by the 3 views
+'''

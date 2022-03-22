@@ -19,7 +19,7 @@ def dataset_info():
             1:('fmost_zarr','h:/globus/pitt/bil/t00_c00_0.zarr'),
             2:('testIMS','z:/testData/bitplaneConverter.ims'),
             3:('HooksBrain','h:/Acquire/Hooks/BrainA.ims'),
-            4:('fmost_weave', 'h:/globus/pitt/bil/weave'),
+            # 4:('fmost_weave', 'h:/globus/pitt/bil/weave'),
             5:('home_testIMS', 'c:/code/testData/bitplaneConverter.ims') # For home testing
                    }
         
@@ -38,8 +38,8 @@ def dataset_info():
             choices = {
                 1:('fmost','/CBI_Hive/globus/pitt/bil/t00_c00_0.zarr'),
                 2:('testIMS','/CBI_FastStore/testData/bitplaneConverter.ims'),
-                3:('HooksBrain','/CBI_Hive/Acquire/Hooks/BrainA.ims'),
-                4:('fmost_weave', '/CBI_Hive/globus/pitt/bil/weave')
+                3:('HooksBrain','/CBI_Hive/Acquire/Hooks/BrainA.ims')
+                # 4:('fmost_weave', '/CBI_Hive/globus/pitt/bil/weave')
                        }
         
     

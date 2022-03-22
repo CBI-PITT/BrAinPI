@@ -6,7 +6,7 @@ Created on Wed Nov  3 11:06:07 2021
 """
 
 import flask, json, zarr, os, ast, re, io,sys
-from flask import request, Response, send_file
+from flask import request, Response, send_file, render_template
 from flask_cors import CORS,cross_origin
 import numpy as np
 import dask.array as da
@@ -42,7 +42,7 @@ elif 'c00' in os.uname()[1]:
 else:
     cacheLocation = '/CBI_FastStore/tmpCache/bil_api'
 
-cacheSizeGB=100
+cacheSizeGB=1000
 evictionPolicy='least-recently-used'
 shards = 16
 timeout=0.010
@@ -289,14 +289,11 @@ if config.cache is not None:
 
 
 
-from flask import render_template
+#######################################################################################
+##  Neuroglancer entry point : decorated separately below to enable caching and flask entry
+#######################################################################################
 
-fakePaths = ['/test/test/test.txt', '/test/test/test2.txt','/test.txt','/test/test']
-ngPath = '/api/ng/' #<--- final slash is required for proper navigation through dir tree
-@app.route(ngPath, defaults={'req_path': ''})
-@app.route(ngPath + '<path:req_path>')
-@cross_origin(allow_headers=['Content-Type'])
-def dir_listing(req_path):
+def neuro_glancer_entry(req_path):
     # return str(request.url.split('/')[-2])
     
     ## Show / select available datasets in /ng
@@ -413,10 +410,33 @@ def dir_listing(req_path):
             )
             
         
-        
-        
-        
         return 'Path not accessable'
+
+##############################################################################
+
+ngPath = '/api/ng/' #<--- final slash is required for proper navigation through dir tree
+
+## Decorating neuro_glancer_entry to allow caching ##
+if config.cache is not None:
+    print('Caching setup')
+    neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
+    print(neuro_glancer_entry)
+
+neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
+neuro_glancer_entry = app.route(ngPath + '<path:req_path>')(neuro_glancer_entry)
+neuro_glancer_entry = app.route(ngPath, defaults={'req_path': ''})(neuro_glancer_entry)
+
+##############################################################################
+## END NEUROGLANCER
+##############################################################################
+
+
+
+
+
+
+# app.route(ngPath + '<path:req_path>')
+# @cross_origin(allow_headers=['Content-Type'])
         
         # return str(config.opendata[datapath].ng_files[0][0:10])
         # return str(config.opendata[datapath].ng_json)
@@ -433,7 +453,7 @@ def dir_listing(req_path):
 #     app.run(threaded=True,host='0.0.0.0')
     
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',port=5001)
+    app.run(host='0.0.0.0',port=5000)
 
 
     
