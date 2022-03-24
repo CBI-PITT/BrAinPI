@@ -20,15 +20,15 @@ def domain_auth(user_name,password, domain_server=r"ldap://cbilab.pitt.edu:389",
     
     server = Server(domain_server, get_info=ALL)
      
-    
     try:
         conn = Connection(server, user=user, password=password, authentication=NTLM)
         
         if conn.bind():
             print('Authentication successful as user: {}'.format(user_name))
             conn.unbind()
-            if conn.closed == True:
-                return True
+            # if conn.closed == True:
+            #     return True
+            return True
         else:
             print('Authentication Failed')
     except:
