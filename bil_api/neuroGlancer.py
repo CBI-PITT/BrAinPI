@@ -264,51 +264,51 @@ def ng_files(numpy_like_object):
 # # Neuroglancer metadata file example
 
 # example_json_neuro_info = {
-#  "data_type": "uint8",
-#  "num_channels": 1,
-#  "scales": [{"chunk_sizes": [[64, 64, 64]],
-#    "encoding": "jpeg",
-#    "key": "8_8_8",
-#    "resolution": [8, 8, 8],
-#    "size": [6446, 6643, 8090],
-#    "voxel_offset": [0, 0, 0]},
+#   "data_type": "uint8",
+#   "num_channels": 1,
+#   "scales": [{"chunk_sizes": [[64, 64, 64]],
+#     "encoding": "jpeg",
+#     "key": "8_8_8",
+#     "resolution": [8, 8, 8],
+#     "size": [6446, 6643, 8090],
+#     "voxel_offset": [0, 0, 0]},
 #   {"chunk_sizes": [[64, 64, 64]],
-#    "encoding": "jpeg",
-#    "key": "16_16_16",
-#    "resolution": [16, 16, 16],
-#    "size": [3223, 3321, 4045],
-#    "voxel_offset": [0, 0, 0]},
+#     "encoding": "jpeg",
+#     "key": "16_16_16",
+#     "resolution": [16, 16, 16],
+#     "size": [3223, 3321, 4045],
+#     "voxel_offset": [0, 0, 0]},
 #   {"chunk_sizes": [[64, 64, 64]],
-#    "encoding": "jpeg",
-#    "key": "32_32_32",
-#    "resolution": [32, 32, 32],
-#    "size": [1611, 1660, 2022],
-#    "voxel_offset": [0, 0, 0]},
+#     "encoding": "jpeg",
+#     "key": "32_32_32",
+#     "resolution": [32, 32, 32],
+#     "size": [1611, 1660, 2022],
+#     "voxel_offset": [0, 0, 0]},
 #   {"chunk_sizes": [[64, 64, 64]],
-#    "encoding": "jpeg",
-#    "key": "64_64_64",
-#    "resolution": [64, 64, 64],
-#    "size": [805, 830, 1011],
-#    "voxel_offset": [0, 0, 0]},
+#     "encoding": "jpeg",
+#     "key": "64_64_64",
+#     "resolution": [64, 64, 64],
+#     "size": [805, 830, 1011],
+#     "voxel_offset": [0, 0, 0]},
 #   {"chunk_sizes": [[64, 64, 64]],
-#    "encoding": "jpeg",
-#    "key": "128_128_128",
-#    "resolution": [128, 128, 128],
-#    "size": [402, 415, 505],
-#    "voxel_offset": [0, 0, 0]},
+#     "encoding": "jpeg",
+#     "key": "128_128_128",
+#     "resolution": [128, 128, 128],
+#     "size": [402, 415, 505],
+#     "voxel_offset": [0, 0, 0]},
 #   {"chunk_sizes": [[64, 64, 64]],
-#    "encoding": "jpeg",
-#    "key": "256_256_256",
-#    "resolution": [256, 256, 256],
-#    "size": [201, 207, 252],
-#    "voxel_offset": [0, 0, 0]},
+#     "encoding": "jpeg",
+#     "key": "256_256_256",
+#     "resolution": [256, 256, 256],
+#     "size": [201, 207, 252],
+#     "voxel_offset": [0, 0, 0]},
 #   {"chunk_sizes": [[64, 64, 64]],
-#    "encoding": "jpeg",
-#    "key": "512_512_512",
-#    "resolution": [512, 512, 512],
-#    "size": [100, 103, 126],
-#    "voxel_offset": [0, 0, 0]}],
-#  "type": "image"}
+#     "encoding": "jpeg",
+#     "key": "512_512_512",
+#     "resolution": [512, 512, 512],
+#     "size": [100, 103, 126],
+#     "voxel_offset": [0, 0, 0]}],
+#   "type": "image"}
 
 ## n-tracer info
 
@@ -363,3 +363,57 @@ to support XY, XZ, and YZ cross-sectional views, chunk sizes of
 (512, 512, 1), (512, 1, 512) and (1, 512, 512) could be used. This does have 
 the disadvantage, however, that chunk data is not shared at all by the 3 views
 '''
+
+
+# ## Browser state example 'Hook's Brain:
+
+a = '{"dimensions":{"x":[4.98e-7%2C"m"]%2C"y":[4.98e-7%2C"m"]%2C"z":[0.00000533%2C"m"]}%2C"position":[9396.5%2C13847.5%2C562.5]%2C"crossSectionScale":54.598150033144236%2C"projectionScale":32000%2C"layers":[{"type":"image"%2C"source":"precomputed://https://brain-api.cbi.pitt.edu/api/ng/3"%2C"tab":"rendering"%2C"shaderControls":{"normalized":{"range":[0%2C9814]%2C"channel":[1]}}%2C"channelDimensions":{"c^":[1%2C""]}%2C"name":"3"}]%2C"selectedLayer":{"visible":true%2C"layer":"3"}%2C"layout":"4panel"}'
+
+# b = a.replace(r'https://neuroglancer-demo.appspot.com/#!','')
+# b = b.replace(r'http://neuroglancer-demo.appspot.com/#!','')
+b = a.replace('%2C',',')
+b = b.replace('true','True')
+b = b.replace('false','False')
+b = eval(b)
+
+
+def make_ng_link(open_dataset_with_ng_json, ngURL='https://neuroglancer-demo.appspot.com/'):
+    stateDict = {}
+    stateDict['dimensions'] = {'x': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0],'um' ],
+                               'y': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1],'um' ],
+                               'z': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2],'um' ]
+                               }
+    stateDict['position'] = [ open_dataset_with_ng_json.ng_json['scales'][0]['size'][0]//2,
+                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][1]//2,
+                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][2]//2
+                             ]
+    
+    stateDict['crossSectionScale'] = 50
+    stateDict['projectionScale'] = 50 * stateDict['dimensions']['z']
+    
+    stateDict['layers'] = []
+    
+    layer = {}
+    layer['type'] = 'image'
+    layer['source'] = 'precomputed://' + 'https://brain-api.cbi.pitt.edu/api/ng/3' #<-- Needs to be imported intellegently
+    layer['tab'] = 'rendering'
+    layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
+    layer['channelDimensions'] = {'c^': [1, '']}
+    layer['name'] = 'Some Name Related to the File'
+    layer['selectedLayer'] = {'visible': True, 'layer': '3'},
+    layer['layout'] = '4panel'
+    
+    stateDict['layers'].append(layer)
+    
+    ## If source URL is not secure, use the non-secure version of neuroglancer
+    if 'https://' in stateDict['layers'][0]['source'] == False:
+        ngURL = ngURL.replace('https://','http://')
+    
+    outURL = ngURL + r'#!'
+    outURL = outURL + str(stateDict)
+    outURL = outURL.replace(',','%2C')
+    outURL = outURL.replace('True','true')
+    outURL = outURL.replace('False','false')
+
+    
+    
