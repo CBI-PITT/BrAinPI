@@ -5,18 +5,17 @@ Created on Wed Nov  3 11:06:07 2021
 @author: alpha
 """
 
-import flask, json, zarr, os, ast, re, io,sys
+import flask, json, os, ast, re, io
 from flask import request, Response, send_file, render_template
-from flask_cors import CORS,cross_origin
+from flask_cors import cross_origin
 import numpy as np
-import dask.array as da
+# import dask.array as da
 
 from bil_api.dataset_info import dataset_info
 # from bil_api import config
 from bil_api import utils
 
 import tifffile as tf
-import io
 
 
 from bil_api import zarrLoader
@@ -430,22 +429,6 @@ neuro_glancer_entry = app.route(ngPath, defaults={'req_path': ''})(neuro_glancer
 ## END NEUROGLANCER
 ##############################################################################
 
-
-
-
-
-
-# app.route(ngPath + '<path:req_path>')
-# @cross_origin(allow_headers=['Content-Type'])
-        
-        # return str(config.opendata[datapath].ng_files[0][0:10])
-        # return str(config.opendata[datapath].ng_json)
-    
-
-    # Show directory contents
-    # path = [os.path.split(x)[0] for x in fakePaths]
-    # files = [os.path.split(x)[1] for x in fakePaths]
-    # return render_template('vfs_bil.html', path=path, files=files)
 
 
 
