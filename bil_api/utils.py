@@ -166,10 +166,20 @@ def metaDataExtraction(numpy_like_object,strKey=False):
         pass
     
     return metadata
+
+
     
 #################################
 ## Depreciated code?  ###########
 #################################
+
+
+def getFromDataset(dataset,res,t,c,z,y,x):
+    '''
+    This is designed to be imported from another module and decorated for
+    diskcache.  config.opendata must be in the global space
+    '''
+    return config.opendata[dataset][res,t,c,z,y,x]
 
 def mountDataset(name,storeType):
     

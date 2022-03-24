@@ -35,13 +35,15 @@ def encode_ng_file(numpy_array,channels):
 
 ## Build neuroglancer json
 
-def ng_json(numpy_like_object,file=None):
+def ng_json(numpy_like_object,file=None, different_chunks=False):
     '''
     Save a json from a 5d numpy like volume
     file = None saves to a BytesIO buffer
     file == str saves to that file name
+    file == 'dict' ourputs a dictionary
     '''
 
+    offDimSize = 1
     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
     
     neuro_info = {}
@@ -51,13 +53,19 @@ def ng_json(numpy_like_object,file=None):
     scales = []
     current_scale = {}
     for res in range(metadata['ResolutionLevels']):
-        current_scale["chunk_sizes"] = [
-            list(
-                reversed(
-                    list(metadata[(res,0,0,'chunks')][-3:])
-                    )
-                )
-            ]
+        print('Creating JSON')
+        chunks = list(reversed(list(metadata[(res,0,0,'chunks')][-3:]))) #<-- [x,y,z] orientation
+        print(chunks)
+        if different_chunks == False:
+            current_scale["chunk_sizes"] = [
+                        list(chunks)
+                ]
+        else:
+            current_scale["chunk_sizes"] = [
+                        [chunks[0],chunks[1],offDimSize],
+                        [chunks[0],offDimSize,chunks[1]],
+                        [offDimSize,chunks[0],chunks[1]]
+                ]
         
         current_scale["encoding"] = 'raw'
         current_scale["key"] = str(res)
@@ -81,6 +89,7 @@ def ng_json(numpy_like_object,file=None):
     neuro_info['scales'] = scales
     neuro_info['type'] = 'image'
     
+    print(neuro_info)
     if file is None:
         b = io.BytesIO()
         b.write(json.dumps(neuro_info).encode())

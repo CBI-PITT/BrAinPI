@@ -40,6 +40,7 @@ elif 'c00' in os.uname()[1]:
     cacheLocation = '/scratch/api_cache'
 else:
     cacheLocation = '/CBI_FastStore/tmpCache/bil_api'
+    #cacheLocation = None
 
 cacheSizeGB=1000
 evictionPolicy='least-recently-used'
@@ -304,7 +305,6 @@ def neuro_glancer_entry(req_path):
             dsetNames.append(dataset_info()[items][0])
         return render_template('ns_datasets.html', dsets=zip(dsetNums,dsetNames))
     
-    
     # Display base path of specifc /ng dataset
     url_split = request.url.split(ngPath)[-1]
     url_path_split = url_split.split('/')
@@ -312,6 +312,7 @@ def neuro_glancer_entry(req_path):
     if url_split[-1] != '':
         if isinstance(re.match('[0-9]',url_path_split[0]),re.Match):
             dsetNum = int(url_path_split[0])
+            print('Data set num == {}'.format(dsetNum))
         else:
             return 'Path must be of style {}{} where {} refers to a specific dataset found at {}'.format(ngPath,'integer','integer',ngPath)
         
@@ -339,7 +340,6 @@ def neuro_glancer_entry(req_path):
         if len(url_path_split) == 3 and isinstance(re.match(file_pattern,url_path_split[-1]),re.Match):
             
             print(request.path + '\n')
-            # print(url_path_split[-1] + '\n')
             
             x,y,z = url_path_split[-1].split('_')
             x = x.split('-')
@@ -348,9 +348,7 @@ def neuro_glancer_entry(req_path):
             x = [int(x) for x in x]
             y = [int(x) for x in y]
             z = [int(x) for x in z]
-            # print(x)
-            # print(y)
-            # print(z)
+            
             img = config.opendata[datapath][
                 int(url_path_split[-2]),
                 slice(0),
