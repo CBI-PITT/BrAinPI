@@ -64,6 +64,8 @@ app = flask.Flask(__name__)
 # cors = CORS(app, resources={r"/api/ng/*": {"origins": "*"}})
 # app.config['CORS_HEADERS'] = 'Content-Type'
 
+from auth import setup_auth
+app = setup_auth(app)
 
 @app.route('/', methods=['GET'])
 def home():
