@@ -15,13 +15,54 @@ https://www.digitalocean.com/community/tutorials/how-to-add-authentication-to-yo
 
 '''
 
-from flask import render_template
+from flask import render_template, request, flash, redirect, url_for
+from flask_login import LoginManager, login_user, UserMixin
+import time
+
+class User(UserMixin):
+    def __init__(self,username):
+        self.id = username.encode()
 
 def setup_auth(app):
+    
+    app.secret_key = 'this is my secret key'
+    
+    login_manager = LoginManager()
+    login_manager.login_view = 'app.login'
+    login_manager.init_app(app)
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        return user_id.encode()
 
     @app.route('/login')
     def login():
         return render_template('login.html')
+    
+    @app.route('/login', methods=['POST'])
+    def login_post():
+        
+        remote_ip = request.remote_addr #<--Potential to log attempts and restrict number of tries
+        username = request.form.get('username')
+        password = request.form.get('password')
+        remember = True if request.form.get('remember') else False
+        
+        ## Check user against domain server
+        user = False # Default to False for security
+        user = domain_auth(username,password) # check if the user actually exists
+        if user != True:
+            user = False
+        
+        user = True ####  TESTING ONLY  ####
+    
+        if user == False:
+            flash('Please check your login details and try again.')
+            return redirect(url_for('login')) # if the user doesn't exist or password is wrong, reload the page
+    
+        # if the above check passes, then we know the user has the right credentials
+        login_user(username, remember=remember)  
+        # login_user(User(username), remember=remember)  
+        return redirect(url_for('profile'))
     
     @app.route('/signup')
     def signup():
@@ -35,7 +76,7 @@ def setup_auth(app):
     def logout():
         return 'Logout'
     
-    return app
+    return app,login_manager
 
 
 

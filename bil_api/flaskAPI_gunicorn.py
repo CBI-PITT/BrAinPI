@@ -57,15 +57,18 @@ config = utils.config(
     timeout=timeout
     )
 
+TEMPLATE_DIR = os.path.abspath('../bil_api/templates')
+STATIC_DIR = os.path.abspath('../bil_api/static')
 
-app = flask.Flask(__name__)
+app = flask.Flask(__name__,template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 # app.config["DEBUG"] = True
 
 # cors = CORS(app, resources={r"/api/ng/*": {"origins": "*"}})
 # app.config['CORS_HEADERS'] = 'Content-Type'
 
+## Import auth routes
 from auth import setup_auth
-app = setup_auth(app)
+app,login_manager = setup_auth(app)
 
 @app.route('/', methods=['GET'])
 def home():

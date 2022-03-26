@@ -1,3 +1,12 @@
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+    <div class="notification is-danger">
+        {{ messages[0] }}. Go to <a href="{{ url_for('login') }}">login page</a>.
+    </div>
+{% endif %}
+{% endwith %}
+<form method="POST" action="/login">
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -7,13 +16,13 @@
         <form method="POST" action="/login">
             <div class="field">
                 <div class="control">
-                    <input class="input is-large" type="email" name="email" placeholder="Your Email" autofocus="">
+                    <input class="input is-large" type="text" name="username" placeholder="Lab Username" autofocus="">
                 </div>
             </div>
 
             <div class="field">
                 <div class="control">
-                    <input class="input is-large" type="password" name="password" placeholder="Your Password">
+                    <input class="input is-large" type="password" name="password" placeholder="Lab Password">
                 </div>
             </div>
             <div class="field">
