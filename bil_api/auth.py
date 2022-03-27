@@ -12,32 +12,58 @@ https://ldap3.readthedocs.io/en/latest/connection.html
 
 
 https://www.digitalocean.com/community/tutorials/how-to-add-authentication-to-your-app-with-flask-login
-
+https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-v-user-logins
 '''
 
-from flask import render_template, request, flash, redirect, url_for
-from flask_login import LoginManager, login_user, UserMixin
 import time
+from flask import (render_template, 
+                   request, 
+                   flash, 
+                   redirect, 
+                   url_for)
+
+from flask_login import (LoginManager, 
+                         login_user, 
+                         UserMixin, 
+                         current_user,
+                         login_required,
+                         logout_user)
+
 
 class User(UserMixin):
     def __init__(self,username):
-        self.id = username.encode()
+        self.id = username
 
 def setup_auth(app):
     
-    app.secret_key = 'this is my secret key'
+    ## KEY FOR TESTING ONLY ##
+    app.secret_key = 'this is my secret key' #<-- Build a way to load from disk
     
-    login_manager = LoginManager()
-    login_manager.login_view = 'app.login'
-    login_manager.init_app(app)
+    login_manager = LoginManager(app)
+    login_manager.login_view = 'login'
+    # login_manager.init_app(app)
+    
+    
     
     @login_manager.user_loader
     def load_user(user_id):
-        return user_id.encode()
+        return User(user_id)
+
+
+
 
     @app.route('/login')
     def login():
+        if current_user.is_authenticated:
+            flash('''
+                  You are already signed in as user {}.
+                  If this is not you, please logout
+                  '''.format(current_user.id))
+            return redirect(url_for('profile'))
         return render_template('login.html')
+    
+    
+    
     
     @app.route('/login', methods=['POST'])
     def login_post():
@@ -60,26 +86,31 @@ def setup_auth(app):
             return redirect(url_for('login')) # if the user doesn't exist or password is wrong, reload the page
     
         # if the above check passes, then we know the user has the right credentials
-        login_user(username, remember=remember)  
-        # login_user(User(username), remember=remember)  
+        login_user(User(username), remember=remember)  
         return redirect(url_for('profile'))
     
-    @app.route('/signup')
-    def signup():
-        return render_template('signup.html')
+    
+    
+    
+    # @app.route('/signup')
+    # def signup():
+    #     return render_template('signup.html')
+    
+    
     
     @app.route('/profile')
+    @login_required
     def profile():
-        return render_template('profile.html')
+        return render_template('profile.html', user=current_user.id)
+    
+    
     
     @app.route('/logout')
     def logout():
-        return 'Logout'
+        logout_user()
+        return redirect(url_for('home'))
     
     return app,login_manager
-
-
-
 
 
 

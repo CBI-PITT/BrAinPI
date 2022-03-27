@@ -1,7 +1,16 @@
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+    <div class="notification is-danger">
+        {{ messages[0] }}.</a>.
+    </div>
+{% endif %}
+{% endwith %}
+<form method="GET" action="/profile">
+
 {% extends "base.html" %}
 
 {% block content %}
 <h1 class="title">
-  Welcome, Anthony!
+  Welcome, {{ user }}!
 </h1>
 {% endblock %}

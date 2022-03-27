@@ -11,21 +11,22 @@ from flask_cors import cross_origin
 import numpy as np
 # import dask.array as da
 
-from bil_api.dataset_info import dataset_info
-# from bil_api import config
-from bil_api import utils
+## Project imports
+from dataset_info import dataset_info
+import utils
 
+## File-type handler imports (some are project specific)
 import tifffile as tf
-
-
-from bil_api import zarrLoader
-from bil_api import neuroGlancer
+import zarrLoader
+import neuroGlancer
 import imaris_ims_file_reader as ims
 
 
 # from weave.weave_read import weave_read
 
 '''
+https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-i-hello-world
+
 To run w/ gunicorn:  gunicorn -w 1 -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app
 To run w/ gunicorn:  gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app -w 1 --threads 12
 To run w/ gunicorn:  gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/bil_api wsgi:app -w 2 --threads 12
@@ -72,8 +73,9 @@ app,login_manager = setup_auth(app)
 
 @app.route('/', methods=['GET'])
 def home():
-    return '''<h1>Brain Image Library Archive API</h1>
-<p>A prototype API for chunked loading of large Brain Image Library datasets.</p>'''
+    return render_template('home.html')
+#     return '''<h1>Brain Image Library Archive API</h1>
+# <p>A prototype API for chunked loading of large Brain Image Library datasets.</p>'''
 
 ##############################################################################
 
