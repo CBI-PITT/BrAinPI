@@ -12,6 +12,7 @@ import ast
 import os
 import urllib
 import json
+import sys
 
 import imaris_ims_file_reader as ims
 import zarr
@@ -23,9 +24,11 @@ from numcodecs import Blosc
 from diskcache import FanoutCache
 
 
-def get_config(file='settings.ini'):
+def get_config(file='settings.ini',allow_no_value=False):
     import configparser
-    config = configparser.ConfigParser()
+    # file = os.path.join(os.path.split(os.path.abspath(__file__))[0],file)
+    file = os.path.join(sys.path[0], file)
+    config = configparser.ConfigParser(allow_no_value=allow_no_value)
     config.read(file)
     return config
     

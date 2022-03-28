@@ -5,7 +5,7 @@ Created on Wed Nov  3 11:06:07 2021
 @author: alpha
 """
 
-import flask, json, os, ast, re, io
+import flask, json, os, ast, re, io, sys
 from flask import request, Response, send_file, render_template
 from flask_cors import cross_origin
 import numpy as np
@@ -21,6 +21,9 @@ import zarrLoader
 import neuroGlancer
 import imaris_ims_file_reader as ims
 
+
+
+os.chdir(sys.path[0])
 
 # from weave.weave_read import weave_read
 
@@ -69,6 +72,10 @@ app.config["DEBUG"] = settings.getboolean('app','debug')
 ## Import auth routes
 from auth import setup_auth
 app,login_manager = setup_auth(app)
+
+## Initiate browser functionality
+from fs_browse import initiate_browseable
+app = initiate_browseable(app)
 
 @app.route('/', methods=['GET'])
 def home():

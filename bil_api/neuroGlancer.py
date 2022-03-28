@@ -43,7 +43,9 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     file == 'dict' ourputs a dictionary
     '''
 
+    # Alternative chunking depth along axial plane    
     offDimSize = 1
+    
     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
     
     neuro_info = {}

@@ -6,13 +6,16 @@ Created on Wed Mar 23 20:44:29 2022
 """
 
 '''
-An attempt at setting up windows domain authentication for CBI users
-https://soshace.com/integrate-ldap-authentication-with-flask/
-https://ldap3.readthedocs.io/en/latest/connection.html
+Windows domain auth:
+    https://soshace.com/integrate-ldap-authentication-with-flask/
+    https://ldap3.readthedocs.io/en/latest/connection.html
 
+Flask login:
+    https://www.digitalocean.com/community/tutorials/how-to-add-authentication-to-your-app-with-flask-login
+    https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-v-user-logins
 
-https://www.digitalocean.com/community/tutorials/how-to-add-authentication-to-your-app-with-flask-login
-https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-v-user-logins
+Flask limiter:
+    https://flask-limiter.readthedocs.io/en/latest/
 '''
 
 import time
@@ -30,6 +33,7 @@ from flask_login import (LoginManager,
                          logout_user)
 
 
+
 class User(UserMixin):
     def __init__(self,username):
         self.id = username
@@ -37,21 +41,39 @@ class User(UserMixin):
 def setup_auth(app):
     ## This import must remain here else circular import error
     from flaskAPI_gunicorn import settings
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
     
     ## KEY FOR TESTING ONLY ##
     app.secret_key = settings.get('auth','secret_key')
     
+    ############################################################
+    # Configure login manager
+    ############################################################
     login_manager = LoginManager(app)
     login_manager.login_view = 'login'
     # login_manager.init_app(app)
     
-    
-    
     @login_manager.user_loader
     def load_user(user_id):
         return User(user_id)
-
-
+    
+    
+    ##########################################################
+    # Configure login rate limiter
+    ##########################################################
+    
+    limiter = Limiter(app, key_func=get_remote_address)
+    
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        flash("Login ratelimit exceeded %s" % e.description)
+        return redirect(url_for('login'))
+    
+    
+    ##########################################################
+    # Configure login routes
+    ##########################################################
 
 
     @app.route('/login')
@@ -68,6 +90,7 @@ def setup_auth(app):
     
     
     @app.route('/login', methods=['POST'])
+    @limiter.limit(settings.get('auth','login_limit'))
     def login_post():
         
         remote_ip = request.remote_addr #<--Potential to log attempts and restrict number of tries
@@ -77,20 +100,21 @@ def setup_auth(app):
         
         ## Check user against domain server
         user = False # Default to False for security
-        user = domain_auth(username,
-                           password,
-                           domain_server=r"ldap://{}:{}".format(
-                               settings.get('auth','domain_server'),
-                               settings.get('auth','domain_port')
-                               ),
-                           domain=settings.get('auth','domain_name')
-                           ) # Return bool True/False if auth succeeds/fails and None if error
-        # if user is None:
-        #     flash('''An error occured during login: please try again.
-        #           If the error persists, please report the problem''')
-        #     return redirect(url_for('login'))
-        
-        user = True ####  TESTING ONLY  ####
+        if 'bypass_auth' in settings and settings.getboolean('auth','bypass_auth') == False:
+            user = domain_auth(username,
+                               password,
+                               domain_server=r"ldap://{}:{}".format(
+                                   settings.get('auth','domain_server'),
+                                   settings.get('auth','domain_port')
+                                   ),
+                               domain=settings.get('auth','domain_name')
+                               ) # Return bool True/False if auth succeeds/fails and None if error
+            if user is None:
+                flash('''An error occured during login: please try again.
+                      If the error persists, please report the problem''')
+                return redirect(url_for('login'))
+        else:
+            user = True
     
         if user == False:
             flash('Please check your login details and try again.')
