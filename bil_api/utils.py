@@ -23,6 +23,13 @@ from numcodecs import Blosc
 from diskcache import FanoutCache
 
 
+def get_config(file='settings.ini'):
+    import configparser
+    config = configparser.ConfigParser()
+    config.read(file)
+    return config
+    
+
 def get(location,baseURL):
     with urllib.request.urlopen(baseURL + location, timeout=5) as url:
         data = dict(json.loads(url.read().decode()))

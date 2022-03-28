@@ -35,9 +35,11 @@ class User(UserMixin):
         self.id = username
 
 def setup_auth(app):
+    ## This import must remain here else circular import error
+    from flaskAPI_gunicorn import settings
     
     ## KEY FOR TESTING ONLY ##
-    app.secret_key = 'this is my secret key' #<-- Build a way to load from disk
+    app.secret_key = settings.get('auth','secret_key')
     
     login_manager = LoginManager(app)
     login_manager.login_view = 'login'
@@ -75,9 +77,18 @@ def setup_auth(app):
         
         ## Check user against domain server
         user = False # Default to False for security
-        user = domain_auth(username,password) # check if the user actually exists
-        if user != True:
-            user = False
+        user = domain_auth(username,
+                           password,
+                           domain_server=r"ldap://{}:{}".format(
+                               settings.get('auth','domain_server'),
+                               settings.get('auth','domain_port')
+                               ),
+                           domain=settings.get('auth','domain_name')
+                           ) # Return bool True/False if auth succeeds/fails and None if error
+        # if user is None:
+        #     flash('''An error occured during login: please try again.
+        #           If the error persists, please report the problem''')
+        #     return redirect(url_for('login'))
         
         user = True ####  TESTING ONLY  ####
     
@@ -86,7 +97,7 @@ def setup_auth(app):
             return redirect(url_for('login')) # if the user doesn't exist or password is wrong, reload the page
     
         # if the above check passes, then we know the user has the right credentials
-        login_user(User(username), remember=remember)  
+        login_user(load_user(username), remember=remember)  
         return redirect(url_for('profile'))
     
     

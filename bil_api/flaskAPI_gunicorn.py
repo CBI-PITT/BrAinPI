@@ -34,35 +34,34 @@ To run w/ gunicorn:  gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTo
 
 To run development:  python -i /CBI_FastStore/cbiPythonTools/bil_api/bil_api/flaskAPI_gunicorn.py
 '''
+## Grab settings information from config.ini file
+settings = utils.get_config('settings.ini')
 
+## Setup cache location based on OS type
+## Optional situations like machine name can be used to customize
 if os.name == 'nt':
-    cacheLocation = r'c:\code\testCache'
+    cacheLocation = settings.get('disk_cache','location_win')
 elif 'c00' in os.uname()[1]:
     cacheLocation = '/scratch/api_cache'
 else:
-    cacheLocation = '/CBI_FastStore/tmpCache/bil_api'
+    cacheLocation = settings.get('disk_cache','location_unix')
     #cacheLocation = None
-
-cacheSizeGB=1000
-evictionPolicy='least-recently-used'
-shards = 16
-timeout=0.010
 
 # Instantiate class that will manage all open datasets
 # This will remain in the global env and be accessed by multiple route methods
 config = utils.config(
     cacheLocation=cacheLocation,
-    cacheSizeGB=cacheSizeGB,
-    evictionPolicy=evictionPolicy,
-    shards=shards,
-    timeout=timeout
+    cacheSizeGB=settings.getint('disk_cache','cacheSizeGB'),
+    evictionPolicy=settings.get('disk_cache','evictionPolicy'),
+    shards=settings.getint('disk_cache','shards'),
+    timeout=settings.getfloat('disk_cache','timeout')
     )
 
-TEMPLATE_DIR = os.path.abspath('../bil_api/templates')
-STATIC_DIR = os.path.abspath('../bil_api/static')
+TEMPLATE_DIR = os.path.abspath(settings.get('app','templates_location'))
+STATIC_DIR = os.path.abspath(settings.get('app','static_location'))
 
 app = flask.Flask(__name__,template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
-# app.config["DEBUG"] = True
+app.config["DEBUG"] = settings.getboolean('app','debug')
 
 # cors = CORS(app, resources={r"/api/ng/*": {"origins": "*"}})
 # app.config['CORS_HEADERS'] = 'Content-Type'
