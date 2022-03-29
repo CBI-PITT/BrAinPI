@@ -60,88 +60,107 @@ def initiate_browseable(app):
             return render_template('vfs_bil.html', path=path, files=files)
         
         else:
-            # if current_user.is_authenticated and current_user.id != html_path[2]:
-            #     flash('You are not authorized to browse to path {}'.format(request.path))
-            #     return redirect(url_for('login'))
             
-            
-            path_map = {}
-            ## Collect anon paths
-            for ii in settings['dir_anon']:
-                path_map[ii] = settings['dir_anon'][ii]
-            print(path_map)
-            
-            ## Collect auth paths
-            if current_user.is_authenticated:
-                for ii in settings['dir_auth']:
-                    path_map[ii] = settings['dir_auth'][ii]
-            print(path_map)
-           
-            # Construct real paths 
-            to_browse = os.path.join(
-                path_map[html_path[1]],
-                *html_path[2:])
-        
-            # List all available files in the resquested path
-            to_browse = glob.glob(to_browse + '/*')
-            
-            # Restrict extry to shared paths to folder named like the username
-            
-
-            
-            # Designed to directly filter 1 level above paths designated in settins.ini
-            if len(html_path) == 2 and \
-                settings.getboolean('auth', 'restrict_paths_to_matched_username') and \
-                    current_user.is_authenticated:
+            try:
+                # Determine what directories that anon users are allowed to browse 
+                # and kick them if the path is not valid
+                path_map = {}
+                ## Collect anon paths
+                for ii in settings['dir_anon']:
+                    path_map[ii] = settings['dir_anon'][ii]
+                print(path_map)
                 
-                groups = get_config('groups.ini',allow_no_value=True)
+                if not current_user.is_authenticated and html_path[1] not in path_map:
+                    flash('Anonymous users are not authorized to browse to path {}'.format(request.path))
+                    return redirect(url_for('login'))
                 
-                if current_user.id.lower() not in [x.lower() for x in groups['all']]:
+                
+                # Determine what paths authenticated users may browse
+                # and kick them if the path is not valid
+                if current_user.is_authenticated:
+                    for ii in settings['dir_auth']:
+                        path_map[ii] = settings['dir_auth'][ii]
+                print(path_map)
+                
+                if current_user.is_authenticated and html_path[1] not in path_map:
+                    flash('You are not authorized to browse to path {}'.format(request.path))
+                    return redirect(url_for('login'))
+               
+                # Construct real paths from names in path_map dict
+                
+                to_browse = os.path.join(
+                    path_map[html_path[1]], # returns the true FS path
+                    *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
+            
+                # Find all available files in the resquested path
+                to_browse = glob.glob(to_browse + '/*')
+                
+                
+                ## We now have a list (to_browse) of all files in the requested path
+                # Now we need to extract only paths that the user is allowed to see
+                
+                # If the user is anonymous, then there is no additional filtering to do
+                if current_user.is_authenticated == False:
+                    pass
+                
+                else:
                     
-                    to_view = []
-                    
-                    # Retain all anon paths
-                    for ii in settings['dir_anon']:
-                        tmp = [x for x in to_browse if settings['dir_anon'][ii] in x]
-                        to_view = to_view + tmp
-                    
-                    # Keep only those paths with username
-                    to_view = to_view + [x for x in to_browse if '/' + current_user.id.lower() in x.lower()]
-                    print(to_view)
-                    
-                    # Keep paths named for the groups a user belongs to
-                    for ii in groups: # Group names
-                        for oo in groups[ii]: # Users in each group
-                            if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
-                                to_view = to_view + [x for x in to_browse if '/' + ii.lower() in x.lower()] # Retain group folder names
+                    # Designed to directly filter 1 level above paths designated in settins.ini
+                    if len(html_path) == 2 and \
+                        settings.getboolean('auth', 'restrict_paths_to_matched_username') and \
+                            current_user.is_authenticated:
+                        
+                        groups = get_config('groups.ini',allow_no_value=True)
+                        
+                        if current_user.id.lower() not in [x.lower() for x in groups['all']]:
                             
-                    to_browse = to_view
+                            to_view = []
+                            
+                            # Retain all anon paths
+                            for ii in settings['dir_anon']:
+                                tmp = [x for x in to_browse if settings['dir_anon'][ii] in x]
+                                to_view = to_view + tmp
+                            
+                            # Keep only those paths with username
+                            to_view = to_view + [x for x in to_browse if '/' + current_user.id.lower() in x.lower()]
+                            print(to_view)
+                            
+                            # Keep paths named for the groups a user belongs to
+                            for ii in groups: # Group names
+                                for oo in groups[ii]: # Users in each group
+                                    if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
+                                        to_view = to_view + [x for x in to_browse if '/' + ii.lower() in x.lower()] # Retain group folder names
+                                    
+                            to_browse = to_view
+                    
+                    
+                    ## Limit files that are seen to those in settings.ini 'file_types'
+                    groups = get_config('groups.ini',allow_no_value=True)
+                    if current_user.is_authenticated and current_user.id.lower() not in [x.lower() for x in groups['all']]:
+                        if settings.getboolean('auth','restrict_files_to_listed_file_types'):
+                            to_view = []
+                            dirs = [x for x in to_browse if os.path.isdir(x)]
+                            for ii in settings['file_types']:
+                                files = [ x for x in to_browse if (os.path.isfile(x) and settings['file_types'][ii] == os.path.splitext('a'+ x)[-1]) ]#<-- add 'a' to make split consistance for files starting with '.'
+                                to_view = to_view + files
+                            to_view = dirs + to_view
+                            to_browse = to_view
+                    
+                
+                # Format path to align with the browser and disguise real paths
+                to_browse = [x.replace(path_map[html_path[1]],'/' + html_path[1]) for x in to_browse]
+                
+                # Sort for easy browsing
+                to_browse = sorted(to_browse)
+                
+                # Get path / file info to pass to html template
+                path = [base[:-1] + os.path.split(x)[0] for x in to_browse] if len(to_browse) > 0 else ['/']
+                files = [os.path.split(x)[1] for x in to_browse]
             
-            
-            ## Limit files that are seen to those in settings.ini 'file_types'
-            groups = get_config('groups.ini',allow_no_value=True)
-            if current_user.id.lower() not in [x.lower() for x in groups['all']]:
-                if settings.getboolean('auth','restrict_files_to_listed_file_types'):
-                    to_view = []
-                    dirs = [x for x in to_browse if os.path.isdir(x)]
-                    for ii in settings['file_types']:
-                        files = [ x for x in to_browse if (os.path.isfile(x) and settings['file_types'][ii] == os.path.splitext('a'+ x)[-1]) ]#<-- add 'a' to make split consistance for files starting with '.'
-                        to_view = to_view + files
-                    to_view = dirs + to_view
-                    to_browse = to_view
-            
-            
-            # Format path to align with the browser and disguise real paths
-            to_browse = [x.replace(path_map[html_path[1]],'/' + html_path[1]) for x in to_browse]
-            
-            # Sort for easy browsing
-            to_browse = sorted(to_browse)
-            
-            # Get path / file info to pass to html template
-            path = [base[:-1] + os.path.split(x)[0] for x in to_browse] if len(to_browse) > 0 else ['/']
-            files = [os.path.split(x)[1] for x in to_browse]
-            
-            return render_template('vfs_bil.html', path=path, files=files)
+                return render_template('vfs_bil.html', path=path, files=files)
+            except Exception:
+                flash('You must not be authorized to browse to path {}'.format(request.path))
+                return redirect(url_for('login'))
             
             
     

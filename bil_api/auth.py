@@ -100,7 +100,7 @@ def setup_auth(app):
         
         ## Check user against domain server
         user = False # Default to False for security
-        if 'bypass_auth' in settings and settings.getboolean('auth','bypass_auth') == False:
+        if 'auth' in settings and settings.getboolean('auth','bypass_auth') == False:
             user = domain_auth(username,
                                password,
                                domain_server=r"ldap://{}:{}".format(
@@ -109,6 +109,10 @@ def setup_auth(app):
                                    ),
                                domain=settings.get('auth','domain_name')
                                ) # Return bool True/False if auth succeeds/fails and None if error
+            
+            if user == False:
+                flash('''Your credentials are not valid''')
+                return redirect(url_for('login'))
             if user is None:
                 flash('''An error occured during login: please try again.
                       If the error persists, please report the problem''')
