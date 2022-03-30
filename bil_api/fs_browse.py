@@ -10,6 +10,7 @@ Make a browseable filesystem that limits paths to those configured in
 settings.ini and according to authentication / groups.ini
 '''
 
+import traceback
 from flask_login import (
                          current_user,
                          login_required,
@@ -29,9 +30,9 @@ def from_html_to_path(req_path, path_map):
         path_map[html_path[1]], # returns the true FS path
         *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
 
-def from_path_to_html(path, path_map, req_path):
+def from_path_to_html(path, path_map, req_path, entry_point):
     html_path = split_html(req_path)
-    return path.replace(path_map[html_path[1]],'/' + html_path[1])
+    return path.replace(path_map[html_path[1]],entry_point + html_path[1])
 
 def is_file_type(file_type, path):
     '''
@@ -118,7 +119,7 @@ def initiate_browseable(app):
                 to_browse = glob.glob(to_browse + '/*')
                 
                 ## Reconstruct html_paths
-                to_browse = [from_path_to_html(x,path_map,request.path) for x in to_browse]
+                to_browse = [from_path_to_html(x,path_map,request.path,base) for x in to_browse]
                 
                 ## We now have a list (to_browse) of all files in the requested path
                 # Now we need to extract only paths that the user is allowed to see
@@ -152,9 +153,9 @@ def initiate_browseable(app):
                             
                             # Retain all anon paths
                             for ii in settings['dir_anon']:
-                                tmp = [x for x in to_browse if settings['dir_anon'].lower() == split_html(x)[1].lower()]
+                                tmp = [x for x in to_browse if ii.lower() == split_html(x)[1].lower()]
                                 to_view = to_view + tmp
-                            
+                            print(to_view)
                             # Keep only those paths from to_browse which contain 'username' at html_path[2]<-- may need to change this to filter at level html_path[2]
                             print(current_user.id.lower())
                             print(to_browse[0:10])
@@ -162,29 +163,33 @@ def initiate_browseable(app):
                             print(to_view)
                             
                             # Keep only those paths from to_browse named for the groups a user belongs to at html_path[2]
+                            allowed_list = [current_user.id]
                             for ii in groups: # Group names
                                 for oo in groups[ii]: # Users in each group
                                     if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
                                         print('Line 168')
+                                        allowed_list.append(ii)
                                         to_view = to_view + [x for x in to_browse if ii.lower() == split_html(x)[2].lower()] # Retain group folder names '/group_name/'
                                     
                             # Reset to_browse to be only paths which are included
                             to_browse = to_view
+                            print(to_browse)
                         
                         
                         ## Limit files that are seen to those in settings.ini 'file_types'
                         if settings.getboolean('auth','restrict_files_to_listed_file_types'):
-                            
+                            print(178)
                             ## to_view will collect all OK paths for viewing
                             to_view = []
                             
-                            paths = [ x for x in to_browse if from_html_to_path(x, path_map) ]
-                            
+                            paths = [ from_html_to_path(x, path_map) for x in to_browse ]
+                            print(184)
+                            print(paths[0:10])
                             
                             # First find all directories (these will not be filtered out)
                             dirs = [ x for x,y in zip(to_browse,paths) if os.path.isdir(y) ]
                             # dirs = [ x for x in to_browse if os.path.isdir(from_html_to_path(x, path_map)) ]
-                            
+                            print(dirs)
                             # Now find all files that match an allowed file type
                             # First get a list of all files
                             files = [ x for x,y in zip(to_browse,paths) if os.path.isfile(y) ]
@@ -216,6 +221,7 @@ def initiate_browseable(app):
             
             except Exception:
                 flash('You must not be authorized to browse to path {}'.format(request.path))
+                print(traceback.format_exc())
                 return redirect(url_for('login'))
             
             
