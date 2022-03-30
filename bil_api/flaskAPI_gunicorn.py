@@ -60,6 +60,8 @@ config = utils.config(
     timeout=settings.getfloat('disk_cache','timeout')
     )
 
+config.settings = utils.get_config('settings.ini') #<-- need to add this to config class so each chunk access doesn't require a read of settings file
+
 TEMPLATE_DIR = os.path.abspath(settings.get('app','templates_location'))
 STATIC_DIR = os.path.abspath(settings.get('app','static_location'))
 
@@ -300,146 +302,9 @@ if config.cache is not None:
         out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
         return out
 
-
-
-#######################################################################################
-##  Neuroglancer entry point : decorated separately below to enable caching and flask entry
-#######################################################################################
-
-def neuro_glancer_entry(req_path):
-    # return str(request.url.split('/')[-2])
-    
-    ## Show / select available datasets in /ng
-    if req_path == '':
-        dsetNums = []
-        dsetNames = []
-        for items in dataset_info():
-            dsetNums.append(str(items))
-            dsetNames.append(dataset_info()[items][0])
-        return render_template('ns_datasets.html', dsets=zip(dsetNums,dsetNames))
-    
-    # Display base path of specifc /ng dataset
-    url_split = request.url.split(ngPath)[-1]
-    url_path_split = url_split.split('/')
-    url_path_split = [x for x in url_path_split if x != '']
-    if url_split[-1] != '':
-        if isinstance(re.match('[0-9]',url_path_split[0]),re.Match):
-            dsetNum = int(url_path_split[0])
-            print('Data set num == {}'.format(dsetNum))
-        else:
-            return 'Path must be of style {}{} where {} refers to a specific dataset found at {}'.format(ngPath,'integer','integer',ngPath)
-        
-        datapath = config.loadDataset(dsetNum)
-        
-        if hasattr(config.opendata[datapath],'ng_files') == False or \
-            hasattr(config.opendata[datapath],'ng_json') == False:
-                
-                ## Forms a comrehensive file list for all chunks
-                ## Not necessary for neuroglancer to function and take a long time
-                # config.opendata[datapath].ng_files = \
-                #     neuroGlancer.ng_files(config.opendata[datapath])
-                
-                ## Temp ignoring of ng_files
-                ## Add attribute so this constantly repeated
-                config.opendata[datapath].ng_files = True
-                
-                config.opendata[datapath].ng_json = \
-                    neuroGlancer.ng_json(config.opendata[datapath],file='dict')
-        
-        
-        ## Serve neuroglancer raw-format files
-        file_name_template = '{}-{}_{}-{}_{}-{}'
-        file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
-        if len(url_path_split) == 3 and isinstance(re.match(file_pattern,url_path_split[-1]),re.Match):
-            
-            print(request.path + '\n')
-            
-            x,y,z = url_path_split[-1].split('_')
-            x = x.split('-')
-            y = y.split('-')
-            z = z.split('-')
-            x = [int(x) for x in x]
-            y = [int(x) for x in y]
-            z = [int(x) for x in z]
-            
-            img = config.opendata[datapath][
-                int(url_path_split[-2]),
-                slice(0),
-                slice(None),
-                slice(z[0],z[1]),
-                slice(y[0],y[1]),
-                slice(x[0],x[1])
-                ]
-            
-            while img.ndim > 4:
-                img = np.squeeze(img,axis=0)
-                
-            print(img.shape)
-            
-            img = neuroGlancer.encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
-            
-            # Flask return of bytesIO as file
-            return send_file(
-                img,
-                as_attachment=True,
-                ## TODO: dynamic naming of file (specifc request or based on region of request)
-                download_name=url_path_split[-1], # name needs to match chunk
-                mimetype='application/octet-stream'
-            )
-        
-        # # Not necessary with config.opendata[datapath].ng_files not being built
-        # # Build appropriate File List in base path
-        # if len(url_path_split) == 1:
-        #     res_files = list(config.opendata[datapath].ng_files.keys())
-        #     # return str(res_files)
-        #     files = ['info', *res_files]
-        #     files = [str(x) for x in files]
-        #     path = [request.script_root]
-        #     return render_template('vfs_bil.html', path=path, files=files)
-        
-        # # Not necessary with config.opendata[datapath].ng_files not being built
-        # # Build html to display all ng_files chunks
-        # if len(url_path_split) == 2 and isinstance(re.match('[0-9]+',url_path_split[-1]),re.Match):
-        #     res = int(url_path_split[-1])
-        #     files = config.opendata[datapath].ng_files[res]
-        #     path = [request.script_root]
-        #     return render_template('vfs_bil.html', path=path, files=files)
-        
-        # Return 'info' json
-        if len(url_path_split) == 2 and url_path_split[-1] == 'info':
-            # return 'in'
-            b = io.BytesIO()
-            b.write(json.dumps(config.opendata[datapath].ng_json, indent=2, sort_keys=False).encode())
-            b.seek(0)
-            
-            return send_file(
-                b,
-                as_attachment=False,
-                download_name='info',
-                mimetype='application/json'
-            )
-            
-        
-        return 'Path not accessable'
-
-##############################################################################
-
-ngPath = '/api/ng/' #<--- final slash is required for proper navigation through dir tree
-
-## Decorating neuro_glancer_entry to allow caching ##
-if config.cache is not None:
-    print('Caching setup')
-    neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
-    print(neuro_glancer_entry)
-
-neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
-neuro_glancer_entry = app.route(ngPath + '<path:req_path>')(neuro_glancer_entry)
-neuro_glancer_entry = app.route(ngPath, defaults={'req_path': ''})(neuro_glancer_entry)
-
-##############################################################################
-## END NEUROGLANCER
-##############################################################################
-
+###############################################################################
+print('Importing Neuroglancer endpoints')
+app = neuroGlancer.setup_neuroglancer(app, config)
 
 
 

@@ -44,6 +44,8 @@ def setup_auth(app):
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
     
+    app.config['SESSION_COOKIE_SECURE'] = True
+    
     ## KEY FOR TESTING ONLY ##
     app.secret_key = settings.get('auth','secret_key')
     
@@ -126,6 +128,7 @@ def setup_auth(app):
     
         # if the above check passes, then we know the user has the right credentials
         login_user(load_user(username), remember=remember)  
+        print('Got to here')
         return redirect(url_for('profile'))
     
     

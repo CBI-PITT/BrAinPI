@@ -20,33 +20,11 @@ from flask_login import (
 from flask import render_template,request, flash, url_for, redirect
 import glob, os
 
-def split_html(req_path):
-    html_path = req_path.split('/')
-    return tuple((x for x in html_path if x != '' ))
+import utils
 
-def from_html_to_path(req_path, path_map):
-    html_path = split_html(req_path)
-    return os.path.join(
-        path_map[html_path[1]], # returns the true FS path
-        *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
-
-def from_path_to_html(path, path_map, req_path, entry_point):
-    html_path = split_html(req_path)
-    return path.replace(path_map[html_path[1]],entry_point + html_path[1])
-
-def is_file_type(file_type, path):
-    '''
-    file_type is file extension starting with '.'
-    Examples: '.ims', '.tiff', '.nd2'
-    
-    return bool
-    '''
-    return file_type.lower() == os.path.splitext('a'+ path)[-1].lower()
-    
 
 def initiate_browseable(app):
     from flaskAPI_gunicorn import login_manager
-    from utils import get_config
     
     base = '/browser/'
     @app.route(base + '<path:req_path>')
@@ -55,27 +33,16 @@ def initiate_browseable(app):
 
         print(request.path)
         
-        html_path = split_html(request.path)
+        html_path = utils.split_html(request.path)
         
         print(html_path)
         
         
-        settings = get_config() #<-- doing this here allows changes to paths to be dynamic
+        settings = utils.get_config() #<-- doing this here allows changes to paths to be dynamic (ie changes can be made while server is live)
+        
         if len(html_path) == 1:
             
-            ## Grab anon paths from settings file
-            paths_anon = []
-            for ii in settings['dir_anon']:
-                paths_anon.append(ii)
-           
-            ## Grab auth paths from settings file
-            paths_auth = []
-            for ii in settings['dir_auth']:
-                paths_auth.append(ii)
-            
-            to_browse = paths_anon
-            if current_user.is_authenticated:
-                to_browse =  paths_auth + to_browse
+            to_browse = utils.get_base_paths(settings,current_user.is_authenticated)
             
             to_browse = sorted(to_browse)
             path = [base[:-1] + os.path.split(x)[0] for x in to_browse] if len(to_browse) > 0 else ['/']
@@ -87,35 +54,19 @@ def initiate_browseable(app):
             
             try:
                 print('Line 88')
-                # Determine what directories that anon users are allowed to browse 
-                # and kick them if the path is not valid
-                path_map = {}
-                ## Collect anon paths
-                for ii in settings['dir_anon']:
-                    path_map[ii] = settings['dir_anon'][ii]
-                print(path_map)
-                
-                if not current_user.is_authenticated and html_path[1] not in path_map:
-                    flash('Anonymous users are not authorized to browse to path {}'.format(request.path))
-                    return redirect(url_for('login'))
-                
-                
-                # Determine what paths authenticated users may browse
-                # and kick them if the path is not valid
-                if current_user.is_authenticated:
-                    print('Line 105')
-                    for ii in settings['dir_auth']:
-                        path_map[ii] = settings['dir_auth'][ii]
-                print(path_map)
+                # Determine what directories that users are allowed to browse 
+                # based on authentication status and boot them if the path is not valid
+                path_map =  utils.get_path_map(settings,current_user.is_authenticated)
                 
                 if html_path[1] not in path_map:
                     flash('You are not authorized to browse to path {}'.format(request.path))
                     return redirect(url_for('login'))
                 
+                
                 if current_user.is_authenticated:
                     
                     # Read in group information
-                    groups = get_config('groups.ini',allow_no_value=True)
+                    groups = utils.get_config('groups.ini',allow_no_value=True)
                     
                     # Build a list of allowed folders
                     allowed_list = [current_user.id.lower()]
@@ -125,23 +76,23 @@ def initiate_browseable(app):
                                 print('Line 168')
                                 allowed_list.append(ii.lower())
                     
-                    if len(split_html(request.path)) >= 3 and \
+                    if len(utils.split_html(request.path)) >= 3 and \
                         not current_user.id.lower() in [x.lower() for x in groups['all']] and \
                         settings.getboolean('auth', 'restrict_paths_to_matched_username') and \
-                        not split_html(request.path)[2].lower() in allowed_list:
+                        not utils.split_html(request.path)[2].lower() in allowed_list:
                         flash('You are not authorized to browse to path {}'.format(request.path))
                         return redirect(url_for('login'))
                
                
                
                 # Construct real paths from names in path_map dict
-                to_browse = from_html_to_path(request.path, path_map)
+                to_browse = utils.from_html_to_path(request.path, path_map)
             
                 # Find all available files in the resquested path
                 to_browse = glob.glob(to_browse + '/*')
                 
                 ## Reconstruct html_paths
-                to_browse = [from_path_to_html(x,path_map,request.path,base) for x in to_browse]
+                to_browse = [utils.from_path_to_html(x,path_map,request.path,base) for x in to_browse]
                 
                 ## We now have a list (to_browse) of all files in the requested path
                 # Now we need to extract only paths that the user is allowed to see
@@ -153,10 +104,6 @@ def initiate_browseable(app):
                 
                 elif current_user.is_authenticated:
                     print('Line 132')
-                    
-                    # Grab groups from groups.ini file
-                    # 'All' group is assumed to have NO restrctions, so all filters are bypassed for this group
-                    groups = get_config('groups.ini',allow_no_value=True)
                     
                     if current_user.id.lower() in [x.lower() for x in groups['all']]:
                         print('Line 139')
@@ -175,7 +122,7 @@ def initiate_browseable(app):
                             
                             # Retain all anon paths
                             for ii in settings['dir_anon']:
-                                tmp = [x for x in to_browse if ii.lower() == split_html(x)[1].lower()]
+                                tmp = [x for x in to_browse if ii.lower() == utils.split_html(x)[1].lower()]
                                 to_view = to_view + tmp
                             # print(to_view)
                             # Keep only those paths from to_browse which contain 'username' at html_path[2]<-- may need to change this to filter at level html_path[2]
@@ -187,7 +134,7 @@ def initiate_browseable(app):
                             
                             
                             
-                            to_view = to_view + [x for x in to_browse if split_html(x)[2].lower() in allowed_list] # Retain group folder names '/group_name/'
+                            to_view = to_view + [x for x in to_browse if utils.split_html(x)[2].lower() in allowed_list] # Retain group folder names '/group_name/'
                                     
                             # Reset to_browse to be only paths which are included
                             to_browse = to_view
@@ -200,7 +147,7 @@ def initiate_browseable(app):
                             ## to_view will collect all OK paths for viewing
                             to_view = []
                             
-                            paths = [ from_html_to_path(x, path_map) for x in to_browse ]
+                            paths = [ utils.from_html_to_path(x, path_map) for x in to_browse ]
                             print(184)
                             print(paths[0:10])
                             
@@ -214,7 +161,7 @@ def initiate_browseable(app):
                             # files = [ x for x in to_browse if os.path.isfile(from_html_to_path(x, path_map)) ]
                             for ii in settings['file_types']:
                                 # Further limit to the file type being filtered
-                                current_files = [ x for x in files if is_file_type(settings['file_types'][ii], split_html(x)[-1]) ]#<-- add 'a' to make split consistent when files start with '.'
+                                current_files = [ x for x in files if utils.is_file_type(settings['file_types'][ii], utils.split_html(x)[-1]) ]#<-- add 'a' to make split consistent when files start with '.'
                                 to_view = to_view + current_files
                             to_view = dirs + to_view
                             

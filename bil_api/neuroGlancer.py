@@ -5,11 +5,24 @@ Created on Thu Mar 17 16:39:55 2022
 @author: awatson
 """
 # bil_api imports
-import utils
 from itertools import product
 import io
 import json
+import re
 from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
+import numpy as np
+import os
+
+## Project imports
+from dataset_info import dataset_info
+import utils
+
+from flask import (
+    render_template,
+    request,
+    send_file
+    )
+from flask_cors import cross_origin
 
 
 def encode_ng_file(numpy_array,channels):
@@ -17,24 +30,11 @@ def encode_ng_file(numpy_array,channels):
     img_ram = io.BytesIO()
     img_ram.write(encoder.encode(numpy_array))
     img_ram.seek(0)
-
-
-    # # Write numpy to NG raw chunk to IO buffer
-    # img_ram = io.BytesIO()
-    # img_ram.write(encoder.encode(numpy_array))
-    # img_ram.seek(0)
     return img_ram
 
 
 
-
-#metadata extracted from datasetimport json
-
-
-# 
-
 ## Build neuroglancer json
-
 def ng_json(numpy_like_object,file=None, different_chunks=False):
     '''
     Save a json from a 5d numpy like volume
@@ -107,20 +107,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
         return
 
 
-'''
-File name convention by chunk = [x,y,z] <-- note: opposite from numpy (z,y,x)
-chunks == [10,15,2]
-size == [18,35,1]
 
-Files:
-    0-10_0-15_0-1
-    0-10_15-30_0-1
-    0-10_30-35_0-1
-    10-18_0-15_0-1
-    10-18_15-30_0-1
-    10-18_30-35_0-1
-    
-'''
 
 def ng_files(numpy_like_object):
     '''
@@ -162,6 +149,214 @@ def ng_files(numpy_like_object):
 
 
 
+
+
+
+def make_ng_link(open_dataset_with_ng_json, ngURL='https://neuroglancer-demo.appspot.com/'):
+    '''
+    Attempts to build a fully working link to ng dataset
+    '''
+    stateDict = {}
+    stateDict['dimensions'] = {'x': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0],'um' ],
+                               'y': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1],'um' ],
+                               'z': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2],'um' ]
+                               }
+    stateDict['position'] = [ open_dataset_with_ng_json.ng_json['scales'][0]['size'][0]//2,
+                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][1]//2,
+                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][2]//2
+                             ]
+    
+    stateDict['crossSectionScale'] = 50
+    stateDict['projectionScale'] = 50 * stateDict['dimensions']['z']
+    
+    stateDict['layers'] = []
+    
+    layer = {}
+    layer['type'] = 'image'
+    layer['source'] = 'precomputed://' + 'https://brain-api.cbi.pitt.edu/api/ng/3' #<-- Needs to be imported intellegently
+    layer['tab'] = 'rendering'
+    layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
+    layer['channelDimensions'] = {'c^': [1, '']}
+    layer['name'] = 'Some Name Related to the File'
+    layer['selectedLayer'] = {'visible': True, 'layer': '3'},
+    layer['layout'] = '4panel'
+    
+    stateDict['layers'].append(layer)
+    
+    ## If source URL is not secure, use the non-secure version of neuroglancer
+    if 'https://' in stateDict['layers'][0]['source'] == False:
+        ngURL = ngURL.replace('https://','http://')
+    
+    outURL = ngURL + r'#!'
+    outURL = outURL + str(stateDict)
+    outURL = outURL.replace(',','%2C')
+    outURL = outURL.replace('True','true')
+    outURL = outURL.replace('False','false')
+    
+    return outURL
+
+    
+
+
+def neuroglancer_dtypes():
+    return [
+        '.ims',
+        '.zarr',
+        '.weave'
+        ]
+
+#######################################################################################
+##  Neuroglancer entry point : decorated separately below to enable caching and flask entry
+#######################################################################################
+
+def setup_neuroglancer(app, config):
+    
+    def neuro_glancer_entry(req_path):
+        # return str(request.url.split('/')[-2])
+        # print(request.path)
+        # print(request.base_url)
+        # print(request.url)
+        # if not utils.is_file_type(neuroglancer_dtypes(), request.path):
+        #     print('Im here')
+        #     return('Neuroglancer can not display this type of dataset')
+        
+        # settings = utils.get_config('settings.ini') #<-- need to add this to config class so each chunk access doesn't require a read of settings file
+        settings = config.settings
+        path_map = utils.get_path_map(settings,user_authenticated=True) #<-- Force user_auth=True to get all possible paths, in this way all ng links will be shareable to anyone
+        datapath = utils.from_html_to_path(request.path, path_map)
+        
+        path_split = utils.split_html(request.path)
+        
+        # Test for different patterns
+        file_name_template = '{}-{}_{}-{}_{}-{}'
+        file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
+        ## NEED to figure out how to extract the datapath from any version of ng request:
+            # /hdshjk/file.ims : /hdshjk/file.ims/info : /hdshjk/file.ims/info/0/0-1_2-3_4-5
+        
+        # Find the file system path to the dataset
+        # Assumptions are neuroglancer only requests 'info' file or chunkfiles
+        if isinstance(re.match(file_pattern,path_split[-1]),re.Match):
+            datapath = '/' + os.path.join(*datapath.split('/')[:-2])
+        elif path_split[-1] == 'info':
+            datapath = '/' + os.path.join(*datapath.split('/')[:-1])
+        datapath = config.loadDataset(datapath)
+        
+        if hasattr(config.opendata[datapath],'ng_files') == False or \
+            hasattr(config.opendata[datapath],'ng_json') == False:
+                
+                ## Forms a comrehensive file list for all chunks
+                ## Not necessary for neuroglancer to function and take a long time
+                # config.opendata[datapath].ng_files = \
+                #     neuroGlancer.ng_files(config.opendata[datapath])
+                
+                ## Temp ignoring of ng_files
+                ## Add attribute so this constantly repeated
+                config.opendata[datapath].ng_files = True
+                
+                config.opendata[datapath].ng_json = \
+                    ng_json(config.opendata[datapath],file='dict')
+            
+        
+        
+        # Return 'info' json
+        if path_split[-1] == 'info':
+            # return 'in'
+            b = io.BytesIO()
+            b.write(json.dumps(config.opendata[datapath].ng_json, indent=2, sort_keys=False).encode())
+            b.seek(0)
+            
+            return send_file(
+                b,
+                as_attachment=False,
+                download_name='info',
+                mimetype='application/json'
+            )
+        
+        ## Serve neuroglancer raw-format files
+        elif isinstance(re.match(file_pattern,path_split[-1]),re.Match):
+            
+            print(request.path + '\n')
+            
+            x,y,z = path_split[-1].split('_')
+            x = x.split('-')
+            y = y.split('-')
+            z = z.split('-')
+            x = [int(x) for x in x]
+            y = [int(x) for x in y]
+            z = [int(x) for x in z]
+            
+            img = config.opendata[datapath][
+                int(path_split[-2]),
+                slice(0),
+                slice(None),
+                slice(z[0],z[1]),
+                slice(y[0],y[1]),
+                slice(x[0],x[1])
+                ]
+            
+            while img.ndim > 4:
+                img = np.squeeze(img,axis=0)
+                
+            print(img.shape)
+            
+            img = encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
+            
+            # Flask return of bytesIO as file
+            return send_file(
+                img,
+                as_attachment=True,
+                ## TODO: dynamic naming of file (specifc request or based on region of request)
+                download_name=path_split[-1], # name needs to match chunk
+                mimetype='application/octet-stream'
+            )
+        
+        # # Not necessary with config.opendata[datapath].ng_files not being built
+        # # Build appropriate File List in base path
+        # if len(url_path_split) == 1:
+        #     res_files = list(config.opendata[datapath].ng_files.keys())
+        #     # return str(res_files)
+        #     files = ['info', *res_files]
+        #     files = [str(x) for x in files]
+        #     path = [request.script_root]
+        #     return render_template('vfs_bil.html', path=path, files=files)
+        
+        # # Not necessary with config.opendata[datapath].ng_files not being built
+        # # Build html to display all ng_files chunks
+        # if len(url_path_split) == 2 and isinstance(re.match('[0-9]+',url_path_split[-1]),re.Match):
+        #     res = int(url_path_split[-1])
+        #     files = config.opendata[datapath].ng_files[res]
+        #     path = [request.script_root]
+        #     return render_template('vfs_bil.html', path=path, files=files)
+        
+        
+            
+            
+        return 'Path not accessable'
+    
+    ##############################################################################
+    
+    ngPath = '/ng/' #<--- final slash is required for proper navigation through dir tree
+    
+    ## Decorating neuro_glancer_entry to allow caching ##
+    if config.cache is not None:
+        print('Caching setup')
+        neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
+        print(neuro_glancer_entry)
+    
+    neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
+    neuro_glancer_entry = app.route(ngPath + '<path:req_path>')(neuro_glancer_entry)
+    neuro_glancer_entry = app.route(ngPath, defaults={'req_path': ''})(neuro_glancer_entry)
+    
+    return app
+
+##############################################################################
+## END NEUROGLANCER
+##############################################################################
+
+
+##############################################################################
+##  Notes and examples below
+##############################################################################
 
 # metadata = {
 #  'shape': (1, 2, 3, 27670, 19441),
@@ -321,6 +516,22 @@ def ng_files(numpy_like_object):
 #     "voxel_offset": [0, 0, 0]}],
 #   "type": "image"}
 
+
+'''
+File name convention by chunk = [x,y,z] <-- note: opposite from numpy (z,y,x)
+chunks == [10,15,2]
+size == [18,35,1]
+
+Files:
+    0-10_0-15_0-1
+    0-10_15-30_0-1
+    0-10_30-35_0-1
+    10-18_0-15_0-1
+    10-18_15-30_0-1
+    10-18_30-35_0-1
+    
+'''
+
 ## n-tracer info
 
 # {'data_type': 'uint16',
@@ -376,55 +587,25 @@ the disadvantage, however, that chunk data is not shared at all by the 3 views
 '''
 
 
-# ## Browser state example 'Hook's Brain:
+# # ## Browser state example 'Hook's Brain:
 
-a = '{"dimensions":{"x":[4.98e-7%2C"m"]%2C"y":[4.98e-7%2C"m"]%2C"z":[0.00000533%2C"m"]}%2C"position":[9396.5%2C13847.5%2C562.5]%2C"crossSectionScale":54.598150033144236%2C"projectionScale":32000%2C"layers":[{"type":"image"%2C"source":"precomputed://https://brain-api.cbi.pitt.edu/api/ng/3"%2C"tab":"rendering"%2C"shaderControls":{"normalized":{"range":[0%2C9814]%2C"channel":[1]}}%2C"channelDimensions":{"c^":[1%2C""]}%2C"name":"3"}]%2C"selectedLayer":{"visible":true%2C"layer":"3"}%2C"layout":"4panel"}'
+# a = '{"dimensions":{"x":[4.98e-7%2C"m"]%2C"y":[4.98e-7%2C"m"]%2C"z":[0.00000533%2C"m"]}%2C"position":[9396.5%2C13847.5%2C562.5]%2C"crossSectionScale":54.598150033144236%2C"projectionScale":32000%2C"layers":[{"type":"image"%2C"source":"precomputed://https://brain-api.cbi.pitt.edu/api/ng/3"%2C"tab":"rendering"%2C"shaderControls":{"normalized":{"range":[0%2C9814]%2C"channel":[1]}}%2C"channelDimensions":{"c^":[1%2C""]}%2C"name":"3"}]%2C"selectedLayer":{"visible":true%2C"layer":"3"}%2C"layout":"4panel"}'
 
-# b = a.replace(r'https://neuroglancer-demo.appspot.com/#!','')
-# b = b.replace(r'http://neuroglancer-demo.appspot.com/#!','')
-b = a.replace('%2C',',')
-b = b.replace('true','True')
-b = b.replace('false','False')
-b = eval(b)
+# # b = a.replace(r'https://neuroglancer-demo.appspot.com/#!','')
+# # b = b.replace(r'http://neuroglancer-demo.appspot.com/#!','')
+# b = a.replace('%2C',',')
+# b = b.replace('true','True')
+# b = b.replace('false','False')
+# b = eval(b)
 
 
-def make_ng_link(open_dataset_with_ng_json, ngURL='https://neuroglancer-demo.appspot.com/'):
-    stateDict = {}
-    stateDict['dimensions'] = {'x': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0],'um' ],
-                               'y': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1],'um' ],
-                               'z': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2],'um' ]
-                               }
-    stateDict['position'] = [ open_dataset_with_ng_json.ng_json['scales'][0]['size'][0]//2,
-                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][1]//2,
-                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][2]//2
-                             ]
-    
-    stateDict['crossSectionScale'] = 50
-    stateDict['projectionScale'] = 50 * stateDict['dimensions']['z']
-    
-    stateDict['layers'] = []
-    
-    layer = {}
-    layer['type'] = 'image'
-    layer['source'] = 'precomputed://' + 'https://brain-api.cbi.pitt.edu/api/ng/3' #<-- Needs to be imported intellegently
-    layer['tab'] = 'rendering'
-    layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
-    layer['channelDimensions'] = {'c^': [1, '']}
-    layer['name'] = 'Some Name Related to the File'
-    layer['selectedLayer'] = {'visible': True, 'layer': '3'},
-    layer['layout'] = '4panel'
-    
-    stateDict['layers'].append(layer)
-    
-    ## If source URL is not secure, use the non-secure version of neuroglancer
-    if 'https://' in stateDict['layers'][0]['source'] == False:
-        ngURL = ngURL.replace('https://','http://')
-    
-    outURL = ngURL + r'#!'
-    outURL = outURL + str(stateDict)
-    outURL = outURL.replace(',','%2C')
-    outURL = outURL.replace('True','true')
-    outURL = outURL.replace('False','false')
 
-    
-    
+
+
+
+
+
+
+
+
+

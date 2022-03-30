@@ -24,7 +24,7 @@ from numcodecs import Blosc
 from diskcache import FanoutCache
 
 
-def get_config(file='settings.ini',allow_no_value=False):
+def get_config(file='settings.ini',allow_no_value=True):
     import configparser
     # file = os.path.join(os.path.split(os.path.abspath(__file__))[0],file)
     file = os.path.join(sys.path[0], file)
@@ -70,6 +70,83 @@ def uncompress_np(bytestring):
     # else:
     return np.load(array)
 
+def split_html(req_path):
+    html_path = req_path.split('/')
+    return tuple((x for x in html_path if x != '' ))
+
+def from_html_to_path(req_path, path_map):
+    html_path = split_html(req_path)
+    return os.path.join(
+        path_map[html_path[1]], # returns the true FS path
+        *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
+
+def from_path_to_html(path, path_map, req_path, entry_point):
+    html_path = split_html(req_path)
+    return path.replace(path_map[html_path[1]],entry_point + html_path[1])
+
+def is_file_type(file_type, path):
+    '''
+    file_type is file extension starting with '.'
+    Examples: '.ims', '.tiff', '.nd2'
+    
+    if file_type is a list of types return True if even 1 match ['.ims','.tif','.nd2']
+    
+    return bool
+    '''
+    if isinstance(file_type,str):
+        file_type = [file_type]
+    if path[-1] == '/':
+        path = path[:-1]
+    terminal_path_ext = os.path.splitext('a'+ path)[-1]
+    return any( [ x.lower() == terminal_path_ext.lower() for x in file_type ] )
+    # return file_type.lower() == os.path.splitext('a'+ path)[-1].lower()
+
+def from_html_to_path(req_path, path_map):
+    html_path = split_html(req_path)
+    return os.path.join(
+        path_map[html_path[1]], # returns the true FS path
+        *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
+
+def from_path_to_html(path, path_map, req_path, entry_point):
+    html_path = split_html(req_path)
+    return path.replace(path_map[html_path[1]],entry_point + html_path[1])
+
+def get_base_paths(settings_config_parser_object,user_authenticated=False):
+    '''
+    Returns a list of directories that users are authorized to see
+    '''
+    ## Grab anon paths from settings file
+    paths = []
+    for ii in settings_config_parser_object['dir_anon']:
+        paths.append(ii)
+    
+    if user_authenticated == False:
+        return paths
+   
+    ## Grab auth paths from settings file
+    for ii in settings_config_parser_object['dir_auth']:
+        paths.append(ii)
+    
+    return paths
+    
+def get_path_map(settings_config_parser_object,user_authenticated=False):
+    '''
+    Returns a dict where key=path_common_name and value=actual_file_system_path
+    '''
+    path_map = {}
+    ## Collect anon paths
+    for ii in settings_config_parser_object['dir_anon']:
+        path_map[ii] = settings_config_parser_object['dir_anon'][ii]
+
+    if not user_authenticated:
+        return path_map
+    
+    for ii in settings_config_parser_object['dir_auth']:
+        path_map[ii] = settings_config_parser_object['dir_auth'][ii]
+    return path_map
+
+
+
 
 class config:
     '''
@@ -106,9 +183,17 @@ class config:
             self.cache = None
 
     
-    def loadDataset(self, selection: int):
-    
-        dataPath = dataset_info()[selection][1]
+    def loadDataset(self, dataPath:str):
+        
+        '''
+        Given the filesystem path to a file, open that file with the appropriate
+        reader and store it in the opendata attribute with the dataPath as 
+        the key
+        
+        If the key exists return
+        Always return the name of the dataPath
+        '''
+        
         print(dataPath)
         
         if dataPath in self.opendata:
