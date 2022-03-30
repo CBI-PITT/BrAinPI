@@ -22,7 +22,7 @@ import glob, os
 
 def split_html(req_path):
     html_path = req_path.split('/')
-    return [x for x in html_path if x != '' ]
+    return tuple((x for x in html_path if x != '' ))
 
 def from_html_to_path(req_path, path_map):
     html_path = split_html(req_path)
@@ -111,6 +111,28 @@ def initiate_browseable(app):
                 if html_path[1] not in path_map:
                     flash('You are not authorized to browse to path {}'.format(request.path))
                     return redirect(url_for('login'))
+                
+                if current_user.is_authenticated:
+                    
+                    # Read in group information
+                    groups = get_config('groups.ini',allow_no_value=True)
+                    
+                    # Build a list of allowed folders
+                    allowed_list = [current_user.id.lower()]
+                    for ii in groups: # Group names
+                        for oo in groups[ii]: # Users in each group
+                            if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
+                                print('Line 168')
+                                allowed_list.append(ii.lower())
+                    
+                    if len(split_html(request.path)) >= 3 and \
+                        not current_user.id.lower() in [x.lower() for x in groups['all']] and \
+                        settings.getboolean('auth', 'restrict_paths_to_matched_username') and \
+                        not split_html(request.path)[2].lower() in allowed_list:
+                        flash('You are not authorized to browse to path {}'.format(request.path))
+                        return redirect(url_for('login'))
+               
+               
                
                 # Construct real paths from names in path_map dict
                 to_browse = from_html_to_path(request.path, path_map)
@@ -125,7 +147,7 @@ def initiate_browseable(app):
                 # Now we need to extract only paths that the user is allowed to see
                 
                 # If the user is anonymous, then there is no additional filtering to do
-                if current_user.is_authenticated == False:
+                if not current_user.is_authenticated:
                     print('Line 128')
                     pass
                 
@@ -155,21 +177,17 @@ def initiate_browseable(app):
                             for ii in settings['dir_anon']:
                                 tmp = [x for x in to_browse if ii.lower() == split_html(x)[1].lower()]
                                 to_view = to_view + tmp
-                            print(to_view)
+                            # print(to_view)
                             # Keep only those paths from to_browse which contain 'username' at html_path[2]<-- may need to change this to filter at level html_path[2]
-                            print(current_user.id.lower())
-                            print(to_browse[0:10])
-                            to_view = to_view + [x for x in to_browse if current_user.id.lower() == split_html(x)[2].lower()]
-                            print(to_view)
+                            # print(current_user.id.lower())
+                            # print(to_browse[0:10])
+                            # to_view = to_view + [x for x in to_browse if current_user.id.lower() == split_html(x)[2].lower()]
+                            # print(to_view)
                             
-                            # Keep only those paths from to_browse named for the groups a user belongs to at html_path[2]
-                            allowed_list = [current_user.id]
-                            for ii in groups: # Group names
-                                for oo in groups[ii]: # Users in each group
-                                    if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
-                                        print('Line 168')
-                                        allowed_list.append(ii)
-                                        to_view = to_view + [x for x in to_browse if ii.lower() == split_html(x)[2].lower()] # Retain group folder names '/group_name/'
+                            
+                            
+                            
+                            to_view = to_view + [x for x in to_browse if split_html(x)[2].lower() in allowed_list] # Retain group folder names '/group_name/'
                                     
                             # Reset to_browse to be only paths which are included
                             to_browse = to_view
