@@ -85,7 +85,7 @@ def initiate_browseable(app):
         else:
             
             try:
-                print('Line 65')
+                print('Line 88')
                 # Determine what directories that anon users are allowed to browse 
                 # and kick them if the path is not valid
                 path_map = {}
@@ -102,7 +102,7 @@ def initiate_browseable(app):
                 # Determine what paths authenticated users may browse
                 # and kick them if the path is not valid
                 if current_user.is_authenticated:
-                    print('Line 82')
+                    print('Line 105')
                     for ii in settings['dir_auth']:
                         path_map[ii] = settings['dir_auth'][ii]
                 print(path_map)
@@ -125,27 +125,27 @@ def initiate_browseable(app):
                 
                 # If the user is anonymous, then there is no additional filtering to do
                 if current_user.is_authenticated == False:
-                    print('Line 107')
+                    print('Line 128')
                     pass
                 
                 elif current_user.is_authenticated:
-                    print('Line 111')
+                    print('Line 132')
                     
                     # Grab groups from groups.ini file
                     # 'All' group is assumed to have NO restrctions, so all filters are bypassed for this group
                     groups = get_config('groups.ini',allow_no_value=True)
                     
                     if current_user.id.lower() in [x.lower() for x in groups['all']]:
-                        print('Line 117')
+                        print('Line 139')
                         pass
                     
                     else:
-                        print('Line 122')
+                        print('Line 143')
                         
                         # All paths +1 above those listed in 'setting.ini' needs to be filtered for 
                         # username_or_group affiliation.  (ie base/path_in_settings.ini/username_or_group/anything_else/doesnt_matter)
                         if settings.getboolean('auth', 'restrict_paths_to_matched_username'):
-                            print('Line 125')
+                            print('Line 148')
                             
                             ## to_view will collect all OK paths for viewing
                             to_view = []
@@ -165,7 +165,7 @@ def initiate_browseable(app):
                             for ii in groups: # Group names
                                 for oo in groups[ii]: # Users in each group
                                     if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
-                                        print('Line 143')
+                                        print('Line 168')
                                         to_view = to_view + [x for x in to_browse if ii.lower() == split_html(x)[2].lower()] # Retain group folder names '/group_name/'
                                     
                             # Reset to_browse to be only paths which are included
