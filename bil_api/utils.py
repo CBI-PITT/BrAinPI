@@ -120,7 +120,7 @@ def get_base_paths(settings_config_parser_object,user_authenticated=False):
     for ii in settings_config_parser_object['dir_anon']:
         paths.append(ii)
     
-    if user_authenticated == False:
+    if not user_authenticated:
         return paths
    
     ## Grab auth paths from settings file

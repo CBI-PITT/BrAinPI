@@ -241,8 +241,8 @@ def setup_neuroglancer(app, config):
             datapath = '/' + os.path.join(*datapath.split('/')[:-1])
         datapath = config.loadDataset(datapath)
         
-        if hasattr(config.opendata[datapath],'ng_files') == False or \
-            hasattr(config.opendata[datapath],'ng_json') == False:
+        if not hasattr(config.opendata[datapath],'ng_json'):
+            # or not hasattr(config.opendata[datapath],'ng_files'):
                 
                 ## Forms a comrehensive file list for all chunks
                 ## Not necessary for neuroglancer to function and take a long time
@@ -251,7 +251,7 @@ def setup_neuroglancer(app, config):
                 
                 ## Temp ignoring of ng_files
                 ## Add attribute so this constantly repeated
-                config.opendata[datapath].ng_files = True
+                # config.opendata[datapath].ng_files = True
                 
                 config.opendata[datapath].ng_json = \
                     ng_json(config.opendata[datapath],file='dict')
