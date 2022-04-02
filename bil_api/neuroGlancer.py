@@ -39,7 +39,7 @@ def ng_shader(numpy_like_object):
     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
     res = numpy_like_object.ResolutionLevels
     
-    shaderStr = '{'
+    shaderStr = ''
     shaderStr = shaderStr + '// Init for each channel:\n\n'
     shaderStr = shaderStr + '// Channel visability check boxes\n'
     
@@ -68,7 +68,7 @@ def ng_shader(numpy_like_object):
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + 'vec3 channel{} = vec3(0);'.format(ii)
     
-    shaderStr = shaderStr + '\nvoid main() {\n\n'
+    shaderStr = shaderStr + '\n\nvoid main() {\n\n'
     shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
     
     for ii in range(metadata['Channels']):
