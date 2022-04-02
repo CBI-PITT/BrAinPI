@@ -34,28 +34,62 @@ def encode_ng_file(numpy_array,channels):
     img_ram.seek(0)
     return img_ram
 
-# def ng_shader(numpy_like_object):
+def ng_shader(numpy_like_object):
     
-#     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
+    metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
+    res = numpy_like_object.ResolutionLevels
     
-#     shaderStr = '{'
-#     shaderStr = shaderStr + '// Init for each channel:\n\n'
-#     shaderStr = shaderStr + '// Channel visability check boxes\n'
+    shaderStr = '{'
+    shaderStr = shaderStr + '// Init for each channel:\n\n'
+    shaderStr = shaderStr + '// Channel visability check boxes\n'
     
-#     for ii in range(metadata['Channels']):
-#         shaderStr = shaderStr + '#uicontrol bool channel{}_visable checkbox(default=true);\n'.format(ii)
+    for ii in range(metadata['Channels']):
+        shaderStr = shaderStr + '#uicontrol bool channel{}_visable checkbox(default=true);\n'.format(ii)
     
-#     shaderStr = shaderStr + '\n// Lookup tables\n'
-#     for ii in range(metadata['Channels']):
-#         shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}],channel=[{}]);\n'.format(
-#             ii,
-#             metadata[(res,0,0,'HistogramMin')],
-#             metadata[(res,0,0,'HistogramMax')],
-#             metadata[(res,0,0,'HistogramMin')] - metadata[(res,0,0,'HistogramMin')]//2,
-#             max(metadata[(res,0,0,'HistogramMax')] + metadata[(res,0,0,'HistogramMax')]*2,65535), #<-- ToDo: code max based on dtype
-#             ,
-                     
-#             )
+    shaderStr = shaderStr + '\n// Lookup tables\n'
+    for ii in range(metadata['Channels']):
+        shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}],channel=[{}]);\n'.format(
+            ii,
+            metadata[(res-1,0,0,'HistogramMin')],
+            metadata[(res-1,0,0,'HistogramMax')],
+            metadata[(res-1,0,0,'HistogramMin')] - metadata[(res-1,0,0,'HistogramMin')]//2,
+            max(metadata[(res-1,0,0,'HistogramMax')] + metadata[(res-1,0,0,'HistogramMax')]*2,65535), #<-- ToDo: code max based on dtype
+            ii
+            )
+    
+    shaderStr = shaderStr + '\n// Colors\n'
+    
+    defaultColors = ['green','red','purple','blue','yellow','orange'] * 10
+    for ii in range(metadata['Channels']):
+        shaderStr = shaderStr + '#uicontrol vec3 channel{}_color color(default="{}");'.format(ii, defaultColors[ii])
+    
+    shaderStr = shaderStr + '\n\n//RGB vector at 0 (ie channel off)\n'
+    
+    for ii in range(metadata['Channels']):
+        shaderStr = shaderStr + 'vec3 channel{} = vec3(0);'.format(ii)
+    
+    shaderStr = shaderStr + '\nvoid main() {\n\n'
+    shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
+    
+    for ii in range(metadata['Channels']):
+        shaderStr = shaderStr + 'if (channel0_visable == true)\n'
+        shaderStr = shaderStr + 'channel{} = channel{}_color * ((toNormalized(getDataValue({})) + lut_{}()));\n\n'.format(ii,ii,ii,ii)
+    
+    shaderStr = shaderStr + '// Add RGB values of all channels\n'
+    shaderStr = shaderStr + 'vec3 rgb = ('
+    for ii in range(metadata['Channels']):
+        shaderStr = shaderStr + 'channel{}'.format(ii)
+        if ii < metadata['Channels']-1:
+            shaderStr = shaderStr + ' + '
+    shaderStr = shaderStr + ');\n\n'
+    
+    shaderStr = shaderStr + '//Retain RGB value with max of 1\n'
+    shaderStr = shaderStr + 'vec3 render = min(rgb,vec3(1));\n\n'
+    shaderStr = shaderStr + '// Render the resulting pixel map\n'
+    shaderStr = shaderStr + 'emitRGB(render);\n'
+    shaderStr = shaderStr + '}'
+    
+    return shaderStr
     
     
 # // Init for each channel:
@@ -153,6 +187,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     
     neuro_info['scales'] = scales
     neuro_info['type'] = 'image'
+    neuro_info['shader'] = ng_shader(numpy_like_object)
     
     
     print(neuro_info)
