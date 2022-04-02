@@ -22,6 +22,8 @@ from flask import (
     request,
     send_file
     )
+
+from flask_login import login_required
 from flask_cors import cross_origin
 
 
@@ -32,7 +34,68 @@ def encode_ng_file(numpy_array,channels):
     img_ram.seek(0)
     return img_ram
 
+# def ng_shader(numpy_like_object):
+    
+#     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
+    
+#     shaderStr = '{'
+#     shaderStr = shaderStr + '// Init for each channel:\n\n'
+#     shaderStr = shaderStr + '// Channel visability check boxes\n'
+    
+#     for ii in range(metadata['Channels']):
+#         shaderStr = shaderStr + '#uicontrol bool channel{}_visable checkbox(default=true);\n'.format(ii)
+    
+#     shaderStr = shaderStr + '\n// Lookup tables\n'
+#     for ii in range(metadata['Channels']):
+#         shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}],channel=[{}]);\n'.format(
+#             ii,
+#             metadata[(res,0,0,'HistogramMin')],
+#             metadata[(res,0,0,'HistogramMax')],
+#             metadata[(res,0,0,'HistogramMin')] - metadata[(res,0,0,'HistogramMin')]//2,
+#             max(metadata[(res,0,0,'HistogramMax')] + metadata[(res,0,0,'HistogramMax')]*2,65535), #<-- ToDo: code max based on dtype
+#             ,
+                     
+#             )
+    
+    
+# // Init for each channel:
 
+# // Channel visability check boxes
+# #uicontrol bool channel0_visable checkbox(default=true)
+# #uicontrol bool channel1_visable checkbox(default=true)
+
+# // Lookup tables
+# #uicontrol invlerp lut_0 (range=[0,10000],window=[0,20000],channel=[0]);
+# #uicontrol invlerp lut_1 (range=[0,10000],window=[0,20000],channel=[1]);
+
+# // Colors
+# #uicontrol vec3 channel0_color color(default="green");
+# #uicontrol vec3 channel1_color color(default="red");
+
+# //RGB vector at 0 (ie channel off)
+# vec3 channel0 = vec3(0);
+# vec3 channel1 = vec3(0);
+
+# void main() {
+  
+#   // For each color, if visable, get data, adjust with lut, then apply to color
+#   if (channel0_visable == true) 
+#     channel0 = channel0_color * ((toNormalized(getDataValue(0)) + lut_0()));
+  
+#   if (channel1_visable == true) 
+#     channel1 = channel1_color * ((toNormalized(getDataValue(1)) + lut_1()));
+  
+#   // Add RGB values of all channels
+#   vec3 rgb = (channel0 + channel1);
+  
+#   //Retain RGB value with max of 1
+#   vec3 render = min(rgb,vec3(1));
+  
+#   // Render the resulting pixel map
+#   emitRGB(
+#     render
+#   );
+# }
 
 ## Build neuroglancer json
 def ng_json(numpy_like_object,file=None, different_chunks=False):
@@ -90,6 +153,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     
     neuro_info['scales'] = scales
     neuro_info['type'] = 'image'
+    
     
     print(neuro_info)
     if file is None:
@@ -342,10 +406,17 @@ def setup_neuroglancer(app, config):
         print('Caching setup')
         neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
         print(neuro_glancer_entry)
+    # neuro_glancer_entry = login_required(neuro_glancer_entry)
     
+    
+   
     neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
+    # neuro_glancer_entry = login_required(neuro_glancer_entry)
     neuro_glancer_entry = app.route(ngPath + '<path:req_path>')(neuro_glancer_entry)
     neuro_glancer_entry = app.route(ngPath, defaults={'req_path': ''})(neuro_glancer_entry)
+    
+    
+    
     
     return app
 
