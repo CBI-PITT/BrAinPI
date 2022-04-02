@@ -37,6 +37,9 @@ def encode_ng_file(numpy_array,channels):
 
 def ng_shader(numpy_like_object):
     
+    # channelMins = []
+    # for ii in range
+    
     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
     res = numpy_like_object.ResolutionLevels
     
@@ -49,31 +52,34 @@ def ng_shader(numpy_like_object):
     
     shaderStr = shaderStr + '\n// Lookup tables\n'
     for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}],channel=[{}]);\n'.format(
+        shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}]'.format(
             ii,
-            metadata[(res-1,0,0,'HistogramMin')],
-            metadata[(res-1,0,0,'HistogramMax')],
-            metadata[(res-1,0,0,'HistogramMin')] - metadata[(res-1,0,0,'HistogramMin')]//2,
-            max(metadata[(res-1,0,0,'HistogramMax')] + metadata[(res-1,0,0,'HistogramMax')]*2,65535), #<-- ToDo: code max based on dtype
-            ii
+            metadata[(res-1,0,ii,'HistogramMin')],
+            metadata[(res-1,0,ii,'HistogramMax')],
+            metadata[(res-1,0,ii,'HistogramMin')] - metadata[(res-1,0,ii,'HistogramMin')]//2,
+            min( metadata[(res-1,0,ii,'HistogramMax')] + metadata[(res-1,0,ii,'HistogramMax')]//2, 65535 ), #<-- ToDo: code max based on dtype
             )
+        if metadata['Channels'] > 1:
+            shaderStr = shaderStr + ',channel=[{}]);\n'.format(ii)
+        else:
+            shaderStr = shaderStr + ');\n'
     
     shaderStr = shaderStr + '\n// Colors\n'
     
     defaultColors = ['green','red','purple','blue','yellow','orange'] * 10
     for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + '#uicontrol vec3 channel{}_color color(default="{}");'.format(ii, defaultColors[ii])
+        shaderStr = shaderStr + '#uicontrol vec3 channel{}_color color(default="{}");\n'.format(ii, defaultColors[ii])
     
-    shaderStr = shaderStr + '\n\n//RGB vector at 0 (ie channel off)\n'
+    shaderStr = shaderStr + '\n//RGB vector at 0 (ie channel off)\n'
     
     for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + 'vec3 channel{} = vec3(0);'.format(ii)
+        shaderStr = shaderStr + 'vec3 channel{} = vec3(0);\n'.format(ii)
     
     shaderStr = shaderStr + '\n\nvoid main() {\n\n'
     shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
     
     for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + 'if (channel0_visable == true)\n'
+        shaderStr = shaderStr + 'if (channel{}_visable == true)\n'.format(ii)
         shaderStr = shaderStr + 'channel{} = channel{}_color * ((toNormalized(getDataValue({})) + lut_{}()));\n\n'.format(ii,ii,ii,ii)
     
     shaderStr = shaderStr + '// Add RGB values of all channels\n'
@@ -257,9 +263,9 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https:/
     Attempts to build a fully working link to ng dataset
     '''
     stateDict = {}
-    stateDict['dimensions'] = {'x': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0],'um' ],
-                               'y': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1],'um' ],
-                               'z': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2],'um' ]
+    stateDict['dimensions'] = {'x': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0]/1000,'um' ],
+                               'y': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1]/1000,'um' ],
+                               'z': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2]/1000,'um' ]
                                }
     stateDict['position'] = [ open_dataset_with_ng_json.ng_json['scales'][0]['size'][0]//2,
                              open_dataset_with_ng_json.ng_json['scales'][0]['size'][1]//2,
@@ -273,13 +279,13 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https:/
     
     layer = {}
     layer['type'] = 'image'
-    layer['source'] = 'precomputed://' + compatible_file_link #<-- Needs to be imported intellegently
-    layer['tab'] = 'rendering'
+    layer['source'] = 'precomputed://' + 'https://brain-api.cbi.pitt.edu' + compatible_file_link #<-- Needs to be imported intellegently
+    # layer['tab'] = 'rendering'
     layer['shader'] = ng_shader(open_dataset_with_ng_json) # Includes controls and defaults
     # layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
     # layer['channelDimensions'] = {'c^': [1, '']}
     layer['name'] = os.path.split(compatible_file_link)[-1]
-    layer['selectedLayer'] = {'visible': True, 'layer': layer['name']},
+    # layer['selectedLayer'] = {'visible': True, 'layer': layer['name']}
     layer['layout'] = '4panel'
     
     stateDict['layers'].append(layer)
@@ -290,8 +296,8 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https:/
     
     outURL = ngURL + r'#!'
     outURL = outURL + str(stateDict)
-    outURL = outURL.replace(',','%2C')
-    outURL = outURL.replace('\\','')
+    # outURL = outURL.replace(',','%2C')
+    # outURL = outURL.replace('\\','')
     outURL = outURL.replace('True','true')
     outURL = outURL.replace('False','false')
     print(outURL)
