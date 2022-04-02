@@ -20,7 +20,8 @@ import utils
 from flask import (
     render_template,
     request,
-    send_file
+    send_file,
+    redirect
     )
 
 from flask_login import login_required
@@ -251,7 +252,7 @@ def ng_files(numpy_like_object):
 
 
 
-def make_ng_link(open_dataset_with_ng_json, ngURL='https://neuroglancer-demo.appspot.com/'):
+def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https://neuroglancer-demo.appspot.com/'):
     '''
     Attempts to build a fully working link to ng dataset
     '''
@@ -266,18 +267,19 @@ def make_ng_link(open_dataset_with_ng_json, ngURL='https://neuroglancer-demo.app
                              ]
     
     stateDict['crossSectionScale'] = 50
-    stateDict['projectionScale'] = 50 * stateDict['dimensions']['z']
+    stateDict['projectionScale'] = 50 * stateDict['dimensions']['z'][0]
     
     stateDict['layers'] = []
     
     layer = {}
     layer['type'] = 'image'
-    layer['source'] = 'precomputed://' + 'https://brain-api.cbi.pitt.edu/api/ng/3' #<-- Needs to be imported intellegently
+    layer['source'] = 'precomputed://' + compatible_file_link #<-- Needs to be imported intellegently
     layer['tab'] = 'rendering'
-    layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
-    layer['channelDimensions'] = {'c^': [1, '']}
-    layer['name'] = 'Some Name Related to the File'
-    layer['selectedLayer'] = {'visible': True, 'layer': '3'},
+    layer['shader'] = ng_shader(open_dataset_with_ng_json) # Includes controls and defaults
+    # layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
+    # layer['channelDimensions'] = {'c^': [1, '']}
+    layer['name'] = os.path.split(compatible_file_link)[-1]
+    layer['selectedLayer'] = {'visible': True, 'layer': layer['name']},
     layer['layout'] = '4panel'
     
     stateDict['layers'].append(layer)
@@ -289,8 +291,10 @@ def make_ng_link(open_dataset_with_ng_json, ngURL='https://neuroglancer-demo.app
     outURL = ngURL + r'#!'
     outURL = outURL + str(stateDict)
     outURL = outURL.replace(',','%2C')
+    outURL = outURL.replace('\\','')
     outURL = outURL.replace('True','true')
     outURL = outURL.replace('False','false')
+    print(outURL)
     
     return outURL
 
@@ -303,6 +307,28 @@ def neuroglancer_dtypes():
         '.zarr',
         '.weave'
         ]
+
+def open_ng_dataset(config,datapath):
+    
+    datapath = config.loadDataset(datapath)
+    
+    if not hasattr(config.opendata[datapath],'ng_json'):
+        # or not hasattr(config.opendata[datapath],'ng_files'):
+            
+            ## Forms a comrehensive file list for all chunks
+            ## Not necessary for neuroglancer to function and take a long time
+            # config.opendata[datapath].ng_files = \
+            #     neuroGlancer.ng_files(config.opendata[datapath])
+            
+            ## Temp ignoring of ng_files
+            ## Add attribute so this constantly repeated
+            # config.opendata[datapath].ng_files = True
+            
+            config.opendata[datapath].ng_json = \
+                ng_json(config.opendata[datapath],file='dict')
+    
+    return datapath
+    
 
 #######################################################################################
 ##  Neuroglancer entry point : decorated separately below to enable caching and flask entry
@@ -334,27 +360,19 @@ def setup_neuroglancer(app, config):
         
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
+        # If only the file name is requested this will redirect to a 
         if isinstance(re.match(file_pattern,path_split[-1]),re.Match):
             datapath = '/' + os.path.join(*datapath.split('/')[:-2])
         elif path_split[-1] == 'info':
             datapath = '/' + os.path.join(*datapath.split('/')[:-1])
-        datapath = config.loadDataset(datapath)
+        elif utils.is_file_type(neuroglancer_dtypes(), datapath):
+            datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
+            link_to_ng = make_ng_link(config.opendata[datapath], request.path, ngURL='https://neuroglancer-demo.appspot.com/')
+            return redirect(link_to_ng) # Redirect browser to fully formed neuroglancer link
+        else:
+            return 'No path to neuroglancer supported dataset'
         
-        if not hasattr(config.opendata[datapath],'ng_json'):
-            # or not hasattr(config.opendata[datapath],'ng_files'):
-                
-                ## Forms a comrehensive file list for all chunks
-                ## Not necessary for neuroglancer to function and take a long time
-                # config.opendata[datapath].ng_files = \
-                #     neuroGlancer.ng_files(config.opendata[datapath])
-                
-                ## Temp ignoring of ng_files
-                ## Add attribute so this constantly repeated
-                # config.opendata[datapath].ng_files = True
-                
-                config.opendata[datapath].ng_json = \
-                    ng_json(config.opendata[datapath],file='dict')
-            
+        datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
         
         
         # Return 'info' json
@@ -404,7 +422,6 @@ def setup_neuroglancer(app, config):
             return send_file(
                 img,
                 as_attachment=True,
-                ## TODO: dynamic naming of file (specifc request or based on region of request)
                 download_name=path_split[-1], # name needs to match chunk
                 mimetype='application/octet-stream'
             )

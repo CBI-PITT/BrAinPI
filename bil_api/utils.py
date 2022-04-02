@@ -74,15 +74,6 @@ def split_html(req_path):
     html_path = req_path.split('/')
     return tuple((x for x in html_path if x != '' ))
 
-def from_html_to_path(req_path, path_map):
-    html_path = split_html(req_path)
-    return os.path.join(
-        path_map[html_path[1]], # returns the true FS path
-        *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
-
-def from_path_to_html(path, path_map, req_path, entry_point):
-    html_path = split_html(req_path)
-    return path.replace(path_map[html_path[1]],entry_point + html_path[1])
 
 def is_file_type(file_type, path):
     '''
