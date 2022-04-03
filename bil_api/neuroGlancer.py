@@ -37,11 +37,18 @@ def encode_ng_file(numpy_array,channels):
 
 def ng_shader(numpy_like_object):
     
-    # channelMins = []
-    # for ii in range
-    
     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
     res = numpy_like_object.ResolutionLevels
+    
+    # Use the lowest resolution volume to predict low and high LUT values
+    # This may impose a dataset opening penelty, but the viewing experience should be better
+    channelMins = []
+    channelMaxs = []
+    for ii in range(metadata['Channels']):
+        lowestResVolume = numpy_like_object[res-1,0,ii,:,:,:]
+        lowestResVolume = lowestResVolume[lowestResVolume > 0]
+        channelMins.append(lowestResVolume.min())
+        channelMaxs.append(lowestResVolume.max())
     
     shaderStr = ''
     shaderStr = shaderStr + '// Init for each channel:\n\n'
@@ -54,10 +61,15 @@ def ng_shader(numpy_like_object):
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}]'.format(
             ii,
-            metadata[(res-1,0,ii,'HistogramMin')],
-            metadata[(res-1,0,ii,'HistogramMax')],
-            metadata[(res-1,0,ii,'HistogramMin')] - metadata[(res-1,0,ii,'HistogramMin')]//2,
-            min( metadata[(res-1,0,ii,'HistogramMax')] + metadata[(res-1,0,ii,'HistogramMax')]//2, 65535 ), #<-- ToDo: code max based on dtype
+            # metadata[(res-1,0,ii,'HistogramMin')],
+            channelMins[ii],
+            channelMaxs[ii],
+            # metadata[(res-1,0,ii,'HistogramMax')],
+            # metadata[(res-1,0,ii,'HistogramMin')] - metadata[(res-1,0,ii,'HistogramMin')]//2,
+            channelMins[ii] - channelMins[ii]//2,
+            min( channelMaxs[ii] + channelMaxs[ii]//2, 65535 )
+            
+            # min( metadata[(res-1,0,ii,'HistogramMax')] + metadata[(res-1,0,ii,'HistogramMax')]//2, 65535 ), #<-- ToDo: code max based on dtype
             )
         if metadata['Channels'] > 1:
             shaderStr = shaderStr + ',channel=[{}]);\n'.format(ii)
