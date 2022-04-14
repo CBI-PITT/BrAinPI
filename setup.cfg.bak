@@ -36,6 +36,7 @@ install_requires =
 	flask-cors
 	flask-login
 	flask_limiter
+	ldap3
 	gunicorn
 	diskcache
 	zarr
