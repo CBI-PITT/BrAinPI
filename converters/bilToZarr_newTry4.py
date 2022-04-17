@@ -13,13 +13,13 @@ import dask.array as da
 from skimage import io
 # from skimage.filters import gaussian
 from numcodecs import Blosc
-import matplotlib.image as mpimg
 from io import BytesIO
 from distributed import Client
 import natsort
 from itertools import product
 from skimage import img_as_uint, img_as_float32
 import itertools
+import json
 
 '''
 Working to make resolution level 0 conversion of jp2 stack to
@@ -180,10 +180,6 @@ for t in range(imageStack.shape[0]):
                 location = os.path.join(out_location,store_location_formatter(key,t,c,z_shards))
                 os.makedirs(os.path.split(location)[0],exist_ok=True)
                 
-                # z_shape = pyramidMap[key][1][0] \
-                #     if z_shards + pyramidMap[key][1][0] < currentShape[0] \
-                #         else currentShape[0]%pyramidMap[key][1][0]
-                
                 z_shape = pyramidMap[key][1][0] \
                     if (z_shards + pyramidMap[key][1][0]) < pyramidMap[key][0][0] \
                         else pyramidMap[key][0][0] % pyramidMap[key][1][0]
@@ -271,7 +267,73 @@ def build_array_res_level(location,res):
     
     return stack
 
+def no_concat(location,res):
+    '''
+    Build a dask array representation of a specific resolution level
+    Always output a 5-dim array (t,c,z,y,x)
+    '''
+    
+    # Determine the number of TimePoints (int)
+    TimePoints = len(glob.glob(os.path.join(location,str(res),'[0-9]')))
+    
+    # Determine the number of Channels (int)
+    Channels = len(glob.glob(os.path.join(location,str(res),'0','[0-9]')))
+    
+    # Build a dask array from underlying zarr ZipStores
+    
+    stack = []
+    for t in range(TimePoints):
+        colors = []
+        
+        for c in range(Channels):
+            z_shard_list = natsort.natsorted(glob.glob(os.path.join(location,str(res),str(t),str(c),'*.zip')))
+            
+            single_color_stack = [da.from_zarr(zarr.ZipStore(file),name=file) for file in z_shard_list]
+            single_color_stack = da.concatenate(single_color_stack,axis=0)
+            colors.append(single_color_stack)
+            
+        colors = da.stack(colors)
+        stack.append(colors)
+    stack = da.stack(stack)
+    
+    return stack
 
+def make_da_zarr(file):
+    return da.from_zarr(zarr.ZipStore(file),name=file)
+
+def no_concat_par(location,res):
+    '''
+    Build a dask array representation of a specific resolution level
+    Always output a 5-dim array (t,c,z,y,x)
+    '''
+    
+    # Determine the number of TimePoints (int)
+    TimePoints = len(glob.glob(os.path.join(location,str(res),'[0-9]')))
+    
+    # Determine the number of Channels (int)
+    Channels = len(glob.glob(os.path.join(location,str(res),'0','[0-9]')))
+    
+    # Build a dask array from underlying zarr ZipStores
+    
+    stack = []
+    for t in range(TimePoints):
+        colors = []
+        
+        for c in range(Channels):
+            z_shard_list = natsort.natsorted(glob.glob(os.path.join(location,str(res),str(t),str(c),'*.zip')))
+            
+            single_color_stack = [delayed(make_da_zarr)(file) for file in z_shard_list]
+            # single_color_stack = dask.compute(single_color_stack)[0]
+            single_color_stack = delayed(da.concatenate)(single_color_stack,axis=0)
+            colors.append(single_color_stack)
+            
+        colors = delayed(da.stack)(colors)
+        stack.append(colors)
+    stack = delayed(da.stack)(stack)
+    
+    return stack.compute()
+
+## Build z_sharded_zip_store
 to_compute = []
 for key in pyramidMap:
     if key == 0:
@@ -332,7 +394,11 @@ class zarr_zip_sharded:
         self.dataset = {}
         for res in range(self.ResolutionLevels):
             print('Assembling Resolution Level {}'.format(res))
-            self.dataset[res] = build_array_res_level(self.location,res)
+            # self.dataset[res] = build_array_res_level(self.location,res) # Works single threaded
+            # self.dataset[res] = no_concat(location,res) # Works to build array with only da.stack commands
+            self.dataset[res] = delayed(no_concat_par)(location,res) # Works full parallel assembly
+        self.dataset = dask.compute(self.dataset)[0]
+            
         
         shape = self.dataset[0].shape
         self.TimePoints = shape[0]
@@ -365,7 +431,7 @@ class zarr_zip_sharded:
         
         if isinstance(key,(int,slice)):
             key = (key)
-        elif isinstance(key,tuple) and len(key) == 5:
+        elif isinstance(key,tuple) and len(key) == 6:
             res = key[0]
             key = key[1:]
         
@@ -383,14 +449,13 @@ class zarr_zip_sharded:
         
         data = self.dataset[res][newKey[0],newKey[1],newKey[2],newKey[3],newKey[4]]
         
-        if self.squeeze == True:
+        if self.squeeze:
             data = da.squeeze(data)
         
         if self.compute:
             return data.compute()
         else:
             return data
-        
         
         
         
