@@ -123,7 +123,7 @@ class zarr_zip_sharded:
         
         return stack.compute()
     
-    def make_da_zarr(file):
+    def make_da_zarr(self,file):
         return da.from_zarr(zarr.ZipStore(file),name=file)
 
 
