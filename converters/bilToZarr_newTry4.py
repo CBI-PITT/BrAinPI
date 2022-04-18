@@ -206,7 +206,7 @@ for t in range(imageStack.shape[0]):
                 os.makedirs(os.path.split(location)[0],exist_ok=True)
                 
                 z_shape = pyramidMap[key][1][0] \
-                    if (z_shards + pyramidMap[key][1][0]) < pyramidMap[key][0][0] \
+                    if (z_shards + pyramidMap[key][1][0]) <= pyramidMap[key][0][0] \
                         else pyramidMap[key][0][0] % pyramidMap[key][1][0]
                 
                 with zarr.ZipStore(location) as store:
