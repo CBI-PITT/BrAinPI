@@ -323,7 +323,8 @@ def neuroglancer_dtypes():
     return [
         '.ims',
         '.zarr',
-        '.weave'
+        '.weave',
+        '.z_sharded_array'
         ]
 
 def open_ng_dataset(config,datapath):
@@ -595,7 +596,6 @@ def setup_neuroglancer(app, config):
 #  (6, 0, 0, 'resolution'): (10.0, 31.897, 31.953),
 #  (6, 0, 0, 'HistogramMax'): 8203,
 #  (6, 0, 0, 'HistogramMin'): 0,
-#  (6, 0, 0, 'chunks'): (1, 1, 4, 256, 256),
 #  (6, 0, 0, 'shapeH5Array'): (4, 512, 512),
 #  (6, 0, 0, 'dtype'): 'uint16',
 #  (6, 0, 1, 'shape'): (1, 1, 3, 432, 303),
