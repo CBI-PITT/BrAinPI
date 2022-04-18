@@ -166,6 +166,31 @@ Storage structure:
 def store_location_formatter(res,t,c,z):
     return '{}/{}/{}/{}.zip'.format(res,t,c,z)
 
+## Need to make this conform to ome-ngff
+# https://ngff.openmicroscopy.org/latest/
+def write_z_sharded_array_meta(location, pyramidMap, imageStack, resolution=(1,1,1,1,1), store='zip',axes='tczyx'):
+    metadata = {}
+    
+    metadata['shape'] = imageStack.shape
+    metadata['axes'] = axes
+    
+    metadata['resolution'] = {}
+    metadata['resolution']['sampling'] = (1,1,1,1,50)
+    metadata['resolution']['units'] = ('s','c','um','um','um')
+    
+    metadata['series'] = {}
+    for key in pyramidMap:
+        metadata['series'][key] = {}
+        metadata['series'][key]['chunks'] = pyramidMap[key][1]
+        metadata['series'][key]['store'] = store
+        metadata['series'][key]['shape'] = pyramidMap[key][0]
+        metadata['series'][key]['dtype'] = str(imageStack.dtype)
+    
+    with open(os.path.join(location,'.z_sharded_array'), 'w') as f:
+        json.dump(metadata, f, indent=1)
+    
+    return metadata
+
 # Write empty zarr zip stores for all z_shards
 # zarrObjs = {} # Store all zarrObjects for easy write access
 for t in range(imageStack.shape[0]):

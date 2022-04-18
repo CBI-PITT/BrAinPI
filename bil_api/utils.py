@@ -18,6 +18,7 @@ import imaris_ims_file_reader as ims
 import zarr
 from bil_api.dataset_info import dataset_info
 from bil_api import zarrLoader
+from bil_api import zarr_zip_sharded_loader
 # from bil_api import config
 from numcodecs import Blosc
 
@@ -205,6 +206,9 @@ class config:
             print('Is Zarr')
             print('Creating zarrSeries object')
             self.opendata[dataPath] = zarrLoader.zarrSeries(dataPath)
+        
+        elif os.path.exists(os.path.join(dataPath,'.z_sharded_array')):
+            self.opendata[dataPath] = zarr_zip_sharded_loader.zarr_zip_sharded(dataPath)
             
         return dataPath
         
