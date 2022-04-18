@@ -108,7 +108,7 @@ def meta():
             z = ims.ims(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.zarr':
             z = zarrLoader.zarrSeries(dsetPath)
-        elif os.path.exists(os.path.join(dsetPath,'.z_sharded_array')):
+        elif os.path.splitext(dsetPath)[1] == '.z_sharded':
             z = zarr_zip_sharded_loader.zarr_zip_sharded(dsetPath)
         elif os.path.exists(os.path.join(dsetPath,'weave.json')):
             z = weave_read(dsetPath)

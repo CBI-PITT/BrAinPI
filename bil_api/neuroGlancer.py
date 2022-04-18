@@ -324,7 +324,7 @@ def neuroglancer_dtypes():
         '.ims',
         '.zarr',
         '.weave',
-        '.z_sharded_array'
+        '.z_sharded'
         ]
 
 def open_ng_dataset(config,datapath):
