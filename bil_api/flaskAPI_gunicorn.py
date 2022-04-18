@@ -18,6 +18,7 @@ import utils
 ## File-type handler imports (some are project specific)
 import tifffile as tf
 import zarrLoader
+import zarr_zip_sharded_loader
 import neuroGlancer
 import imaris_ims_file_reader as ims
 
@@ -107,6 +108,8 @@ def meta():
             z = ims.ims(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.zarr':
             z = zarrLoader.zarrSeries(dsetPath)
+        elif os.path.exists(os.path.join(dsetPath,'.z_sharded_array')):
+            z = zarr_zip_sharded_loader.zarr_zip_sharded(dsetPath)
         elif os.path.exists(os.path.join(dsetPath,'weave.json')):
             z = weave_read(dsetPath)
             z.metaData = z.meta

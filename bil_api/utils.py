@@ -85,12 +85,16 @@ def is_file_type(file_type, path):
     
     return bool
     '''
+    
+    orig_path = path
     if isinstance(file_type,str):
         file_type = [file_type]
     if path[-1] == '/':
         path = path[:-1]
     terminal_path_ext = os.path.splitext('a'+ path)[-1]
-    return any( [ x.lower() == terminal_path_ext.lower() for x in file_type ] )
+    
+    return any( [ x.lower() == terminal_path_ext.lower() for x in file_type ] ) + \
+        any( [os.path.exists(os.path.join(orig_path,x)) for x in file_type] )
     # return file_type.lower() == os.path.splitext('a'+ path)[-1].lower()
 
 def from_html_to_path(req_path, path_map):
