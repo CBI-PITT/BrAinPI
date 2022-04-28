@@ -33,14 +33,17 @@ def initiate_browseable(app):
 
         print(request.path)
         
-        html_path = utils.split_html(request.path)
+        # Split the requested path to a tuple that can be reused below
+        html_path_split = utils.split_html(request.path)
+        print(html_path_split)
         
-        print(html_path)
+        # Extract settings information that can be reused
+        # Doing this here allows changes to paths to be dynamic (ie changes can be made while server is live)
+        # May want to change this so that each browser access does not require access to settings file on disk.
+        ## DEFAULT ## utils.get_config(file='settings.ini',allow_no_value=True)
+        settings =  utils.get_config()
         
-        
-        settings = utils.get_config() #<-- doing this here allows changes to paths to be dynamic (ie changes can be made while server is live)
-        
-        if len(html_path) == 1:
+        if len(html_path_split) == 1:
             
             to_browse = utils.get_base_paths(settings,current_user.is_authenticated)
             
@@ -58,7 +61,7 @@ def initiate_browseable(app):
                 # based on authentication status and boot them if the path is not valid
                 path_map =  utils.get_path_map(settings,current_user.is_authenticated)
                 
-                if html_path[1] not in path_map:
+                if html_path_split[1] not in path_map:
                     flash('You are not authorized to browse to path {}'.format(request.path))
                     return redirect(url_for('login'))
                 
@@ -76,10 +79,15 @@ def initiate_browseable(app):
                                 print('Line 168')
                                 allowed_list.append(ii.lower())
                     
-                    if len(utils.split_html(request.path)) >= 3 and \
+                    ## Retain access to anon folders
+                    ##Retain access to everything if in 'all' group
+                    ## Determine if folders should be restricted to user-name-matched only
+                    ## Retain if folder name is in allowed_list of usernames / groups
+                    if len(html_path_split) >= 3 and \
+                        not html_path_split[1].lower() in [x.lower() for x in settings['dir_anon']] and \
                         not current_user.id.lower() in [x.lower() for x in groups['all']] and \
                         settings.getboolean('auth', 'restrict_paths_to_matched_username') and \
-                        not utils.split_html(request.path)[2].lower() in allowed_list:
+                        not html_path_split[2].lower() in allowed_list: 
                         flash('You are not authorized to browse to path {}'.format(request.path))
                         return redirect(url_for('login'))
                
