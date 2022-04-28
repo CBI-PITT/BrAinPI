@@ -423,7 +423,7 @@ def setup_neuroglancer(app, config):
             
             img = config.opendata[datapath][
                 int(path_split[-2]),
-                slice(0),
+                slice(0,1),
                 slice(None),
                 slice(z[0],z[1]),
                 slice(y[0],y[1]),

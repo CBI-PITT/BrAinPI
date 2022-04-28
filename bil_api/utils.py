@@ -212,7 +212,7 @@ class config:
             self.opendata[dataPath] = zarrLoader.zarrSeries(dataPath)
         
         elif os.path.splitext(dataPath)[1] == '.z_sharded':
-            self.opendata[dataPath] = zarr_zip_sharded_loader.zarr_zip_sharded(dataPath)
+            self.opendata[dataPath] = zarr_zip_sharded_loader.zarr_zip_sharded(dataPath,squeeze=False)
             
         return dataPath
         

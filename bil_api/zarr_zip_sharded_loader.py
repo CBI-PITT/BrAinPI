@@ -29,7 +29,7 @@ class zarr_zip_sharded:
         for res in range(self.ResolutionLevels):
             print('Assembling Resolution Level {}'.format(res))
             # self.dataset[res] = build_array_res_level(self.location,res) # Works single threaded
-            # self.dataset[res] = no_concat(location,res) # Works to build array with only da.stack commands
+            # self.dataset[res] = self.build_array(location,res) # Works to build array with only da.stack commands
             self.dataset[res] = delayed(self.build_array_par)(location,res) # Works full parallel assembly
         self.dataset = dask.compute(self.dataset)[0]
             
@@ -50,6 +50,8 @@ class zarr_zip_sharded:
             self.metaData[(r,t,c,'shape')] = self.dataset[r].shape
             self.metaData[(r,t,c,'ndim')] = self.dataset[r].ndim
             self.metaData[(r,t,c,'size')] = self.dataset[r].size
+            ## Need to extract resolution by some other means.  For now, default to 1,1,1 and divide by 2 for each series
+            self.metaData[r,t,c,'resolution'] = tuple([x*(2**r) for x in (50,1,1)])#(1,1,1)(z,y,x)
             
     def change_resolution_lock(self,ResolutionLevelLock):
         self.ResolutionLevelLock = ResolutionLevelLock
@@ -111,7 +113,7 @@ class zarr_zip_sharded:
             
             for c in range(Channels):
                 z_shard_list = natsort.natsorted(glob.glob(os.path.join(location,str(res),str(t),str(c),'*.zip')))
-                
+                print(z_shard_list)
                 single_color_stack = [delayed(self.make_da_zarr)(file) for file in z_shard_list]
                 # single_color_stack = dask.compute(single_color_stack)[0]
                 single_color_stack = delayed(da.concatenate)(single_color_stack,axis=0)
@@ -123,8 +125,41 @@ class zarr_zip_sharded:
         
         return stack.compute()
     
-    def make_da_zarr(self,file):
+    @staticmethod
+    def make_da_zarr(file):
         return da.from_zarr(zarr.ZipStore(file),name=file)
+    
+    def build_array(self,location,res):
+        '''
+        Build a dask array representation of a specific resolution level
+        Always output a 5-dim array (t,c,z,y,x)
+        '''
+        
+        # Determine the number of TimePoints (int)
+        TimePoints = len(glob.glob(os.path.join(location,str(res),'[0-9]')))
+        
+        # Determine the number of Channels (int)
+        Channels = len(glob.glob(os.path.join(location,str(res),'0','[0-9]')))
+        
+        # Build a dask array from underlying zarr ZipStores
+        
+        stack = []
+        for t in range(TimePoints):
+            colors = []
+            
+            for c in range(Channels):
+                z_shard_list = natsort.natsorted(glob.glob(os.path.join(location,str(res),str(t),str(c),'*.zip')))
+                
+                single_color_stack = [da.from_zarr(zarr.ZipStore(file),name=file) for file in z_shard_list]
+                single_color_stack = da.concatenate(single_color_stack,axis=0)
+                colors.append(single_color_stack)
+                
+            colors = da.stack(colors)
+            stack.append(colors)
+        stack = da.stack(stack)
+        
+        return stack
+
 
 
         
