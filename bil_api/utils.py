@@ -98,10 +98,23 @@ def is_file_type(file_type, path):
     # return file_type.lower() == os.path.splitext('a'+ path)[-1].lower()
 
 def from_html_to_path(req_path, path_map):
+    # print('UTIL line 101: {}'.format(req_path))
     html_path = split_html(req_path)
+    # print('UTIL line 103: {}'.format(html_path))
     return os.path.join(
         path_map[html_path[1]], # returns the true FS path
         *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
+
+# def from_html_to_path(req_path, path_map):
+#     for key in path_map:
+#         if key in req_path:
+#             request = [x for x in req_path[1:].split(key) if x != '' ]
+#             request = [x for x in request if x != '/' ]
+#             print(request)
+#             break
+#     return os.path.join(
+#         path_map[key], # returns the true FS path
+#         *request) # returns a unpacked list of all subpaths from html_path[1]
 
 def from_path_to_html(path, path_map, req_path, entry_point):
     html_path = split_html(req_path)

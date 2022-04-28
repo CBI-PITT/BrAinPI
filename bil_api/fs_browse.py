@@ -95,12 +95,39 @@ def initiate_browseable(app):
                
                 # Construct real paths from names in path_map dict
                 to_browse = utils.from_html_to_path(request.path, path_map)
+                print('Live 98')
+                print(to_browse)
             
+                
+                # Get current directory listing by Files, Directories and stats on each
+                current_path = {}
+                if os.path.isdir(to_browse):
+                    current_path['isfile'] = False
+                    for root, dirs, files in os.walk(to_browse):
+                        current_path['root'] = root
+                        current_path['dirs'] = dirs
+                        current_path['files'] = files
+                        break
+                    current_path['dirs'] = [os.path.join(root,x) for x in current_path['dirs']]
+                    current_path['files'] = [os.path.join(root,x) for x in current_path['files']]
+                    
+                    current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
+                    current_path['files_stat'] = [os.stat(x) for x in current_path['files']]
+                    
+                    current_path['dirs_num_entries'] = [len(os.listdir(x)) for x in current_path['dirs']]
+                    
+                    ## Reconstruct html_paths
+                    current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
+                    current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
+                elif os.path.isfile(to_browse):
+                    current_path['isfile'] = True
+                
+                print(current_path)
+                
+                
                 # Find all available files in the resquested path
                 to_browse = glob.glob(to_browse + '/*')
                 
-                ## Reconstruct html_paths
-                to_browse = [utils.from_path_to_html(x,path_map,request.path,base) for x in to_browse]
                 
                 ## We now have a list (to_browse) of all files in the requested path
                 # Now we need to extract only paths that the user is allowed to see
@@ -152,10 +179,13 @@ def initiate_browseable(app):
                         ## Limit files that are seen to those in settings.ini 'file_types'
                         if settings.getboolean('auth','restrict_files_to_listed_file_types'):
                             print(178)
+                            print(to_browse)
+                            print(path_map)
                             ## to_view will collect all OK paths for viewing
                             to_view = []
                             
-                            paths = [ utils.from_html_to_path(x, path_map) for x in to_browse ]
+                            # paths = [ utils.from_html_to_path(x, path_map) for x in to_browse ]
+                            paths = to_browse
                             print(184)
                             print(paths[0:10])
                             
@@ -199,22 +229,7 @@ def initiate_browseable(app):
             
             
     
-    
-    
-    
     return app
-            
-                
-            
-            
-            
-            
-
-        
-    
-    
-    
-    
     
     
     
