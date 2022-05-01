@@ -31,6 +31,7 @@ class zarr_zip_sharded:
             # self.dataset[res] = build_array_res_level(self.location,res) # Works single threaded
             # self.dataset[res] = self.build_array(location,res) # Works to build array with only da.stack commands
             self.dataset[res] = delayed(self.build_array_par)(location,res) # Works full parallel assembly
+            # self.dataset[res] = delayed(self.build_array)(location,res) # Works full parallel assembly
         self.dataset = dask.compute(self.dataset)[0]
             
         
