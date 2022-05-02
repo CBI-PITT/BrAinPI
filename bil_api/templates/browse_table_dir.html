@@ -1,0 +1,174 @@
+<div class="container ps-0">
+    {% if _meta.par_dir.ret_title %}
+
+        <div id="parent-link" class="file-dir ps-5 parent-path">
+            <a href="{{_meta.par_dir.ret_link}}">
+                [Parent] {{_meta.par_dir.ret_title}}
+            </a>
+        </div>
+        {% else %}
+        <div id="parent-link" class="file-dir ps-5 parent-path">
+            <a href="/api/browse/">
+                [Top Level]
+            </a>
+        </div>
+
+{% endif %}
+
+<table id="myTable" class="mx-auto">
+    <thead>
+    <tr class="bg-light">
+        <th class="w-50">Dir | File</th>
+       
+        <th>Updated</th>
+        <th>Size</th>
+    </tr>
+    </thead>
+
+    <tr class="">
+        <td class="file-dir ps-5 dir-path">
+            {% if _meta.dirname %}
+            <a class="" href="{{_meta.dir_slug}}">
+                {{_meta.dirname}}
+            </a>
+            {% else %}
+            [top level]
+            {% endif %}
+        </td>
+        <td class="">
+            {{_meta.dir_updated}}
+        </td>
+        <td class="">
+            D: {{_meta.num_dirs}} F: {{_meta.num_files}}
+        </td>
+        
+    
+    </tr>   
+    
+{% for cdir in dirs %}
+    {% if cdir._meta %}
+    <tr class="">
+        <td class="file-dir ps-5 subdir-path"><span class="d-none sort-hack">0</span>
+            <a class="ms-3" href="{{cdir._meta.dir_slug}}">{{cdir._meta.dirname}}</a>
+        </td>
+        <td class="">
+            {{cdir._meta.dir_updated}}
+        </td>
+        <td class="">
+            D: {{cdir._meta.num_dirs}} F: {{cdir._meta.num_files}}
+        </td>
+    </tr>
+        <!-- <tr>
+            <td><pre>{{cdir._meta}}</pre></td>
+        </tr> -->
+        {% endif  %}
+        {% endfor %}
+        <!-- <tr><td>{{files}}</td></tr> -->
+        {% for cfile in files %}
+        {% if cfile %}
+
+    <tr class="file-row">
+        <td class="file-dir ps-5 file-path" ><span class="d-none sort-hack">1</span>
+            
+<div class="brain-file-btn"
+          data-fdata='{{cfile | tojson}}'
+    data-filename="{{cfile.filename}}" 
+    data-fileslug="{{cfile.file_slug}}" 
+    data-ngslug="{{cfile.ng_slug}}" 
+    data-filesize="{{cfile.file_size}}"
+    data-updated="{{cfile.file_updated}}" 
+    data-bs-toggle="modal" data-bs-target="#brainModal">
+    <span class="ms-4">{{cfile.filename}}</span>
+        </div>
+             
+        </td>
+        <td class="">
+            {{cfile.file_updated}}
+        </td>
+        <td class=""><span class="d-none sort-hack">{{cfile.file_size[2]}}</span>
+            S: {{cfile.file_size[0]}} {{cfile.file_size[1]}}
+        </td>
+    </tr>
+        <!-- <tr>
+            <td><pre>{{cfile._meta}}</pre></td>
+        </tr> -->
+    {% endif %}
+{% endfor %}
+</table>
+</div>
+<!-- Button trigger modal -->
+
+  
+  <!-- Modal -->
+  <div class="modal fade" id="brainModal" tabindex="-1" aria-labelledby="brainModalLabel" aria-hidden="true">
+    <div class="modal-dialog w-75">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="brainModalLabel">Modal title</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>File Size: <span id="brainModalFileSize"></span></p>
+          <p>Last Update: <span id="brainModalUpdated"></span></p>
+        </div>
+        <div class="modal-footer">
+          <a href="#" type="button" id="brainModalNgSlug" class="btn btn-primary btn-sm" target="ngwindow">View on NG</a>
+          <a href="#" type="button" id="brainModalFileSlug" class="btn btn-primary btn-sm" target="dwindow">Download</a>
+          <a href="#" type="button" id="brainModalFileInfo" class="btn btn-primary btn-sm" target="ngwindow">File Info</a>
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+          
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  
+<script>
+
+
+
+
+
+    const dataTable = new simpleDatatables.DataTable("#myTable", {
+  searchable: true,
+  fixedHeight: true,
+columns: [
+      // Sort the second column in ascending order
+      { select: 0, sort: "asc" },
+    ]
+});
+// frows.addEventListener('click',barfalert,false);
+
+var brainModalEl = document.getElementById('brainModal')
+brainModalEl.addEventListener('show.bs.modal', function (event) {
+  console.log('got modal, got dataset',event.relatedTarget.dataset);
+  var bdata = event.relatedTarget.dataset;
+  var fdata = JSON.parse(event.relatedTarget.dataset.fdata);
+  console.log('got fdata?',fdata.filename);
+
+  event.target.querySelector('#brainModalLabel').innerHTML = fdata.filename;
+  event.target.querySelector('#brainModalUpdated').innerHTML = fdata.file_updated;
+  event.target.querySelector('#brainModalFileSize').innerHTML = fdata.file_size[0] + ' ' + fdata.file_size[1];
+
+  var ng_btn = event.target.querySelector('#brainModalNgSlug') 
+  if (fdata.ng_slug)
+{
+  
+  ng_btn.setAttribute('href',fdata.ng_slug);
+  ng_btn.classList.remove('d-none');
+}
+else{
+  ng_btn.setAttribute('href',fdata.ng_slug)
+  ng_btn.classList.add('d-none');
+}  
+  event.target.querySelector('#brainModalFileSlug').setAttribute('href',fdata.file_slug);
+  event.target.querySelector('#brainModalFileInfo').setAttribute('href',fdata.file_slug + '/info');
+  console.log('does target have href?',bdata.ngslug,event.target.querySelector('#brainModalNgSlug').href)
+
+  // event.target.querySelector('#')
+  console.log('what is event.target',event.target.querySelector('#brainModalLabel'));
+})
+
+
+
+  </script>
