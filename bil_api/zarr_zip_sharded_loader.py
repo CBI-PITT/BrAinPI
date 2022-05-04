@@ -127,8 +127,20 @@ class zarr_zip_sharded:
         return stack.compute()
     
     @staticmethod
-    def make_da_zarr(file):
-        return da.from_zarr(zarr.ZipStore(file),name=file)
+    def open_zip_zarr_store(file):
+        '''
+        An attempt to instantiate a zarr.ZipStore and keep it closed
+        so that too many files are not opened at once.
+        '''
+        with zarr.ZipStore(file) as store:
+            return store
+    
+    def make_da_zarr(self,file):
+        return da.from_zarr(self.open_zip_zarr_store(file),name=file)
+    
+    # @staticmethod
+    # def make_da_zarr(file):
+    #     return da.from_zarr(zarr.ZipStore(file),name=file)
     
     def build_array(self,location,res):
         '''
