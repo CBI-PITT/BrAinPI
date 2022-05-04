@@ -80,6 +80,10 @@ app,login_manager = setup_auth(app)
 from fs_browse import initiate_browseable
 app = initiate_browseable(app)
 
+## Initiate development_browser functionality
+from fs_browse_new import initiate_browseable
+app = initiate_browseable(app)
+
 @app.route('/', methods=['GET'])
 def home():
     return render_template('home.html')

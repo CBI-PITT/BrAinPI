@@ -26,10 +26,10 @@ import utils
 def initiate_browseable(app):
     from flaskAPI_gunicorn import login_manager
     
-    base = '/browser/'
+    base = '/browser_new/'
     @app.route(base + '<path:req_path>')
     @app.route(base, defaults={'req_path': ''})
-    def browse_fs(req_path):
+    def browse_fs_new(req_path):
 
         print(request.path)
         
@@ -99,35 +99,35 @@ def initiate_browseable(app):
                 print(to_browse)
             
                 
-                # # Get current directory listing by Files, Directories and stats on each
-                # current_path = {}
-                # if os.path.isdir(to_browse):
-                #     current_path['isfile'] = False
-                #     for root, dirs, files in os.walk(to_browse):
-                #         current_path['root'] = root
-                #         current_path['dirs'] = dirs
-                #         current_path['files'] = files
-                #         break
-                #     current_path['dirs'] = [os.path.join(root,x) for x in current_path['dirs']]
-                #     current_path['files'] = [os.path.join(root,x) for x in current_path['files']]
+                # Get current directory listing by Files, Directories and stats on each
+                current_path = {}
+                if os.path.isdir(to_browse):
+                    current_path['isfile'] = False
+                    for root, dirs, files in os.walk(to_browse):
+                        current_path['root'] = root
+                        current_path['dirs'] = dirs
+                        current_path['files'] = files
+                        break
+                    current_path['dirs'] = [os.path.join(root,x) for x in current_path['dirs']]
+                    current_path['files'] = [os.path.join(root,x) for x in current_path['files']]
                     
-                #     current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
-                #     current_path['files_stat'] = [os.stat(x) for x in current_path['files']]
-                #     current_path['files_size'] = [utils.get_file_size(x.st_size) for x in current_path['files_stat']]  
+                    current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
+                    current_path['files_stat'] = [os.stat(x) for x in current_path['files']]
+                    current_path['files_size'] = [utils.get_file_size(x.st_size) for x in current_path['files_stat']]  
                     
-                #     current_path['dirs_entries'] = [utils.num_dirs_files(x) for x in current_path['dirs']]
+                    current_path['dirs_entries'] = [utils.num_dirs_files(x) for x in current_path['dirs']]
                     
-                #     ## Reconstruct html_paths
-                #     current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
-                #     current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
-                # elif os.path.isfile(to_browse):
-                #     current_path['isfile'] = True
+                    ## Reconstruct html_paths
+                    current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
+                    current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
+                elif os.path.isfile(to_browse):
+                    current_path['isfile'] = True
                 
-                # # print(current_path)
-                # print('before')
+                # print(current_path)
+                print('before')
                 # print(current_path['files_size'])
-                # # print(current_path['dirs'])
-                # print('after')
+                # print(current_path['dirs'])
+                print('after')
                 
                 
                 # Find all available files in the resquested path
@@ -178,13 +178,13 @@ def initiate_browseable(app):
                                     
                             # Reset to_browse to be only paths which are included
                             to_browse = to_view
-                            print(to_browse)
+                            # print(to_browse)
                         
                         
                         ## Limit files that are seen to those in settings.ini 'file_types'
                         if settings.getboolean('auth','restrict_files_to_listed_file_types'):
                             print(178)
-                            print(to_browse)
+                            # print(to_browse)
                             print(path_map)
                             ## to_view will collect all OK paths for viewing
                             to_view = []
@@ -216,7 +216,7 @@ def initiate_browseable(app):
                 # # Format paths to align with the browser representation and thus disguise real paths
                 # to_browse = [x.replace(path_map[html_path[1]],'/' + html_path[1]) for x in to_browse]
                 
-                print(to_browse)
+                # print(to_browse)
                 
                 # Sort for easy browsing
                 to_browse = sorted(to_browse)

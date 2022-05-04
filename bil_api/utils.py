@@ -13,6 +13,7 @@ import os
 import urllib
 import json
 import sys
+import math
 
 import imaris_ims_file_reader as ims
 import zarr
@@ -24,6 +25,23 @@ from numcodecs import Blosc
 
 from diskcache import FanoutCache
 
+
+def get_file_size(in_bytes):
+    '''
+    returns a tuple (number, suffix, sortindex) eg (900,GB,2) 
+    the table hack will sort by the sort index then the number otherwise
+    3 GB will be 'smaller' than 5 kB
+    '''
+    suffixes = ('B','kB','MB','GB','TB')
+    a = 0
+    while in_bytes > 1000:
+        a += 1 #This will go up the suffixes tuple with each division
+        in_bytes = in_bytes / 1000
+    return math.ceil(in_bytes), suffixes[a], a   
+
+def num_dirs_files(path):
+    for _, dirs, files in os.walk(path):
+        return len(dirs), len(files)
 
 def get_config(file='settings.ini',allow_no_value=True):
     import configparser
