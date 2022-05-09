@@ -136,7 +136,10 @@ def from_html_to_path(req_path, path_map):
 
 def from_path_to_html(path, path_map, req_path, entry_point):
     html_path = split_html(req_path)
-    return path.replace(path_map[html_path[1]],entry_point + html_path[1])
+    if len(html_path) == 1:
+        return path.replace(path_map[html_path[0]],entry_point)
+    else:
+        return path.replace(path_map[html_path[1]],entry_point + html_path[1])
 
 def get_base_paths(settings_config_parser_object,user_authenticated=False):
     '''

@@ -7,10 +7,14 @@ Created on Mon May  2 20:44:43 2022
 
 '''
 Map of the browser dictionary/JSON
+It will be populated with the approrpate relitive html links to each dir/file
 
 current_path:
-    ['is_file']: bool
+    #['is_file']: bool
     ['root']: str, path to root of directory
+    #todo
+    ['parent_path']: str, path to parent of directory (os.path.split()[1])
+    #todo
     ['dirs']: list, all directories in the current_path, [] = no dirs
     ['files']: list, all files in the currect_path, [] = no files
     
