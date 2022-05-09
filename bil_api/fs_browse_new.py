@@ -21,9 +21,11 @@ from flask import render_template,request, flash, url_for, redirect
 import glob, os
 from natsort import natsorted
 from flask import jsonify
+import datetime
 import utils
 
-# url_to_path
+def time_format(time_from_os_stat):
+    return datetime.datetime.fromtimestamp(time_from_os_stat).strftime("%Y-%m-%d %H:%I")
 
 def initiate_browseable(app):
     from flaskAPI_gunicorn import login_manager
@@ -33,6 +35,9 @@ def initiate_browseable(app):
     @app.route(base + '<path:req_path>')
     @app.route(base, defaults={'req_path': ''})
     def browse_fs_new(req_path):
+        
+        
+        
 
         print(request.path)
         
@@ -47,9 +52,17 @@ def initiate_browseable(app):
         ## DEFAULT ## utils.get_config(file='settings.ini',allow_no_value=True)
         settings =  utils.get_config()
         
+        page_description = {}
+        page_description['title'] = settings['browser']['title']
+        page_description['header'] = settings['browser']['header']
+        page_description['footer'] = settings['browser']['footer']
+        print(page_description)
+        
         # Determine what directories that users are allowed to browse 
         # based on authentication status and boot them if the path is not valid
         path_map =  utils.get_path_map(settings,current_user.is_authenticated)
+        
+        user={'is_authenticated':current_user.is_authenticated, 'id':current_user.id}
         
         if current_user.is_authenticated:
             
@@ -78,18 +91,26 @@ def initiate_browseable(app):
             # current_path['root'] = base[:-1]
             current_path['files'] = []
             current_path['current_path'] = request.path
+            current_path['current_path_modtime'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%I")
+            current_path['current_path_entries'] = (len(to_browse),0)
+            
             current_path['parent_path'] = base[:-1]
             current_path['parent_is_root'] = True
             current_path['parent_folder_name'] = base[1:-1]
             
+            
             current_path['dirs'] = [path_map[x] for x in to_browse] #converts to real path
+            current_path['dirs_name'] = to_browse
             print(current_path['dirs'])
-            # current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
+            current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
             # print(current_path['dirs_stat'])
             current_path['files_stat'] = []
             current_path['files_size'] = []
+            current_path['files_name'] = []
+            current_path['files_modtime'] = []
             
             current_path['dirs_entries'] = [utils.num_dirs_files(x) for x in current_path['dirs']]
+            current_path['dirs_modtime'] = [time_format(x.st_mtime) for x in current_path['dirs_stat']]
             print(current_path['dirs_entries'])
             ## Reconstruct html_paths
             current_path['dirs'] = to_browse
@@ -97,7 +118,14 @@ def initiate_browseable(app):
             
             print(current_path['dirs'])
             # return render_template('vfs_bil.html', path=path, files=files)
-            return jsonify(current_path)
+            # return jsonify(current_path)
+            print(user)
+            return render_template(
+                'fl_browse_table_dir.html', 
+                page_description=page_description, 
+                current_path=current_path, 
+                user=user
+                )
         
         else:
             
@@ -136,8 +164,11 @@ def initiate_browseable(app):
                 current_path = {}
                 current_path['current_path'] = request.path
                 current_path['parent_path'] = '/' + os.path.join(*html_path_split[:-1]) if len(html_path_split) > 2 else base[:-1]
+                current_path['current_path_entries'] = utils.num_dirs_files(to_browse)
+                
                 current_path['parent_is_root'] = False if len(html_path_split) > 2 else True
                 current_path['parent_folder_name'] = html_path_split[-2]
+                current_path['current_path_modtime'] = time_format(os.stat(to_browse).st_mtime)
                 if os.path.isdir(to_browse):
                     # current_path['isfile'] = False
                     for root, dirs, files in os.walk(to_browse):
@@ -167,17 +198,35 @@ def initiate_browseable(app):
                     current_path['dirs'] = natsorted(current_path['dirs'])
                     current_path['files'] = natsorted(current_path['files'])
                     
-                    # current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
+                    current_path['dirs_name'] = [os.path.split(x)[-1] if x[-1] != '/' else os.path.split(x[:-1])[-1] for x in current_path['dirs']]
+                    current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
                     current_path['files_stat'] = [os.stat(x) for x in current_path['files']]
-                    current_path['files_size'] = [utils.get_file_size(x.st_size) for x in current_path['files_stat']]  
+                    current_path['files_size'] = [utils.get_file_size(x.st_size) for x in current_path['files_stat']]
+                    current_path['files_modtime'] = [time_format(x.st_mtime) for x in current_path['files_stat']] 
+                    current_path['files_name'] = [os.path.split(x)[-1] if x[-1] != '/' else os.path.split(x[:-1])[-1] for x in current_path['files']]
+                    current_path['files_ng_slug'] = [x.replace(base,'/ng/') for x in current_path['files']]
                     
                     current_path['dirs_entries'] = [utils.num_dirs_files(x) for x in current_path['dirs']]
+                    current_path['dirs_modtime'] = [time_format(x.st_mtime) for x in current_path['dirs_stat']]
                     
                     ## Reconstruct html_paths
                     current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
                     current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
                     
-                    return jsonify(current_path)
+                    
+                    # current_path['by_files_dict'] = {}
+                    # for idx, file in enumerate(current_path['files']):
+                    #     current_path['by_files_dict'][file] = {}
+                    #     current_path['by_files_dict'][file][]
+                    
+                    # return jsonify(current_path)
+                    print(user)
+                    return render_template(
+                        'fl_browse_table_dir.html', 
+                        page_description=page_description, 
+                        current_path=current_path, 
+                        user=user
+                        )
                 
                 elif os.path.isfile(to_browse):
                     current_path['isFile'] = True
