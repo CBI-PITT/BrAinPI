@@ -23,12 +23,16 @@
 							<a href="{{ url_for('browse_fs') }}" class="navbar-item">
                                 Browse Files
                             </a>
+                            {% if not user['is_authenticated'] %}
                             <a href="{{ url_for('login') }}" class="navbar-item">
                                 Login
                             </a>
+                            {% endif %}
+                            {% if user['is_authenticated'] %}
                             <a href="{{ url_for('logout') }}" class="navbar-item">
-                                Logout
+                                Logout: {{ user.id }}
                             </a>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

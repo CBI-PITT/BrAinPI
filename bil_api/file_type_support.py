@@ -16,8 +16,9 @@ from flask import url_for
 
 def ng_links(req_path):
     '''
+    req_path is a string from the 'browse_fs' endpoint to a file.
     If the file type is supported for neuroglancer
-    return the ng file entrypoint
+    return the ng file entrypoint else return None
     '''
     
     file_types = neuroGlancer.neuroglancer_dtypes()

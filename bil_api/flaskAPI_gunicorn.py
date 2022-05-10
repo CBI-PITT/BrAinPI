@@ -13,7 +13,7 @@ import numpy as np
 
 ## Project imports
 from dataset_info import dataset_info
-import utils
+import utils, auth
 
 ## File-type handler imports (some are project specific)
 import tifffile as tf
@@ -86,7 +86,7 @@ app = initiate_browseable(app)
 
 @app.route('/', methods=['GET'])
 def home():
-    return render_template('home.html')
+    return render_template('home.html', user=auth.user_info())
 #     return '''<h1>Brain Image Library Archive API</h1>
 # <p>A prototype API for chunked loading of large Brain Image Library datasets.</p>'''
 

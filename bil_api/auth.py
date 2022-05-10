@@ -32,7 +32,8 @@ from flask_login import (LoginManager,
                          login_required,
                          logout_user)
 
-
+def user_info():
+    return {'is_authenticated':current_user.is_authenticated, 'id':current_user.id if current_user.is_authenticated else None}
 
 class User(UserMixin):
     def __init__(self,username):
@@ -86,7 +87,7 @@ def setup_auth(app):
                   If this is not you, please logout
                   '''.format(current_user.id))
             return redirect(url_for('profile'))
-        return render_template('login.html')
+        return render_template('login.html', user=user_info())
     
     
     
@@ -143,7 +144,7 @@ def setup_auth(app):
     @app.route('/profile')
     @login_required
     def profile():
-        return render_template('profile.html', user=current_user.id)
+        return render_template('profile.html', user=user_info())
     
     
     
