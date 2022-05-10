@@ -50,7 +50,8 @@
             D: {{ current_path['current_path_entries'][0] }} F: {{ current_path['current_path_entries'][1] }}
         </td>
     </tr>   
-    
+
+{# This is to describe all directories and stats in the current directory #}
 {% for dir in current_path['dirs'] %}
     <tr class="">
         <td class="file-dir ps-5 subdir-path"><span class="d-none sort-hack">0</span>
@@ -63,11 +64,9 @@
             D: {{ current_path['dirs_entries'][loop.index0][0] }} F: {{ current_path['dirs_entries'][loop.index0][1] }}
         </td>
     </tr>
-        <!-- <tr>
-            <td><pre>PLACEHOLDER</pre></td>
-        </tr> -->
         {% endfor %}
-        <!-- <tr><td>PLACEHOLDER</td></tr> -->
+        
+        {# This is to describe all files and stats in the current directory #}
         {% for file in current_path['files'] %}
 
     <tr class="file-row">
@@ -92,9 +91,6 @@
             S: {{ current_path['files_size'][loop.index0][0] }} {{ current_path['files_size'][loop.index0][1] }}
         </td>
     </tr>
-        <!-- <tr>
-            <td><pre>PLACEHOLDER</pre></td>
-        </tr> -->
 {% endfor %}
 </table>
 </div>

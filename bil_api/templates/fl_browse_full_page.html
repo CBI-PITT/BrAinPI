@@ -15,22 +15,17 @@
         {{ current_path['current_path'] }} <a id="top"></a>
       </div>
       <div class="cb-logout" style="text-align: right">
-        <a href="{{ url_for('home') }}">Home</a>
-      </div>
-	  <div class="cb-logout" style="text-align: right">
-        <a href="{{ url_for('browse_fs') }}">Browse Files
-		</a>
-      </div>
-      {% if not user['is_authenticated'] %}
-	  <div class="cb-logout" style="text-align: right">
-        <a href="{{ url_for('login') }}">Login</a>
-      </div>
-      {% endif %}
-      {% if user['is_authenticated'] %}
-	  <div class="cb-logout" style="text-align: right">
-        <a href="{{ url_for('logout') }}">Logout: {{ user.id }}</a>
-      </div>
-      {% endif %}
+          <a class="me-3" href="{{ url_for('home') }}">Home</a>
+          <a class="me-3" href="{{ url_for('browse_fs') }}">Browse Files
+        </a>
+        {% if not user['is_authenticated'] %}
+          <a class="me-3" href="{{ url_for('login') }}">Login</a>
+        {% endif %}
+        {% if user['is_authenticated'] %}
+          <a class="me-3" href="{{ url_for('logout') }}">Logout: {{ user.id }}</a>
+        {% endif %}
+        </div>
+
     </div>
     <div style="margin-bottom: 5em">
 		{% block content %}

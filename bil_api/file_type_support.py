@@ -53,4 +53,22 @@ def downloadable(req_path,size=None, max_sizeGB=None):
 
 
 
-
+def dir_as_file(req_path):
+    '''
+    Some directories should be treated like files.  For instance,
+    it is not helpful to open a zarr directory in the browser,
+    but options to view in neuroglancer should be available
+    
+    Temporalilly this looks at neuroglancer support only
+    '''
+    
+    file_types = neuroGlancer.neuroglancer_dtypes()
+    file_type_supported = utils.is_file_type(file_types, req_path)
+    
+    if file_type_supported:
+        return req_path
+    else:
+        return None
+    
+    
+    

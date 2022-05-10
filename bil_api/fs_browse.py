@@ -61,7 +61,7 @@ def initiate_browseable(app):
         page_description['title'] = settings['browser']['title']
         page_description['header'] = settings['browser']['header']
         page_description['footer'] = settings['browser']['footer']
-        print(page_description)
+        # print(page_description)
         
         # Determine what directories that users are allowed to browse 
         # based on authentication status and boot them if the path is not valid
@@ -106,7 +106,7 @@ def initiate_browseable(app):
             
             current_path['dirs'] = [path_map[x] for x in to_browse] #converts to real path
             current_path['dirs_name'] = to_browse
-            print(current_path['dirs'])
+            # print(current_path['dirs'])
             current_path['dirs_stat'] = [os.stat(x) for x in current_path['dirs']]
             # print(current_path['dirs_stat'])
             current_path['files_stat'] = []
@@ -116,18 +116,38 @@ def initiate_browseable(app):
             
             current_path['dirs_entries'] = [utils.num_dirs_files(x) for x in current_path['dirs']]
             current_path['dirs_modtime'] = [time_format(x.st_mtime) for x in current_path['dirs_stat']]
-            print(current_path['dirs_entries'])
+            # print(current_path['dirs_entries'])
             
             ## Reconstruct html_paths
             current_path['dirs'] = to_browse
             current_path['files'] = []
+            
+            ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)
+            remove_dirs_idx = []
+            for idx,_ in enumerate(current_path['dirs']):
+                supported = fts.ng_links(current_path['dirs'][idx])
+                if supported:
+                    remove_dirs_idx.append(idx)
+                    current_path['files'].append(supported)
+                    current_path['files_stat'].append(current_path['dirs_stat'][idx])
+                    current_path['files_size'].append((0,'B',0))
+                    current_path['files_modtime'].append(current_path['dirs_modtime'][idx])
+                    current_path['files_name'].append(current_path['dirs_name'][idx])
+                    
+            # print(remove_dirs_idx)
+            if remove_dirs_idx != []:
+                current_path['dirs'] = [ x for idx,x in enumerate(current_path['dirs']) if idx not in remove_dirs_idx ]
+                current_path['dirs_name'] = [ x for idx,x in enumerate(current_path['dirs_name']) if idx not in remove_dirs_idx ]
+                current_path['dirs_stat'] = [ x for idx,x in enumerate(current_path['dirs_stat']) if idx not in remove_dirs_idx ]
+                current_path['dirs_entries'] = [ x for idx,x in enumerate(current_path['dirs_entries']) if idx not in remove_dirs_idx ]
+                current_path['dirs_modtime'] = [ x for idx,x in enumerate(current_path['dirs_modtime']) if idx not in remove_dirs_idx ]
             
             ## Determine what options each files has
             current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
             current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
             current_path['files_dl'] = [fts.downloadable(x, size=current_path['files_stat'][idx].st_size, max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
             
-            print(current_path['dirs'])
+            # print(current_path['dirs'])
             # return render_template('vfs_bil.html', path=path, files=files)
             # return jsonify(current_path)
         
@@ -161,7 +181,7 @@ def initiate_browseable(app):
                 # Construct real paths from names in path_map dict
                 to_browse = utils.from_html_to_path(request.path, path_map)
                 print('Live 110')
-                print(to_browse)
+                # print(to_browse)
             
                 
                 # Get current directory listing by Files, Directories and stats on each
@@ -217,11 +237,31 @@ def initiate_browseable(app):
                     current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
                     current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
                     
+                    ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)
+                    remove_dirs_idx = []
+                    for idx,_ in enumerate(current_path['dirs']):
+                        supported = fts.ng_links(current_path['dirs'][idx])
+                        if supported:
+                            remove_dirs_idx.append(idx)
+                            current_path['files'].append(supported)
+                            current_path['files_stat'].append(current_path['dirs_stat'][idx])
+                            current_path['files_size'].append((0,'B',0))
+                            current_path['files_modtime'].append(current_path['dirs_modtime'][idx])
+                            current_path['files_name'].append(current_path['dirs_name'][idx])
+                            
+                    # print(remove_dirs_idx)
+                    if remove_dirs_idx != []:
+                        current_path['dirs'] = [ x for idx,x in enumerate(current_path['dirs']) if idx not in remove_dirs_idx ]
+                        current_path['dirs_name'] = [ x for idx,x in enumerate(current_path['dirs_name']) if idx not in remove_dirs_idx ]
+                        current_path['dirs_stat'] = [ x for idx,x in enumerate(current_path['dirs_stat']) if idx not in remove_dirs_idx ]
+                        current_path['dirs_entries'] = [ x for idx,x in enumerate(current_path['dirs_entries']) if idx not in remove_dirs_idx ]
+                        current_path['dirs_modtime'] = [ x for idx,x in enumerate(current_path['dirs_modtime']) if idx not in remove_dirs_idx ]
+                    
                     ## Determine what options each files has
                     current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
                     current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
                     current_path['files_dl'] = [fts.downloadable(x, size=current_path['files_stat'][idx].st_size, max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
-                    print(current_path['files_ng_info'])
+                    # print(current_path['files_ng_info'])
                     
                     
                     # current_path['by_files_dict'] = {}
@@ -265,7 +305,7 @@ def initiate_browseable(app):
             files_json[file]['files_dl'] = current_path['files_dl'][idx]
         
         current_path['files_json'] = files_json
-        print(files_json)
+        # print(files_json)
         
         '''
         Everything above this builds 
