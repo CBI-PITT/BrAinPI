@@ -74,9 +74,9 @@
         <td class="file-dir ps-5 file-path" ><span class="d-none sort-hack">1</span>
             
 <div class="brain-file-btn"
-    data-fdata='{{file | tojson}}'
+    data-fdata='{{ current_path['files_json'][file] | tojson }}'
     data-filename="{{ current_path['files_name'][loop.index0] }}" 
-    data-fileslug="{{file}}" 
+    data-fileslug="{{ current_path['files_dl'][loop.index0] }}" 
     data-ngslug="{{ current_path['files_ng_slug'][loop.index0] }}" 
     data-filesize="{{ current_path['files_size'][loop.index0] }}"
     data-updated="{{ current_path['files_modtime'][loop.index0] }}" 
@@ -106,17 +106,17 @@
     <div class="modal-dialog w-75">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="brainModalLabel">Modal title</h5>
+          <h5 class="modal-title" id="brainModalLabel">File Options</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <p>File Size: <span id="brainModalFileSize"></span></p>
-          <p>Last Update: <span id="brainModalUpdated"></span></p>
+          <p>Last Updated: <span id="brainModalUpdated"></span></p>
         </div>
         <div class="modal-footer">
           <a href="#" type="button" id="brainModalNgSlug" class="btn btn-primary btn-sm" target="ngwindow">View on NG</a>
-          <a href="#" type="button" id="brainModalFileSlug" class="btn btn-primary btn-sm" target="dwindow">Download</a>
-          <a href="#" type="button" id="brainModalFileInfo" class="btn btn-primary btn-sm" target="ngwindow">File Info</a>
+          <a href="#" type="button" id="brainModalFileSlug" class="btn btn-primary btn-sm" target="dlwindow">Download</a>
+          <a href="#" type="button" id="brainModalFileInfo" class="btn btn-primary btn-sm" target="nginfowindow">NG Info</a>
           <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
           
         </div>
@@ -148,23 +148,48 @@ brainModalEl.addEventListener('show.bs.modal', function (event) {
   var fdata = JSON.parse(event.relatedTarget.dataset.fdata);
   console.log('got fdata?',fdata.filename);
 
-  event.target.querySelector('#brainModalLabel').innerHTML = fdata.filename;
-  event.target.querySelector('#brainModalUpdated').innerHTML = fdata.file_updated;
-  event.target.querySelector('#brainModalFileSize').innerHTML = fdata.file_size[0] + ' ' + fdata.file_size[1];
+  event.target.querySelector('#brainModalLabel').innerHTML = fdata.files_name;
+  event.target.querySelector('#brainModalUpdated').innerHTML = fdata.files_modtime;
+  event.target.querySelector('#brainModalFileSize').innerHTML = fdata.files_size[0] + ' ' + fdata.files_size[1];
 
-  var ng_btn = event.target.querySelector('#brainModalNgSlug') 
-  if (fdata.ng_slug)
+// Button Configuration
+
+// Neuroglancer Button and Info
+
+  var ng_btn = event.target.querySelector('#brainModalNgSlug')
+  var ng_info_btn = event.target.querySelector('#brainModalFileInfo')
+  if (fdata.files_ng_slug)
 {
   
-  ng_btn.setAttribute('href',fdata.ng_slug);
+  ng_btn.setAttribute('href',fdata.files_ng_slug);
   ng_btn.classList.remove('d-none');
+  
+  ng_info_btn.setAttribute('href',fdata.files_ng_info);
+  ng_info_btn.classList.remove('d-none');
+  
 }
 else{
-  ng_btn.setAttribute('href',fdata.ng_slug)
+  ng_btn.setAttribute('href',fdata.files_ng_slug)
   ng_btn.classList.add('d-none');
+  
+  ng_info_btn.setAttribute('href',fdata.files_ng_info);
+  ng_info_btn.classList.add('d-none');
 }  
-  event.target.querySelector('#brainModalFileSlug').setAttribute('href',fdata.file_slug);
-  event.target.querySelector('#brainModalFileInfo').setAttribute('href',fdata.file_slug + '/info');
+
+// Download Button
+
+  var dl_btn = event.target.querySelector('#brainModalFileSlug') 
+
+  if (fdata.files_dl)
+  {
+  dl_btn.setAttribute('href',fdata.files_dl);
+  dl_btn.classList.remove('d-none');
+}
+  else{
+  dl_btn.setAttribute('href',fdata.files_dl);
+  dl_btn.classList.add('d-none');
+  }
+  
   console.log('does target have href?',bdata.ngslug,event.target.querySelector('#brainModalNgSlug').href)
 
   // event.target.querySelector('#')

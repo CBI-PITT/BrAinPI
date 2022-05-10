@@ -256,6 +256,7 @@ def initiate_browseable(app):
         files_json = {}
         for idx, file in enumerate(current_path['files']):
             files_json[file] = {}
+            files_json[file]['files'] = file
             files_json[file]['files_name'] = current_path['files_name'][idx]
             files_json[file]['files_size'] = current_path['files_size'][idx]
             files_json[file]['files_modtime'] = current_path['files_modtime'][idx]
@@ -263,6 +264,7 @@ def initiate_browseable(app):
             files_json[file]['files_ng_info'] = current_path['files_ng_info'][idx]
             files_json[file]['files_dl'] = current_path['files_dl'][idx]
         
+        current_path['files_json'] = files_json
         print(files_json)
         
         '''
