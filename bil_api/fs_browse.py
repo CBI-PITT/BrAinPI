@@ -17,12 +17,18 @@ from flask_login import (
                          logout_user
                          )
 
-from flask import render_template,request, flash, url_for, redirect
+from flask import render_template,request, flash, url_for, redirect, send_file
 import glob, os
 from natsort import natsorted
 from flask import jsonify
 import datetime
+
+## Project-specific imports
 import utils, auth
+import file_type_support as fts
+
+dl_size_GB = 8
+
 
 def time_format(time_from_os_stat):
     return datetime.datetime.fromtimestamp(time_from_os_stat).strftime("%Y-%m-%d %H:%I")
@@ -111,19 +117,19 @@ def initiate_browseable(app):
             current_path['dirs_entries'] = [utils.num_dirs_files(x) for x in current_path['dirs']]
             current_path['dirs_modtime'] = [time_format(x.st_mtime) for x in current_path['dirs_stat']]
             print(current_path['dirs_entries'])
+            
             ## Reconstruct html_paths
             current_path['dirs'] = to_browse
             current_path['files'] = []
             
+            ## Determine what options each files has
+            current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
+            current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
+            current_path['files_dl'] = [fts.downloadable(x, size=current_path['files_stat'][idx].st_size, max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
+            
             print(current_path['dirs'])
             # return render_template('vfs_bil.html', path=path, files=files)
             # return jsonify(current_path)
-            return render_template(
-                'fl_browse_table_dir.html', 
-                page_description=page_description, 
-                current_path=current_path, 
-                user=auth.user_info()
-                )
         
         else:
             
@@ -166,7 +172,8 @@ def initiate_browseable(app):
                 
                 current_path['parent_is_root'] = False if len(html_path_split) > 2 else True
                 current_path['parent_folder_name'] = html_path_split[-2]
-                current_path['current_path_modtime'] = time_format(os.stat(to_browse).st_mtime)
+                if os.path.isdir(to_browse):
+                    current_path['current_path_modtime'] = time_format(os.stat(to_browse).st_mtime)
                 if os.path.isdir(to_browse):
                     # current_path['isfile'] = False
                     for root, dirs, files in os.walk(to_browse):
@@ -202,7 +209,6 @@ def initiate_browseable(app):
                     current_path['files_size'] = [utils.get_file_size(x.st_size) for x in current_path['files_stat']]
                     current_path['files_modtime'] = [time_format(x.st_mtime) for x in current_path['files_stat']] 
                     current_path['files_name'] = [os.path.split(x)[-1] if x[-1] != '/' else os.path.split(x[:-1])[-1] for x in current_path['files']]
-                    current_path['files_ng_slug'] = [x.replace(base,'/ng/') for x in current_path['files']]
                     
                     current_path['dirs_entries'] = [utils.num_dirs_files(x) for x in current_path['dirs']]
                     current_path['dirs_modtime'] = [time_format(x.st_mtime) for x in current_path['dirs_stat']]
@@ -211,6 +217,12 @@ def initiate_browseable(app):
                     current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
                     current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
                     
+                    ## Determine what options each files has
+                    current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
+                    current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
+                    current_path['files_dl'] = [fts.downloadable(x, size=current_path['files_stat'][idx].st_size, max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
+                    print(current_path['files_ng_info'])
+                    
                     
                     # current_path['by_files_dict'] = {}
                     # for idx, file in enumerate(current_path['files']):
@@ -218,28 +230,53 @@ def initiate_browseable(app):
                     #     current_path['by_files_dict'][file][]
                     
                     # return jsonify(current_path)
-                    return render_template(
-                        'fl_browse_table_dir.html', 
-                        page_description=page_description, 
-                        current_path=current_path, 
-                        user=auth.user_info()
-                        )
                 
                 elif os.path.isfile(to_browse):
                     current_path['isFile'] = True
-                    return jsonify(current_path)
+                    # return jsonify(current_path)
+                    return send_file(to_browse, attachment_filename=os.path.split(to_browse)[1], as_attachment=True)
                 
                 else:
                     # If a non-file / dir is passed, move backward to the nearest file/dir
                     return redirect(current_path['parent_path'])
                 
                     # return render_template('vfs_bil.html', path=path, files=files)
+                
+                
             
             except Exception:
                 flash('You must not be authorized to browse to path {}'.format(request.path))
                 print(traceback.format_exc())
                 return redirect(url_for('login'))
-            
+        
+        
+        '''
+        Build a dict for each file with each available option
+        '''
+        files_json = {}
+        for idx, file in enumerate(current_path['files']):
+            files_json[file] = {}
+            files_json[file]['files_name'] = current_path['files_name'][idx]
+            files_json[file]['files_size'] = current_path['files_size'][idx]
+            files_json[file]['files_modtime'] = current_path['files_modtime'][idx]
+            files_json[file]['files_ng_slug'] = current_path['files_ng_slug'][idx]
+            files_json[file]['files_ng_info'] = current_path['files_ng_info'][idx]
+            files_json[file]['files_dl'] = current_path['files_dl'][idx]
+        
+        print(files_json)
+        
+        '''
+        Everything above this builds 
+        'page_description', 'current_path'
+        This is the data passed to render template to build the browser
+        Return renders the browser
+        '''
+        return render_template(
+            'fl_browse_table_dir.html', 
+            page_description=page_description, 
+            current_path=current_path, 
+            user=auth.user_info()
+            )
             
     
     return app

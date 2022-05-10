@@ -8,6 +8,9 @@ Created on Wed Mar 30 15:49:10 2022
 '''
 Attempt at creating file type hooks to produce links for opening files in other
 applications like neuroglancer or napari
+
+Can be used as a filter to determine if the file has the ability to be used by
+another process
 '''
 
 import utils
@@ -31,5 +34,23 @@ def ng_links(req_path):
     
     else:
         return None
+
+
+def downloadable(req_path,size=None, max_sizeGB=None):
+    '''
+    Determine if the requested file can be downlaoded
+    max_size imposes a limit on the size of the file that can
+    be downloaded
+    
+    req_path = str to url or file
+    size = bytes as int/float
+    max_sizeGB = int/float in GB
+    '''
+    if max_sizeGB is not None:
+        if size/1000/1000/1000 > max_sizeGB:
+            return None
+    return req_path
+
+
 
 
