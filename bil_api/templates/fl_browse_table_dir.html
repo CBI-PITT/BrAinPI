@@ -126,15 +126,20 @@
 
 
 
+// Modal configuration for accessing file options
 
-    const dataTable = new simpleDatatables.DataTable("#myTable", {
-  searchable: true,
-  fixedHeight: true,
-columns: [
-      // Sort the second column in ascending order
-      { select: 0, sort: "asc" },
-    ]
-});
+const dataTable = new simpleDatatables.DataTable(
+    "#myTable", 
+      {
+         searchable: true,
+         fixedHeight: true,
+         columns: [
+             // Sort the second column in ascending order
+             { select: 0, sort: "asc" },
+           ]
+       }
+);
+
 // frows.addEventListener('click',barfalert,false);
 
 var brainModalEl = document.getElementById('brainModal')
@@ -148,7 +153,7 @@ brainModalEl.addEventListener('show.bs.modal', function (event) {
   event.target.querySelector('#brainModalUpdated').innerHTML = fdata.files_modtime;
   event.target.querySelector('#brainModalFileSize').innerHTML = fdata.files_size[0] + ' ' + fdata.files_size[1];
 
-// Button Configuration
+// Button Configuration for file options
 
 // Neuroglancer Button and Info
 

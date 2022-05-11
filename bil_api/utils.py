@@ -32,12 +32,12 @@ def get_file_size(in_bytes):
     the table hack will sort by the sort index then the number otherwise
     3 GB will be 'smaller' than 5 kB
     '''
-    suffixes = ('B','kB','MB','GB','TB')
+    suffixes = ('B','KB','MB','GB','TB','PB')
     a = 0
-    while in_bytes > 1000:
+    while in_bytes > 1024:
         a += 1 #This will go up the suffixes tuple with each division
-        in_bytes = in_bytes / 1000
-    return math.ceil(in_bytes), suffixes[a], a   
+        in_bytes = in_bytes / 1024
+    return round(in_bytes,2), suffixes[a], a   
 
 def num_dirs_files(path):
     for _, dirs, files in os.walk(path):

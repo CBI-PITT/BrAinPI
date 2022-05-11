@@ -17,10 +17,18 @@ from flask_login import (
                          logout_user
                          )
 
-from flask import render_template,request, flash, url_for, redirect, send_file
+from flask import (
+    render_template,
+    request, 
+    flash, 
+    url_for, 
+    redirect, 
+    send_file,
+    jsonify
+    )
+
 import glob, os
 from natsort import natsorted
-from flask import jsonify
 import datetime
 
 ## Project-specific imports
@@ -43,8 +51,6 @@ def initiate_browseable(app):
     def browse_fs(req_path):
         
         
-        
-
         print(request.path)
         
         # Split the requested path to a tuple that can be reused below
@@ -146,10 +152,6 @@ def initiate_browseable(app):
             current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
             current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
             current_path['files_dl'] = [fts.downloadable(x, size=current_path['files_stat'][idx].st_size, max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
-            
-            # print(current_path['dirs'])
-            # return render_template('vfs_bil.html', path=path, files=files)
-            # return jsonify(current_path)
         
         else:
             
@@ -159,8 +161,6 @@ def initiate_browseable(app):
                 if html_path_split[1] not in path_map:
                     flash('You are not authorized to browse to path {}'.format(request.path))
                     return redirect(url_for('login'))
-                
-                
                 
                 ## Boot user if they are gaining access to an inappropriate folder
                 ## Retain access to anon folders
@@ -176,13 +176,9 @@ def initiate_browseable(app):
                     flash('You are not authorized to browse to path {}'.format(request.path))
                     return redirect(url_for('login'))
                
-               
-               
                 # Construct real paths from names in path_map dict
                 to_browse = utils.from_html_to_path(request.path, path_map)
                 print('Live 110')
-                # print(to_browse)
-            
                 
                 # Get current directory listing by Files, Directories and stats on each
                 current_path = {}
@@ -261,15 +257,6 @@ def initiate_browseable(app):
                     current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
                     current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
                     current_path['files_dl'] = [fts.downloadable(x, size=current_path['files_stat'][idx].st_size, max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
-                    # print(current_path['files_ng_info'])
-                    
-                    
-                    # current_path['by_files_dict'] = {}
-                    # for idx, file in enumerate(current_path['files']):
-                    #     current_path['by_files_dict'][file] = {}
-                    #     current_path['by_files_dict'][file][]
-                    
-                    # return jsonify(current_path)
                 
                 elif os.path.isfile(to_browse):
                     current_path['isFile'] = True
@@ -279,10 +266,6 @@ def initiate_browseable(app):
                 else:
                     # If a non-file / dir is passed, move backward to the nearest file/dir
                     return redirect(current_path['parent_path'])
-                
-                    # return render_template('vfs_bil.html', path=path, files=files)
-                
-                
             
             except Exception:
                 flash('You must not be authorized to browse to path {}'.format(request.path))
@@ -292,6 +275,7 @@ def initiate_browseable(app):
         
         '''
         Build a dict for each file with each available option
+        This is used by javascript to build the modl
         '''
         files_json = {}
         for idx, file in enumerate(current_path['files']):
