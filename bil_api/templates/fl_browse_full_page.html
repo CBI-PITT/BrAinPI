@@ -9,24 +9,48 @@
     <script src="https://cdn.jsdelivr.net/npm/simple-datatables@latest" type="text/javascript"></script>   <title>{{ page_description['title'] }}</title>
   </head>
   <body>
-    <div class="header">
-      {{ page_description['header'] }}
-      <div class="cb-breadcrumb" style="text-align: left">
-        {{ current_path['current_path'] }} <a id="top"></a>
-      </div>
-      <div class="cb-logout" style="text-align: right">
-          <a class="me-3" href="{{ url_for('home') }}">Home</a>
-          <a class="me-3" href="{{ url_for('browse_fs') }}">Browse Files
-        </a>
-        {% if not user['is_authenticated'] %}
-          <a class="me-3" href="{{ url_for('login') }}">Login</a>
-        {% endif %}
-        {% if user['is_authenticated'] %}
-          <a class="me-3" href="{{ url_for('logout') }}">Logout: {{ user.id }}</a>
-        {% endif %}
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #343;">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="{{ url_for('browse_fs') }}"> {{ page_description['header'] }} </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarText" aria-controls="navbarText" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarText">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+              {% if current_path['html_path_split']|length > 3 %}
+              <a class="nav-link active" aria-current="page" href="#">{{ url_for('browse_fs') }}{{ current_path['html_path_split'][1]}}/.../{{ current_path['html_path_split'][-1] }}</a>
+              {% elif current_path['html_path_split']|length == 3 %}
+              <a class="nav-link active" aria-current="page" href="#">{{ url_for('browse_fs') }}{{ current_path['html_path_split'][1]}}/{{ current_path['html_path_split'][-1] }}</a>
+              {% elif current_path['html_path_split']|length == 2 %}
+              <a class="nav-link active" aria-current="page" href="#">{{ url_for('browse_fs') }}{{ current_path['html_path_split'][1]}}</a>
+              {% elif current_path['html_path_split']|length == 1 %}
+              <a class="nav-link active" aria-current="page" href="#">{{ url_for('browse_fs')[:-1] }}</a>
+              {% endif %}
+            </li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"> Path </a>
+              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                  {% for path in current_path['all_parents'] %}
+                  <li><a class="dropdown-item" href="{{ path[1] }}">{{ path[0] }}</a></li>
+                  {% endfor %}
+              </ul>
+            </li>
+          </ul>
+          <ul class="navbar-nav">
+              <li class="nav-item"><a class="nav-link" href="{{ url_for('home') }}">Home</a></li>
+        <li class="nav-item"><a class="nav-link" href="{{ url_for('browse_fs') }}">Browse Files</a></li>
+      {% if not user['is_authenticated'] %}
+      <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Login</a></li>
+      {% endif %}
+      {% if user['is_authenticated'] %}
+      <li class="nav-item"><a class="nav-link" href="{{ url_for('logout') }}">Logout: {{ user['id'] }}</a></li>
+      {% endif %}
+        </ul>
         </div>
+      </div>
+    </nav>
 
-    </div>
     <div style="margin-bottom: 5em">
 		{% block content %}
         {% endblock %}

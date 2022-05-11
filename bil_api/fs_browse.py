@@ -101,7 +101,9 @@ def initiate_browseable(app):
             current_path = {}
             # current_path['root'] = base[:-1]
             current_path['files'] = []
+            current_path['html_path_split'] = html_path_split
             current_path['current_path'] = base[:-1]
+            current_path['current_path_name'] = base[1:-1]
             current_path['current_path_modtime'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%I")
             current_path['current_path_entries'] = (len(to_browse),0)
             
@@ -127,6 +129,9 @@ def initiate_browseable(app):
             ## Reconstruct html_paths
             current_path['dirs'] = to_browse
             current_path['files'] = []
+            
+            ## Tuples of each derivitive path
+            current_path['all_parents'] = [ (html_path_split[-(idx+1)], '/' + os.path.join(*html_path_split[0:len(html_path_split)-idx])) for idx,_ in enumerate(html_path_split) ]
             
             ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)
             remove_dirs_idx = []
@@ -182,7 +187,9 @@ def initiate_browseable(app):
                 
                 # Get current directory listing by Files, Directories and stats on each
                 current_path = {}
+                current_path['html_path_split'] = html_path_split
                 current_path['current_path'] = request.path
+                current_path['current_path_name'] = os.path.split(current_path['current_path'])[1]
                 current_path['parent_path'] = '/' + os.path.join(*html_path_split[:-1]) if len(html_path_split) > 2 else base[:-1]
                 current_path['current_path_entries'] = utils.num_dirs_files(to_browse)
                 
@@ -232,6 +239,9 @@ def initiate_browseable(app):
                     ## Reconstruct html_paths
                     current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
                     current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
+                    
+                    ## Tuples of each derivitive path
+                    current_path['all_parents'] = [ (html_path_split[-(idx+1)], '/' + os.path.join(*html_path_split[0:len(html_path_split)-idx])) for idx,_ in enumerate(html_path_split) ]
                     
                     ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)
                     remove_dirs_idx = []
