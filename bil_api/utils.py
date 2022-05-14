@@ -233,7 +233,7 @@ class config:
             print('Is IMS')
             
             print('Creating ims object')
-            self.opendata[dataPath] = ims.ims(dataPath)
+            self.opendata[dataPath] = ims.ims(dataPath,squeeze_output=False)
             
             if self.opendata[dataPath].hf is None or self.opendata[dataPath].dataset is None:
                 print('opening ims object')

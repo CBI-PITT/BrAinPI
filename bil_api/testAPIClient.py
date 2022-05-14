@@ -35,18 +35,24 @@ Run: python -i  z:\cbiPythonTools\bil_api\bil_api\testAPIClient.py
 # baseURL = 'http://127.0.0.1:5000/api/'
 # baseURL = 'http://awatson.duckdns.org:5000/api/'
 # baseURL = 'http://136.142.29.160:5000/api/'
-baseURL = 'http://c00.bil.psc.edu:5001/api/'
+# baseURL = 'http://c00.bil.psc.edu:5001/api/'
 baseURL = 'https://brain-api.cbi.pitt.edu/api/'
 
 os.environ["NAPARI_ASYNC"] = "1"
 # os.environ["NAPARI_OCTREE"] = "1"
 
+selectedDataset = '/CBI_Hive/globus/pitt/bil/t00_c00_0.zarr'
+# selectedDataset = '/CBI_Hive/Public/world/BrainA.ims'
+selectedDataset = '/CBI_Hive/Public/world/BrainA_25_atlas.ims'
 
-# Find datasets, print, and allow 1 to be selected
-print('Available datasets \n')
-available = utils.get('available-datasets',baseURL)
-utils.prettyPrintDict(available)
-selectedDataset = input('Enter the number of the dataset do you wish to view? \n')
+selectedDataset = '/CBI_Hive/Public/world/BrainA_25_atlas_ch1.ims'
+
+
+# # Find datasets, print, and allow 1 to be selected
+# print('Available datasets \n')
+# available = utils.get('available-datasets',baseURL)
+# utils.prettyPrintDict(available)
+# selectedDataset = input('Enter the number of the dataset do you wish to view? \n')
 
 # Take the selected dataset and describe it as a numpy-like array
 data = dataWrapper(baseURL,selectedDataset)
@@ -62,7 +68,7 @@ print(imagePyramid)
 
 # print(imagePyramid)
 
-napari.view_image(imagePyramid,contrast_limits=[0,65534],channel_axis=channel_axis)
+napari.view_image(imagePyramid,contrast_limits=[0,2000],channel_axis=channel_axis,scale=tuple(data.metadata[(0,0,0,'resolution')]))
 # napari.view_image(imagePyramid,contrast_limits=[0,65534],channel_axis=0)
 
 

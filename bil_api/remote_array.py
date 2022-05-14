@@ -111,7 +111,7 @@ class dataWrapper:
         axes = (t,c,z,y,x)
         '''
         
-        location = '{}fmostCompress?dset={}&res={}&tstart={}&tstop={}&tstep={}&cstart={}&cstop={}&cstep={}&zstart={}&zstop={}&zstep={}&ystart={}&ystop={}&ystep={}&xstart={}&xstop={}&xstep={}'.format(
+        location = '{}arrayCompress?dset={}&res={}&tstart={}&tstop={}&tstep={}&cstart={}&cstop={}&cstep={}&zstart={}&zstop={}&zstep={}&ystart={}&ystop={}&ystep={}&xstart={}&xstop={}&xstep={}'.format(
         self.baseURL,
         datasetNum,
         res,
@@ -121,7 +121,7 @@ class dataWrapper:
         key[3].start,key[3].stop,key[3].step,
         key[4].start,key[4].stop,key[4].step
         )
-        
+        print(location)
         # location = f'{baseURL}fmostCompress?dset={datasetNum}&res={res}&tstart={key[0].start}&tstop={key[0].stop}&tstep={key[0].step}&cstart={key[1].start}&cstop={key[1].stop}&cstep={key[1].step}&zstart={key[2].start}&zstop={key[2].stop}&zstep={key[2].step}&ystart={key[3].start}&ystop={key[3].stop}&ystep={key[3].step}&xstart={key[4].start}&xstop={key[4].stop}&xstep={key[4].step}'
         array = self.getArrayFromAPI(location)
         # print('Shape of returned array = {}'.format(array.shape))

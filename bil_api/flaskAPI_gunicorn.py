@@ -6,7 +6,7 @@ Created on Wed Nov  3 11:06:07 2021
 """
 
 import flask, json, os, ast, re, io, sys
-from flask import request, Response, send_file, render_template
+from flask import request, Response, send_file, render_template, jsonify
 from flask_cors import cross_origin
 import numpy as np
 # import dask.array as da
@@ -103,8 +103,9 @@ def datasets():
 def meta():
     print(request.args)
     if 'id' in request.args:
-        dsetNum = int(request.args['id'])
-        dsetPath = dataset_info()[dsetNum][1]
+        # dsetNum = int(request.args['id'])
+        # dsetPath = dataset_info()[dsetNum][1]
+        dsetPath = request.args['id']
         print(dsetPath)
         print(os.path.split(dsetPath)[1])
         
@@ -118,7 +119,7 @@ def meta():
             z = weave_read(dsetPath)
             z.metaData = z.meta
         else:
-            print('API can currently only load Zarr and IMS datasets')
+            print('API can currently only load Zarr, IMS and z_sharded datasets')
             return
             
         metadata = utils.metaDataExtraction(z,strKey=True)
@@ -131,7 +132,7 @@ def meta():
 ###############################################################################
 
 # A route to return specific dataset chunks.
-@app.route('/api/fmostCompress', methods=['GET'])
+@app.route('/api/arrayCompress', methods=['GET'])
 def fmostCompress():
     '''
     Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
@@ -164,9 +165,17 @@ def fmostCompress():
     else:
         return 'A required data set, resolution level or (t,c,z,y,x) start/stop/step parameter is missing'
     
+    # for x in request.args:
+    #     print(x)
+    # print(jsonify(request.args))
     intArgs = {}
     for x in request.args:
-        intArgs[x] = ast.literal_eval(request.args[x])
+        # print(x)
+        if x == 'dset':
+            # print(x + ' in dset')
+            intArgs[x] = request.args[x]
+        else:
+            intArgs[x] = ast.literal_eval(request.args[x])
     # print(intArgs)
     
     

@@ -213,7 +213,11 @@ def initiate_browseable(app):
                         not current_user.id.lower() in [x.lower() for x in groups['all']]:
                             
                             if settings.getboolean('auth', 'restrict_paths_to_matched_username'):
-                                current_path['dirs'] = [x for x in current_path['dirs'] if utils.split_html(x)[2].lower() in allowed_list]
+                                # For predictable filter ALWAYS filter on the html path and not the file system path
+                                tmp_dirs = [x for x in current_path['dirs'] if utils.from_path_to_html(x,path_map,request.path,base)[2].lower() in allowed_list]
+                                tmp_dirs = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
+                                tmp_dirs = [utils.split_html(x) for x in tmp_dirs]
+                                current_path['dirs'] = [x for x,y in zip(current_path['dirs'], tmp_dirs) if y[2].lower() in allowed_list]
                             
                             if settings.getboolean('auth','restrict_files_to_listed_file_types'):
                                 to_view = []
