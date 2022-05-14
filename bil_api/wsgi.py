@@ -1,4 +1,4 @@
-from flaskAPI_gunicorn import app
+from BrAinPI import app
 
 if __name__ == "__main__":
     app.run()

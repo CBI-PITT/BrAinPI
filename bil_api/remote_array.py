@@ -18,7 +18,7 @@ class dataWrapper:
     '''
     A wrapper to describe a specific dataset at a specific resolution level as
     a sliceable array-like object.  It is self describing after receving metadata
-    from the bil-api.  
+    from the BrAinPI.  
     
     baseURL specifies the bil_api address:port:
         example: http://brainimagelibrary.org/api:5000  <-- only an example
@@ -28,7 +28,7 @@ class dataWrapper:
     
     The only optional parameter is 'ResolutionLock' which forces the class to adopt
     the metadata specific to that resolution level and forces the class to always 
-    request data from that specoific resoltution level.
+    request data from that specific resoltution level.
     '''
     def __init__(self,baseURL,selectedDataset,ResolutionLock=0):
         
