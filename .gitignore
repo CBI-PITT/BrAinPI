@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Project specific
+settings.ini
+groups.ini
+
 # Distribution / packaging
 .Python
 env/
