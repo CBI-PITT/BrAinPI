@@ -7,8 +7,8 @@ __pycache__/
 *.so
 
 # Project specific
-settings.ini
-groups.ini
+*/settings.ini
+*/groups.ini
 
 # Distribution / packaging
 .Python
