@@ -41,7 +41,7 @@ class User(UserMixin):
 
 def setup_auth(app):
     ## This import must remain here else circular import error
-    from flaskAPI_gunicorn import settings
+    from BrAinPI import settings
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
     

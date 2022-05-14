@@ -17,7 +17,7 @@ import math
 
 import imaris_ims_file_reader as ims
 import zarr
-from bil_api.dataset_info import dataset_info
+# from bil_api.dataset_info import dataset_info
 from bil_api import zarrLoader
 from bil_api import zarr_zip_sharded_loader
 # from bil_api import config

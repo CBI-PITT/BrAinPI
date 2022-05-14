@@ -42,7 +42,7 @@ def time_format(time_from_os_stat):
     return datetime.datetime.fromtimestamp(time_from_os_stat).strftime("%Y-%m-%d %H:%I")
 
 def initiate_browseable(app):
-    from flaskAPI_gunicorn import login_manager
+    from BrAinPI import login_manager
     
     # base entrypoint must always begin and end with '/' --> /my_entry/
     base = '/browser/'

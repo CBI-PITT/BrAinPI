@@ -14,7 +14,7 @@ import numpy as np
 import os
 
 ## Project imports
-from dataset_info import dataset_info
+# from dataset_info import dataset_info
 import utils
 
 from flask import (

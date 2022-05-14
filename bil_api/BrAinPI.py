@@ -12,7 +12,6 @@ import numpy as np
 # import dask.array as da
 
 ## Project imports
-from dataset_info import dataset_info
 import utils, auth
 
 ## File-type handler imports (some are project specific)
@@ -80,9 +79,9 @@ app,login_manager = setup_auth(app)
 from fs_browse import initiate_browseable
 app = initiate_browseable(app)
 
-## Initiate development_browser functionality
-from fs_browse_new import initiate_browseable
-app = initiate_browseable(app)
+# ## Initiate development_browser functionality
+# from fs_browse_new import initiate_browseable
+# app = initiate_browseable(app)
 
 @app.route('/', methods=['GET'])
 def home():
