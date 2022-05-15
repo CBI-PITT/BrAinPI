@@ -1,10 +1,10 @@
-# bil_api
+# BrAinPI
 
-The goal of this project is to create a flask-based API for public access to Brain Image Library (BIL) datasets in many forms
+BrAinPI, pronounced "Brain Pie", is a Flask-based API for serving a variety of multiscale imaging data for access over the web or for visualization.  Originally designed for serving imaging data of whole brains from the Brain Image Library, it can be used for any type of imaging data.
 
+BrAinPI provides a file browser interface that allows one to expose a file system with basic user and group management.  The browser supports basic file download.  When multiscale chunked imaging file types are available (ie. HDF5, Zarr, OME-Tiff), BrAinPI can view the dataset in neuroglancer or provide links where users can request image information from arbitrary regions within a dataset.  
 
-
-The broader goals are for the API to provide multi-resolution image data to enable visualization of multi-terabyte datasets over the internet.  This will first be implemented in Napari, but can be used used by any program that can interact with the API and make use of multi-resolution series data.
+BrAinPI is built as a webservice to enable the integration of large imaging data with application for visualization and processing workflows.
 
 
 
@@ -12,20 +12,24 @@ The broader goals are for the API to provide multi-resolution image data to enab
 conda create -y -n bil_api python=3.8
 conda activate bil_api
 
+git clone https://github.com/CBI-PITT/BrAinPI.git
 pip install -e /path/to/cloned/repo/
 
-## Run API
+## Before running BrAinPI
+
 '''
-Note: Before running the API edit the location of .ims and .zarr datasets in dataset_info.py.  IMS will work out of the box, zarr is currently likely to fail.
+Note: Before running the API edit the settings_TEMPLATE.ini and groups_TEMPLATE.ini files and rename them to settings.ini and groups.ini.
 '''
 
-python -i /path/to/cloned/repo/bil_api/flaskAPI.py
+For development:
+	python -i /path/to/cloned/repo/bil_api/BrAinPI.py
 
-## Run Client
-'''
-Note: Before running the client edit testAPIClient.py and change 'baseURL' to address of API server.
-'''
-python -i /path/to/cloned/repo/bil_api/testAPIClient.py
+In production:
+    gunicorn -b 0.0.0.0:5000 --chdir path/to/cloned/repo/BrAinPI wsgi:app -w 4 --threads 6
+    #Adjust these parameters for your specific situation
+    #-w = workers
+    #-threads = threads per worker
+
 ```
 
 Note:   IMS files will work out of the box, zarr is currently likely to fail.
