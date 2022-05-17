@@ -18,10 +18,11 @@ import math
 import imaris_ims_file_reader as ims
 import zarr
 # from bil_api.dataset_info import dataset_info
-from bil_api import zarrLoader
-from bil_api import zarr_zip_sharded_loader
-# from bil_api import config
-from numcodecs import Blosc
+import zarrLoader
+import zarr_zip_sharded_loader
+# from BrAinPI import config
+# from numcodecs import Blosc
+import blosc
 
 from diskcache import FanoutCache
 
@@ -63,11 +64,12 @@ def compress_np(nparr):
     Returns a compressed bytestring, uncompressed and the compressed byte size.
     """
     
-    comp = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
+    # comp = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE,typesize=8)
     bytestream = io.BytesIO()
     np.save(bytestream, nparr)
     uncompressed = bytestream.getvalue()
-    compressed = comp.encode(uncompressed)
+    # compressed = comp.encode(uncompressed)
+    compressed = blosc.compress(uncompressed, typesize=6, clevel=1,cname='zstd', shuffle=blosc.BITSHUFFLE)
     return compressed, len(uncompressed), len(compressed)
 
 
@@ -77,8 +79,9 @@ def uncompress_np(bytestring):
     Returns a numpy array.
     """
     
-    comp = Blosc(cname='zstd', clevel=1, shuffle=Blosc.SHUFFLE)
-    array = comp.decode(bytestring)
+    # comp = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE,typesize=8)
+    # array = comp.decode(bytestring)
+    array = blosc.decompress(bytestring)
     array = io.BytesIO(array)
     
     # sequeeze = False
@@ -175,7 +178,13 @@ def get_path_map(settings_config_parser_object,user_authenticated=False):
         path_map[ii] = settings_config_parser_object['dir_auth'][ii]
     return path_map
 
-
+def get_html_split_and_associated_file_path(config,request):
+    settings = config.settings
+    path_map = get_path_map(settings,user_authenticated=True) #<-- Force user_auth=True to get all possible paths, in this way all ng links will be shareable to anyone
+    datapath = from_html_to_path(request.path, path_map)
+    
+    path_split = split_html(request.path)
+    return path_split, datapath
 
 
 class config:

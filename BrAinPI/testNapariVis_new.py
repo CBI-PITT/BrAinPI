@@ -18,7 +18,7 @@ import urllib3
 
 # bil_api imports
 import utils
-from remote_array import dataWrapper
+from remote_array_new import dataWrapper
 
 # Vis and helper imports
 import napari
@@ -32,21 +32,16 @@ from pstats import SortKey
 Run: python -i  z:\cbiPythonTools\bil_api\bil_api\testAPIClient.py
 '''
 
-# baseURL = 'http://127.0.0.1:5000/api/'
-# baseURL = 'http://awatson.duckdns.org:5000/api/'
-# baseURL = 'http://136.142.29.160:5000/api/'
-# baseURL = 'http://c00.bil.psc.edu:5001/api/'
-# baseURL = 'https://brain-api.cbi.pitt.edu/api/'
-baseURL = 'https://brain-api.cbi.pitt.edu/array/'
+baseURL = 'https://brain-api.cbi.pitt.edu/array'
 
 os.environ["NAPARI_ASYNC"] = "1"
 # os.environ["NAPARI_OCTREE"] = "1"
 
-selectedDataset = '/CBI_Hive/globus/pitt/bil/t00_c00_0.zarr'
-# selectedDataset = '/CBI_Hive/Public/world/BrainA.ims'
-selectedDataset = '/CBI_Hive/Public/world/BrainA_25_atlas.ims'
+selectedDataset = '/world/BrainA_25_atlas_ch1.ims'
+selectedDataset = '/world/BrainA.ims'
+selectedDataset = '/globus/bil/fMOST Zarr nStripe/t00_c00_0.zarr'
 
-selectedDataset = '/CBI_Hive/Public/world/BrainA_25_atlas_ch1.ims'
+selectedDataset = selectedDataset.replace(" ", "%20")
 
 
 # # Find datasets, print, and allow 1 to be selected
@@ -56,7 +51,7 @@ selectedDataset = '/CBI_Hive/Public/world/BrainA_25_atlas_ch1.ims'
 # selectedDataset = input('Enter the number of the dataset do you wish to view? \n')
 
 # Take the selected dataset and describe it as a numpy-like array
-data = dataWrapper(baseURL,selectedDataset)
+data = dataWrapper(baseURL + selectedDataset)
 
 # Build a list of the datasets for each resolution level from Highest to Lowest
 imagePyramid = []

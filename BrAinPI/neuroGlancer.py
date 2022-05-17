@@ -21,7 +21,8 @@ from flask import (
     render_template,
     request,
     send_file,
-    redirect
+    redirect,
+    jsonify
     )
 
 from flask_login import login_required
@@ -206,7 +207,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     
     neuro_info['scales'] = scales
     neuro_info['type'] = 'image'
-    neuro_info['shader'] = ng_shader(numpy_like_object)
+    # neuro_info['shader'] = ng_shader(numpy_like_object)
     
     
     print(neuro_info)
@@ -356,20 +357,8 @@ def open_ng_dataset(config,datapath):
 def setup_neuroglancer(app, config):
     
     def neuro_glancer_entry(req_path):
-        # return str(request.url.split('/')[-2])
-        # print(request.path)
-        # print(request.base_url)
-        # print(request.url)
-        # if not utils.is_file_type(neuroglancer_dtypes(), request.path):
-        #     print('Im here')
-        #     return('Neuroglancer can not display this type of dataset')
         
-        # settings = utils.get_config('settings.ini') #<-- need to add this to config class so each chunk access doesn't require a read of settings file
-        settings = config.settings
-        path_map = utils.get_path_map(settings,user_authenticated=True) #<-- Force user_auth=True to get all possible paths, in this way all ng links will be shareable to anyone
-        datapath = utils.from_html_to_path(request.path, path_map)
-        
-        path_split = utils.split_html(request.path)
+        path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
         
         # Test for different patterns
         file_name_template = '{}-{}_{}-{}_{}-{}'
@@ -399,14 +388,22 @@ def setup_neuroglancer(app, config):
             # return 'in'
             b = io.BytesIO()
             b.write(json.dumps(config.opendata[datapath].ng_json, indent=2, sort_keys=False).encode())
+            # b.write(json.dumps(config.opendata[datapath].ng_json).encode())
             b.seek(0)
             
-            return send_file(
-                b,
-                as_attachment=False,
-                download_name='info',
-                mimetype='application/json'
-            )
+            return jsonify(config.opendata[datapath].ng_json)
+            # return send_file(
+            #     b,
+            #     as_attachment=False,
+            #     download_name='info',
+            #     mimetype='application/json'
+            # )
+            # return send_file(
+            #     b,
+            #     as_attachment=False,
+            #     download_name='info', # name needs to match chunk
+            #     mimetype='application/octet-stream'
+            # )
         
         ## Serve neuroglancer raw-format files
         elif isinstance(re.match(file_pattern,path_split[-1]),re.Match):

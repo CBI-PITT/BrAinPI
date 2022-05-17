@@ -220,17 +220,20 @@ def fmostCompress():
     # if os.path.splitext(dataPath)[1] == '.ims':
     #     z = ims.ims(dataPath)
 
-    out = grabArray(datapath,intArgs)
-
+    if config.cache is None:
+        t,c,z,y,x = makesSlices(intArgs)
+        # No Caching
+        out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
+    else:
+        # Cache
+        # out = grabArrayCache(datapath,str(intArgs)) #use when using lru_cache
+        out = grabArrayCache(datapath,intArgs)
+        # print(out)
 
     # out = z[intArgs['res'],tslice,cslice,zslice,yslice,xslice]
     # print(out.max())
     # out = np.zeros((5,5,5))
-    if config.cache is not None:
-        out,_,_ = compress_np(out)
-    else:
-        out,_,_ = utils.compress_np(out)
-        
+    out,_,_ = utils.compress_np(out)
     return Response(response=out, status=200,
                     mimetype="application/octet_stream")
 
@@ -248,9 +251,9 @@ requiredParam = (
     )
 
 # A route to return specific dataset chunks.
-# array_base = '/array/'
-# @app.route(array_base + '<path:req_path>')
-# @app.route(array_base, defaults={'req_path': ''})
+array_base = '/array/'
+@app.route(array_base + '<path:req_path>')
+@app.route(array_base, defaults={'req_path': ''})
 def get_compressed_array(req_path):
     '''
     Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
@@ -270,7 +273,7 @@ def get_compressed_array(req_path):
     '''
     
     print(request.path)
-    print(request.args)
+    # print(request.args)
     if all((x in request.args for x in requiredParam)):
         pass
     else:
@@ -292,16 +295,21 @@ def get_compressed_array(req_path):
     # if os.path.splitext(dataPath)[1] == '.ims':
     #     z = ims.ims(dataPath)
     
-    out = grabArray(datapath,intArgs)
+    if config.cache is None:
+        t,c,z,y,x = makesSlices(intArgs)
+        # No Caching
+        out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
+    else:
+        # Cache
+        # out = grabArrayCache(datapath,str(intArgs)) #use when using lru_cache
+        
+        out = grabArrayCache(datapath,intArgs)
+        # print(out)
     
     # out = z[intArgs['res'],tslice,cslice,zslice,yslice,xslice]
     # print(out.max())
     # out = np.zeros((5,5,5))
-    if config.cache is not None:
-        out,_,_ = compress_np(out)
-    else:
-        out,_,_ = utils.compress_np(out)
-        
+    out,_,_ = utils.compress_np(out)
     return Response(response=out, status=200,
                     mimetype="application/octet_stream")
 
@@ -372,7 +380,7 @@ def tiff():
     
     ###  End dask attempt
     
-    out = grabArray(datapath,intArgs)
+    out = grabArrayCache(datapath,intArgs)
     print(out)
     
     img_ram = io.BytesIO()
@@ -407,35 +415,22 @@ def makesSlices(intArgs):
 
 ##############################################################################
 
-def grabArray(datapath,intArgs):
-    '''
-    intArgs = eval(intArgs) was used to deal with lru_cache which did not 
-    like tuples as arguments.  However, diskcache.memorize() works fine.
-    '''
-    t,c,z,y,x = makesSlices(intArgs)
-    out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
-    return out
+if config.cache is not None:
+    @config.cache.memoize()
+    def grabArrayCache(datapath,intArgs):
+        
+        # intArgs = eval(intArgs)
+        '''
+        intArgs = eval(intArgs) was used to deal with lru_cache which did not 
+        like tuples as arguments.  However, diskcache.memorize() works fine.
+        '''
+        t,c,z,y,x = makesSlices(intArgs)
+        out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
+        return out
 
 ###############################################################################
 print('Importing Neuroglancer endpoints')
 app = neuroGlancer.setup_neuroglancer(app, config)
-
-
-
-print(config.cache)
-if config.cache is not None:
-    @config.cache.memoize()
-    def compress_np(np_array):
-        print('Reading from disk')
-        return utils.compress_np(np_array)
-    # utils.compress_np = config.cache.memoize()(utils.compress_np)
-    # get_compressed_array = config.cache.memoize()(get_compressed_array)
-    # fmostCompress = config.cache.memoize()(fmostCompress)
-    print(config.cache)
-
-array_base = '/array/'
-get_compressed_array = app.route(array_base + '<path:req_path>')(get_compressed_array)
-get_compressed_array = app.route(array_base, defaults={'req_path': ''})(get_compressed_array)
 
 
 
