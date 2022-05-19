@@ -147,8 +147,10 @@ def get_zarray_file(numpy_like_dataset,resolution_level):
     zarray['compressor']['id'] = compressor.codec_id
     zarray['compressor']['shuffle'] = compressor.shuffle
     
+    print(metadata[(0, 0, 0, 'dtype')])
+    print(encoding_values[metadata[(0, 0, 0, 'dtype')]])
     zarray['dimension_separator'] = '.'
-    zarray['dtype'] = '<u2' if numpy_like_dataset.dtype == np.uint16 else '<u2'  ## Need to figure out other dtype opts for uint8, float et al
+    zarray['dtype'] = encoding_values[metadata[(0, 0, 0, 'dtype')]]#'<u2' if numpy_like_dataset.dtype == np.uint16 else '<u2'  ## Need to figure out other dtype opts for uint8, float et al
     zarray['fill_value'] = 0
     zarray['filters'] = None
     zarray['order'] = 'C'
@@ -171,7 +173,38 @@ values = {
     np.dtype('uint16'):(0,65535),
     np.dtype('float'):(0,1),
     np.dtype('float32'):(0,1),
-    np.dtype('float64'):(0,1)
+    np.dtype('float64'):(0,1),
+    'uint8':(0,255),
+    'uint16':(0,65535),
+    'float':(0,1),
+    'float32':(0,1),
+    'float64':(0,1)
+    }
+
+value_types = {
+    np.dtype('uint8'):'uint8',
+    np.dtype('uint16'):'uint16',
+    np.dtype('float'):float,
+    np.dtype('float32'):float,
+    np.dtype('float64'):float,
+    'uint8':'uint8',
+    'uint16':'uint16',
+    'float':float,
+    'float32':float,
+    'float64':float
+    }
+
+encoding_values = {
+    np.dtype('uint8'):'<u1',
+    np.dtype('uint16'):'<u2',
+    np.dtype('float'):'<f4',
+    np.dtype('float32'):'<f4',
+    np.dtype('float64'):'<f8',
+    'uint8':'<u1',
+    'uint16':'<u2',
+    'float':'<f4',
+    'float32':'<f4',
+    'float64':'<f8'
     }
 
 ###################################
@@ -258,11 +291,25 @@ def get_zattr_file(numpy_like_dataset):
     for ch in range(metadata['Channels']):
         current_channel_data = numpy_like_dataset[metadata['ResolutionLevels']-1,0,ch,:,:,:]
         
-        end = int(current_channel_data.max()) if (current_channel_data.dtype == np.uint16 or current_channel_data.dtype == np.uint8) else float(current_channel_data.max())
-        start = int(current_channel_data.min()) if (current_channel_data.dtype == np.uint16 or current_channel_data.dtype == np.uint8) else float(current_channel_data.min())
+        end = int(current_channel_data.max()) if not value_types[current_channel_data.dtype] == float else float(current_channel_data.max())
+        start = int(current_channel_data.min()) if not value_types[current_channel_data.dtype] == float else float(current_channel_data.min())
         
-        max_window = end*2 if end*2 <= values[current_channel_data.dtype][1] else values[current_channel_data.dtype][1]
-        min_window = start//2 if start//2 >= values[current_channel_data.dtype][0] else values[current_channel_data.dtype][0]
+        if value_types[current_channel_data.dtype] == float and \
+            ((end > 1 or end < 1) or \
+                (start < 1 or start > 1)): #<---  May need to look at this more closely
+            
+            if end > 1:
+                max_window = end*2
+            if end < 1:
+                max_window = end/2
+            if start > 1:
+                min_window = start / 2
+            if start <= 0:
+                min_window = start*2
+                
+        else:
+            max_window = end*2 if end*2 <= values[current_channel_data.dtype][1] else values[current_channel_data.dtype][1]
+            min_window = start//2 if start//2 >= values[current_channel_data.dtype][0] else values[current_channel_data.dtype][0]
         
         channel = {
             'active':True,
