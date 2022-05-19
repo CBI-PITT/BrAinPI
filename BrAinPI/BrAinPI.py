@@ -7,7 +7,7 @@ Created on Wed Nov  3 11:06:07 2021
 
 import flask, json, os, ast, re, io, sys
 from flask import request, Response, send_file, render_template, jsonify
-from flask_cors import cross_origin
+from flask_cors import cross_origin, CORS
 import numpy as np
 # import dask.array as da
 
@@ -78,6 +78,9 @@ app,login_manager = setup_auth(app)
 ## Initiate browser functionality
 from fs_browse import initiate_browseable
 app = initiate_browseable(app)
+
+from ome_zarr import setup_omezarr
+app = setup_omezarr(app,config)
 
 # ## Initiate development_browser functionality
 # from fs_browse_new import initiate_browseable
@@ -437,7 +440,7 @@ array_base = '/array/'
 get_compressed_array = app.route(array_base + '<path:req_path>')(get_compressed_array)
 get_compressed_array = app.route(array_base, defaults={'req_path': ''})(get_compressed_array)
 
-
+# CORS(app)
 
 # if __name__ == '__main__':
 #     app.run(threaded=True,host='0.0.0.0')

@@ -166,6 +166,14 @@ colors = [
     'FFFF00'  #yellow
     ]
 
+values = {
+    np.dtype('uint8'):(0,255),
+    np.dtype('uint16'):(0,65535),
+    np.dtype('float'):(0,1),
+    np.dtype('float32'):(0,1),
+    np.dtype('float64'):(0,1)
+    }
+
 ###################################
 ### OME-NGFF Complient .zattr   ###
 ###################################
@@ -250,6 +258,12 @@ def get_zattr_file(numpy_like_dataset):
     for ch in range(metadata['Channels']):
         current_channel_data = numpy_like_dataset[metadata['ResolutionLevels']-1,0,ch,:,:,:]
         
+        end = int(current_channel_data.max()) if (current_channel_data.dtype == np.uint16 or current_channel_data.dtype == np.uint8) else float(current_channel_data.max())
+        start = int(current_channel_data.min()) if (current_channel_data.dtype == np.uint16 or current_channel_data.dtype == np.uint8) else float(current_channel_data.min())
+        
+        max_window = end*2 if end*2 <= values[current_channel_data.dtype][1] else values[current_channel_data.dtype][1]
+        min_window = start//2 if start//2 >= values[current_channel_data.dtype][0] else values[current_channel_data.dtype][0]
+        
         channel = {
             'active':True,
             'coefficient': 1.0,
@@ -258,10 +272,10 @@ def get_zattr_file(numpy_like_dataset):
             'inverted':False,
             'label': 'Channel_{}'.format(ch),
             'window':{
-                'end': int(current_channel_data.max()) if (current_channel_data.dtype == np.uint16 or current_channel_data.dtype == np.uint8) else float(current_channel_data.max()),
-                'max': 0,
-                'min':0,
-                'start':int(current_channel_data.min()) if (current_channel_data.dtype == np.uint16 or current_channel_data.dtype == np.uint8) else float(current_channel_data.min())
+                'end': end,
+                'max': max_window,
+                'min':min_window,
+                'start':start
                 }
             }
         
@@ -319,7 +333,7 @@ file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0
 
 def setup_omezarr(app, config):
     
-    def setup_omezarr_entry(req_path):
+    def omezarr_entry(req_path):
         
         path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
         
@@ -408,32 +422,25 @@ def setup_omezarr(app, config):
                 {'zarr_format':2}
                 )
         
-        return []
-            
-        # elif utils.is_file_type(neuroglancer_dtypes(), datapath):
-        #     datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
-        #     link_to_ng = make_ng_link(config.opendata[datapath], request.path, ngURL='https://neuroglancer-demo.appspot.com/')
-        #     return redirect(link_to_ng) # Redirect browser to fully formed neuroglancer link
-        # else:
-        #     return 'No path to neuroglancer supported dataset'
+        abort(404)
         
-        # datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
+        #####  FUNCTION END  ######
         
+    
+    
     zarrpath = '/omezarr/' #<--- final slash is required for proper navigation through dir tree
     
-    ## Decorating neuro_glancer_entry to allow caching ##
-    # if config.cache is not None:
-    #     print('Caching setup')
-    #     neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
-    #     print(neuro_glancer_entry)
-    # # neuro_glancer_entry = login_required(neuro_glancer_entry)
-    
-    
-   
-    # neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
+    # Decorating neuro_glancer_entry to allow caching ##
+    if config.cache is not None:
+        print('Caching setup')
+        omezarr_entry = config.cache.memoize()(omezarr_entry)
+        print(omezarr_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
-    setup_omezarr_entry = app.route(zarrpath + '<path:req_path>')(setup_omezarr_entry)
-    setup_omezarr_entry = app.route(zarrpath, defaults={'req_path': ''})(setup_omezarr_entry)
+    
+    # omezarr_entry = cross_origin(allow_headers=['Content-Type'])(omezarr_entry)
+    # omezarr_entry = login_required(omezarr_entry)
+    omezarr_entry = app.route(zarrpath + '<path:req_path>')(omezarr_entry)
+    omezarr_entry = app.route(zarrpath, defaults={'req_path': ''})(omezarr_entry)
     
     return app
     

@@ -257,6 +257,11 @@ class config:
         elif os.path.splitext(dataPath)[1] == '.z_sharded':
             self.opendata[dataPath] = zarr_zip_sharded_loader.zarr_zip_sharded(dataPath,squeeze=False)
             
+        ## Append extracted metadata as attribute to open dataset
+        try:
+            self.opendata[dataPath].metadata = metaDataExtraction(self.opendata[dataPath])
+        except Exception:
+            pass
         return dataPath
         
     
@@ -296,7 +301,7 @@ def metaDataExtraction(numpy_like_object,strKey=False):
                 newMetaDict[str(key)] = numpy_like_object.metaData[key] \
                     if isinstance(numpy_like_object.metaData[key],np.dtype) == False \
                         else str(numpy_like_object.metaData[key])
-        print(newMetaDict)
+        # print(newMetaDict)
         metadata.update(newMetaDict)
     
     except Exception:
