@@ -45,7 +45,7 @@ settings = utils.get_config('settings.ini')
 if os.name == 'nt':
     cacheLocation = settings.get('disk_cache','location_win')
 elif 'c00' in os.uname()[1]:
-    cacheLocation = '/scratch/api_cache'
+    cacheLocation = settings.get('disk_cache','location_unix')
 else:
     cacheLocation = settings.get('disk_cache','location_unix')
     #cacheLocation = None

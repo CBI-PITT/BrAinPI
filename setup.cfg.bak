@@ -3,9 +3,9 @@ name = bil_api
 
 author = Alan M Watson
 author_email = alan.watson@pitt.edu
-url = https://github.com/CBI-PITT/bil_api
+url = https://github.com/CBI-PITT/BrAinPI
 license = BSD-3-Clause
-description = Development of API and Clients for Accessing Brain Image Library Data
+description = An API for serving multiscale microscopy data
 long_description = file: README.md
 long_description_content_type = text/markdown
 classifiers =
@@ -19,10 +19,10 @@ classifiers =
     Operating System :: OS Independent
     License :: OSI Approved :: BSD License
 project_urls =
-    Bug Tracker = https://github.com/CBI-PITT/bil_api/issues
-    Documentation = https://github.com/CBI-PITT/bil_api#README.md
-    Source Code = https://github.com/CBI-PITT/bil_api
-    User Support = https://github.com/CBI-PITT/bil_api/issues
+    Bug Tracker = https://github.com/CBI-PITT/BrAinPI/issues
+    Documentation = https://github.com/CBI-PITT/BrAinPI#README.md
+    Source Code = https://github.com/CBI-PITT/BrAinPI
+    User Support = https://github.com/CBI-PITT/BrAinPI/issues
 
 [options]
 packages = find:
@@ -52,4 +52,5 @@ install_requires =
 	tifffile
 	neuroglancer-scripts
 	pebble
+	natsort
 	
