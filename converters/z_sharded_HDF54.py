@@ -316,11 +316,12 @@ class z_sharded_builder:
         
         for t,c in product(range(self.TimePoints),range(self.Channels)):
             files = self.list_files(res,t,c)
+            # Make relative paths for vds file for win+lin compatability
             relatives = [x.replace(self.out_location,'.') for x in files]
-            for ii in files:
+            for rel,ii in zip(relatives,files):
                     
                 print('Layout file {}'.format(ii))
-                vsource = h5py.VirtualSource(ii, 'data', shape=self.shards_dict[ii]['shape'])
+                vsource = h5py.VirtualSource(rel, 'data', shape=self.shards_dict[ii]['shape'])
                 layout[t,c,
                        self.shards_dict[ii]['z_start']:self.shards_dict[ii]['z_stop'],
                        :,:] = vsource
