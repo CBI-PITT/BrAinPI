@@ -19,7 +19,7 @@ import imaris_ims_file_reader as ims
 import zarr
 # from bil_api.dataset_info import dataset_info
 import zarrLoader
-import zarr_zip_sharded_loader
+import zarr_zip_sharded_loader4 as zarr_zip_sharded_loader
 # from BrAinPI import config
 # from numcodecs import Blosc
 import blosc
