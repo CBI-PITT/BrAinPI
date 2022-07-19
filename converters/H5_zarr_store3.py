@@ -11,6 +11,7 @@ but implemented in a directory store-like structure to limit the number of files
 per directory
 '''
 
+
 import os
 import zarr
 import h5py
@@ -76,7 +77,14 @@ from zarr._storage.store import (
 #         print('Create')
 #         f.create_dataset("0.0", data=data)
 #         print('Delete')
-#         del f['0.0']
+#         del f['0.0']from numcodecs import Blosc
+
+# from numcodecs import Blosc
+# compressor=Blosc(cname='zstd', clevel=8, shuffle=Blosc.BITSHUFFLE)
+
+# store = H5Store(r'Z:\testData\test_h5_store2')
+# z = zarr.zeros((1, 2, 11500, 20000, 20000), chunks=(1,1,256,256,256), store=store, overwrite=True, compressor=compressor)
+# z[0,0,7,0:2000,0:5000] = 42
 
 class H5Store(Store):
     """Storage class using directories and files on a standard file system.
