@@ -20,6 +20,7 @@ import natsort
 from itertools import product
 import itertools
 import json
+from contextlib import contextmanager
 
 import h5py
 import hdf5plugin
@@ -36,17 +37,27 @@ No Interpreter yet
 # def build():
 # client = Client()
 
-## SETTINGS SPECIFIC TO THE CURRENT ARRAY BEING CREATED ##
-
+# # SETTINGS SPECIFIC TO THE CURRENT ARRAY BEING CREATED ##
 if os.name == 'nt':
-    location = r"h:/globus/pitt/bil/jp2/download.brainimagelibrary.org/8a/d7/8ad742d9c0b886fd/Calb1_GFP_F_F5_200420/level1"
+    location = r"H:\globus\pitt\bil\fMOST RAW"
 else:
-    location = r"/CBI_Hive/globus/pitt/bil/jp2/download.brainimagelibrary.org/8a/d7/8ad742d9c0b886fd/Calb1_GFP_F_F5_200420/level1"
+    location = r"/CBI_Hive/globus/pitt/bil/fMOST RAW"
 # location = r"Z:\zarr"
 if os.name == 'nt':
-    out_location = r"h:/globus/pitt/bil/jp2/h5_shard"
+    out_location = r"H:/globus/pitt/bil/fmost_h5_shard"
 else:
-    out_location = r"/CBI_Hive/globus/pitt/bil/jp2/h5_shard"
+    out_location = r"/CBI_Hive/globus/pitt/bil/fmost_h5_shard"
+
+
+# if os.name == 'nt':
+#     location = r"z:/testData/bil/download.brainimagelibrary.org/8a/d7/8ad742d9c0b886fd/Calb1_GFP_F_F5_200420/level1"
+# else:
+#     location = r"/CBI_FastStore/testData/bil/download.brainimagelibrary.org/8a/d7/8ad742d9c0b886fd/Calb1_GFP_F_F5_200420/level1"
+# # location = r"Z:\zarr"
+# if os.name == 'nt':
+#     out_location = r"z:/testData/bil/h5_shard"
+# else:
+#     out_location = r"/CBI_FastStore/testData/bil/h5_shard"
 
 # if os.name == 'nt':
 #     location = r"H:\globus\pitt\bil\TEST"
@@ -67,9 +78,11 @@ class z_sharded_builder:
     def __init__(
             self,location,out_location,fileType,
             geometry=(50,1,1),origionalChunkSize=(8,1024,1024),minChunkSize=(8,1024,1024),
-            sim_jobs=10, compressor=hdf5plugin.Blosc(cname='zstd', clevel=8, shuffle=hdf5plugin.Blosc.BITSHUFFLE),
+            sim_jobs=10, compressor=hdf5plugin.Blosc(cname='zstd', clevel=4, shuffle=hdf5plugin.Blosc.BITSHUFFLE),
             build_imediately = False
             ):
+        
+        # hdf5plugin.Blosc(cname='zstd', clevel=0, shuffle=hdf5plugin.Blosc.BITSHUFFLE)
         
         self.location = location
         self.out_location = out_location
@@ -106,11 +119,27 @@ class z_sharded_builder:
         self.pyramidMap = self.imagePyramidNum()
         
         self.record_z_shards()
-        self.write_empty_z_shards()
+        
         # self.write_resolution_0()
         # self.create_vds(0)
-        self.write_resolution_series()
         
+        #n_workers=self.sim_jobs,
+        # self.write_empty_z_shards()
+        # with Client() as client:
+        #     self.write_resolution_series(client)
+        
+    
+    @contextmanager
+    def dist_client(self):
+        # Code to acquire resource, e.g.:
+        self.client = Client()
+        try:
+            yield
+        finally:
+            # Code to release resource, e.g.:
+            self.client.close()
+            self.client = None
+
     
     @staticmethod
     def read_file(fileName):
@@ -263,12 +292,13 @@ class z_sharded_builder:
     
     
     
-    def write_resolution_series(self):
+    def write_resolution_series(self,client):
         '''
         Make downsampled versions of dataset based on pyramidMap
+        Requies that a dask.distribuited client be passed for parallel processing
         '''
         for res in range(len(self.pyramidMap)):
-            self.write_resolution(res)
+            self.write_resolution(res,client)
             
     
     
@@ -276,14 +306,16 @@ class z_sharded_builder:
         print('Writing {}'.format(file))
         with h5py.File(file,'a') as store:
             dataset = store["data"]
-            dataset[:] = data
+            # dataset[:] = data
+            dataset.write_direct(data,np.s_[:],np.s_[:])
         return 'complete'
     
     def dump_to_zip_force_shape(self,file,data):
         print('Writing {}'.format(file))
         with h5py.File(file,'a') as store:
             dataset = store["data"]
-            dataset[:] = data[0:dataset.shape[0],0:dataset.shape[1],0:dataset.shape[2]]
+            # dataset[:] = data[0:dataset.shape[0],0:dataset.shape[1],0:dataset.shape[2]]
+            dataset.write_direct(data,np.s_[0:dataset.shape[0],0:dataset.shape[1],0:dataset.shape[2]],np.s_[:])
         return 'complete'
     
     def list_files(self,res,t,c):
@@ -332,9 +364,9 @@ class z_sharded_builder:
                 f['vdata'][key] = data
     
         
-    def write_resolution(self,res):
+    def write_resolution(self,res,client):
         if res == 0:
-            self.write_resolution_0()
+            self.write_resolution_0(client)
             self.create_vds(0)
             return
         
@@ -367,7 +399,7 @@ class z_sharded_builder:
                     # parent_z_stop = parent_z_stop + 1
                     
                     print('Reading data {},{},{},{},{}'.format(t,c,str(parent_z_start)+'-'+str(parent_z_stop),':',':'))
-                    data_to_downsample = self.get_from_vds(
+                    data_to_downsample = delayed(self.get_from_vds)(
                         res-1,
                         (
                             t,c,slice(parent_z_start,parent_z_stop),slice(None),slice(None)
@@ -377,52 +409,44 @@ class z_sharded_builder:
                     print('Data Shape Prior to DS {}'.format(data_to_downsample.shape))
                     
                     # Convert to float prior to downscale
-                    data_to_downsample = img_as_float32(data_to_downsample)
+                    data_to_downsample = delayed(img_as_float32)(data_to_downsample)
                     print('Downsampling data : local mean')
-                    data_to_downsample = downscale_local_mean(data_to_downsample,(downsample_factor[res],downsample_factor[res],downsample_factor[res]))
+                    data_to_downsample = delayed(downscale_local_mean)(data_to_downsample,(downsample_factor[res],downsample_factor[res],downsample_factor[res]))
                     print('Data Shape after to DS {}'.format(data_to_downsample.shape))
                     
                     # Convert back to the appropriate dtype
-                    data_to_downsample = self.dtype_convert(data_to_downsample)
-                    self.dump_to_zip_force_shape(file,data_to_downsample)
+                    data_to_downsample = delayed(self.dtype_convert)(data_to_downsample)
+                    data_to_downsample = delayed(self.dump_to_zip_force_shape)(file,data_to_downsample)
+                    to_run.append(data_to_downsample)
         
         self.create_vds(res)
-                    # new_shape = [x//y for x,y in zip(data_to_downsample.shape,downsample_factor)]
-                    # canvas = np.zeros(tuple(new_shape))
-                    
-                
-                # for idx in range(0,shape_parent[0],z_depth):
-                    
-                #     read_key = (
-                #         t,c,
-                #         slice(
-                #             idx,
-                #             idx+z_depth+1 if idx+z_depth+1 < shape_parent[0] else shape_parent[0]-1
-                #               ),
-                #         slice(None),
-                #         slice(None)
-                #         )
-                #     data = self.get_from_vds(res-1,read_key)
-                    
-                    
-                #     stack = []
-                #     for z in range(idx,idx+z_depth):
-                        
-                #         if z < self.shape[2]:
-                #             file = self.filesList[c][z]
-                #             print('Reading {}'.format(file))
-                #             stack.append( delayed(self.read_file)(file) )
-                #     stack = delayed(np.stack)(stack,axis=0)
-                #     # print(stack.shape)
-                #     # print(stack.dtype)
-                #     # print(stack.min())
-                #     # print(stack.max())
-                #     location = self.store_location_formatter(0,t,c,idx)
-                #     stack = delayed(self.dump_to_zip)(location,stack)
-                #     to_run.append(stack)
-                #     del stack
         
-    def write_resolution_0(self):
+        # Client is managed in self.write_resolution_series
+        # with Client() as client:
+        running = []
+        priority = 0
+        run = client.compute(to_run[0],priority=priority)
+        running.append(run)
+        del run
+        del to_run[0]
+        while len(to_run) > 0:
+            priority -= 1
+            run = client.compute(to_run[0],priority=priority)
+            running.append(run)
+            del run
+            del to_run[0]
+            while len(running) >= self.sim_jobs:
+                print('{} jobs running, {} remaining'.format(len(running),len(to_run)))
+                running = [x for x in running if x.status != 'finished']
+                time.sleep(2)
+        
+        while len(running) > 0:
+            print('{} jobs running, {} remaining'.format(len(running),len(to_run)))
+            running = [x for x in running if x.status !='finished']
+            time.sleep(2)
+        print('Jobs complete')
+        
+    def write_resolution_0(self,client):
         
         z_depth = self.pyramidMap[0][1][0]
         
@@ -448,28 +472,48 @@ class z_sharded_builder:
                     to_run.append(stack)
                     del stack
                     
-        with Client() as client:
-            running = []
-            run = client.compute(to_run[0])
+        # Client is managed in self.write_resolution_series
+        # with Client() as client:
+        running = []
+        priority = 0
+        run = client.compute(to_run[0],priority=priority)
+        running.append(run)
+        del run
+        del to_run[0]
+        while len(to_run) > 0:
+            priority -= 1
+            run = client.compute(to_run[0],priority=priority)
             running.append(run)
             del run
             del to_run[0]
-            while len(to_run) > 0:
-                
-                run = client.compute(to_run[0])
-                running.append(run)
-                del run
-                del to_run[0]
-                while len(running) >= self.sim_jobs:
-                    print('{} jobs running, {} remaining'.format(len(running),len(to_run)))
-                    running = [x for x in running if x.status != 'finished']
-                    time.sleep(2)
-            
-            while len(running) > 0:
+            while len(running) >= self.sim_jobs:
                 print('{} jobs running, {} remaining'.format(len(running),len(to_run)))
-                running = [x for x in running if x.status !='finished']
+                running = [x for x in running if x.status != 'finished']
                 time.sleep(2)
-            print('Jobs complete')
+        
+        while len(running) > 0:
+            print('{} jobs running, {} remaining'.format(len(running),len(to_run)))
+            running = [x for x in running if x.status !='finished']
+            time.sleep(2)
+        print('Jobs complete')
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
 # ## Need to make this conform to ome-ngff
 # # https://ngff.openmicroscopy.org/latest/

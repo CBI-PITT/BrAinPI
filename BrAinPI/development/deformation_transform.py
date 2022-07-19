@@ -155,7 +155,7 @@ def deform(array, fields,resolution):
         resolution = (resolution,resolution,resolution)
     # Round all numbers and convert array to int
     # fields = [np.around(x).astype(int) for x in fields]
-    fields = [x*1000/y for x,y in zip(fields,resolution)]
+    # fields = [x*1000/y for x,y in zip(fields,resolution)]
     # fields = [x/y for x,y in zip(fields,[5.33,1.99,1.99])]
     # fields = [x*10 for x in fields]
     fields = [x.astype(int) for x in fields]
@@ -214,7 +214,12 @@ atlas_aligned = io.imread(r"Z:\testData\deformation_field\downsampled.tiff")
 # field_scales = [int(1000 / resolution) for resolution in [5.33,1.992,1.992]]
 
 ####  Test Data
-z_deform = io.imread(r"H:\Acquire\Hooks\BrainA_alignment\registration_autofluorescence_fft_denoised\deformation_field_0.tiff")
-y_deform = io.imread(r"H:\Acquire\Hooks\BrainA_alignment\registration_autofluorescence_fft_denoised\deformation_field_1.tiff")
-x_deform = io.imread(r"H:\Acquire\Hooks\BrainA_alignment\registration_autofluorescence_fft_denoised\deformation_field_2.tiff")
+# z_deform = io.imread(r"H:\Acquire\Hooks\BrainA_alignment\registration_autofluorescence_fft_denoised\deformation_field_0.tiff")
+# y_deform = io.imread(r"H:\Acquire\Hooks\BrainA_alignment\registration_autofluorescence_fft_denoised\deformation_field_1.tiff")
+# x_deform = io.imread(r"H:\Acquire\Hooks\BrainA_alignment\registration_autofluorescence_fft_denoised\deformation_field_2.tiff")
+
+####  Test Data
+z_deform = io.imread(r"Z:\testData\deformation_field\deformation_field_0.tiff")
+y_deform = io.imread(r"Z:\testData\deformation_field\deformation_field_1.tiff")
+x_deform = io.imread(r"Z:\testData\deformation_field\deformation_field_2.tiff")
 
