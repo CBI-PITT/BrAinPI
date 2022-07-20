@@ -18,6 +18,7 @@ import h5py
 import numpy as np
 import shutil
 import errno
+import time
 
 from zarr.errors import (
     MetadataError,
@@ -45,10 +46,7 @@ from zarr.util import (buffer_size, json_loads, nolock, normalize_chunks,
 
 from zarr._storage.absstore import ABSStore  # noqa: F401
 
-from zarr._storage.store import (
-                                 array_meta_key,
-                                 Store
-                                 )
+from zarr._storage.store import Store
 
 
 # file = r'Z:\testData\test.h5'
@@ -134,7 +132,7 @@ class H5Store(Store):
     Safe to write in multiple threads or processes.
     """
 
-    def __init__(self, path, normalize_keys=True, dimension_separator='.',h5_name='xy_chunks.h5'):
+    def __init__(self, path, normalize_keys=True, dimension_separator='.',swmr=True):
 
         # guard conditions
         path = os.path.abspath(path)
@@ -144,8 +142,8 @@ class H5Store(Store):
         self.path = path
         self.normalize_keys = normalize_keys
         self._dimension_separator = dimension_separator
-        self._h5_name = h5_name
         self.chunk_depth = self._chunk_depth()
+        self.swmr=swmr
 
     def _normalize_key(self, key):
         return key.lower() if self.normalize_keys else key
@@ -155,8 +153,7 @@ class H5Store(Store):
     #     h5_file = os.path.join(base,self._h5_name)
     #     return h5_file,dset
 
-    @staticmethod
-    def _fromfile(file,dset):
+    def _fromfile(self,file,dset):
         """ Read data from a file
         Parameters
         ----------
@@ -168,14 +165,25 @@ class H5Store(Store):
         file reading logic.
         """
         # Extract Bytes from h5py
-        with h5py.File(file,'a') as f:
-            if dset in f:
-                return f[dset][()].tobytes()
-            else:
-                raise KeyError(dset)
+        trys = 0
+        while True:
+            try:
+                with h5py.File(file,'r',libver='latest', swmr=self.swmr) as f:
+                    if dset in f:
+                        return f[dset][()].tobytes()
+                    else:
+                        raise KeyError(dset)
+                break
+            except KeyError:
+                raise
+            except:
+                trys += 1
+                print('READ Failed for key {}, try #{} : Pausing 0.1 sec'.format(dset, trys))
+                time.sleep(0.1)
+                if trys == 100:
+                    raise
 
-    @staticmethod
-    def _tofile(key, data, file):
+    def _tofile(self,key, data, file):
         """ Write data to a file
         Parameters
         ----------
@@ -188,10 +196,23 @@ class H5Store(Store):
         Subclasses should overload this method to specify any custom
         file writing logic.
         """
-        with h5py.File(file,'a') as f:
-            if key in f:
-                del f[key]
-            f.create_dataset(key, data=data)
+        trys = 0
+        while True:
+            try:
+                with h5py.File(file,'a',libver='latest') as f:
+                    f.swmr_mode = self.swmr
+                    if key in f:
+                        print('Deleting existing dataset before writing new data : {}'.format(key))
+                        del f[key]
+                    f.create_dataset(key, data=data)
+                break
+            except:
+                trys += 1
+                print('WRITE Failed for key {}, try #{} : Pausing 0.1 sec'.format(key, trys))
+                time.sleep(0.1)
+                if trys == 100:
+                    raise
+                
     
     def _chunk_depth(self):
         return 3
@@ -221,7 +242,7 @@ class H5Store(Store):
     
     def __getitem__(self, key):
         
-        print('key : {}'.format(key))
+        print('GET : {}'.format(key))
         
         #Special case for .zarray file which should be in file system
         if key == '.zarray':
@@ -243,7 +264,7 @@ class H5Store(Store):
         
         # key = self._normalize_key(key)
         
-        print('key : {}'.format(key))
+        print('SET : {}'.format(key))
         
         #Special case for .zarray file which should be in file system
         if key == '.zarray':
@@ -259,8 +280,8 @@ class H5Store(Store):
 
         # destination path for key
         h5_file, dset = self._dset_from_dirStoreFilePath(key)
-        print(h5_file)
-        print(dset)
+        # print(h5_file)
+        # print(dset)
         # print(h5_file,dset)
 
         # ensure there is no directory in the way
@@ -282,15 +303,21 @@ class H5Store(Store):
 
     def __delitem__(self, key):
         
-        h5_file, dset = self._dset_from_dirStoreFilePath(key)
-        #Delete datasets
-        with h5py.File(h5_file,'a') as f:
-            del f[dset]
+        print('DEL : {}'.format(key))
+        if '.zarray' in key:
+            file = os.path.join(self.path,key)
+            if os.path.exists(file):
+                os.remove(file)
+        else:
+            h5_file, dset = self._dset_from_dirStoreFilePath(key)
+            #Delete datasets
+            with h5py.File(h5_file,'a',libver='latest', swmr=self.swmr) as f:
+                del f[dset]
 
     def __contains__(self, key):
         
-        print(key)
-        print('in contains')
+        print('CON : {}'.format(key))
+        # print('in contains')
         key = self._normalize_key(key)
         filepath = os.path.join(self.path, key)
         
@@ -298,9 +325,9 @@ class H5Store(Store):
             return os.path.exists(filepath)
         except:
             h5_file, dset = self._dset_from_dirStoreFilePath(key)
-            print(h5_file)
-            print(dset)
-            with h5py.File(h5_file,'a') as f:
+            # print(h5_file)
+            # print(dset)
+            with h5py.File(h5_file,'a',libver='latest', swmr=self.swmr) as f:
                 return dset in f
         return False
 
@@ -328,7 +355,7 @@ class H5Store(Store):
                     h5_file = os.path.join(dirpath,f)
                     # print(h5_file)
                     # h5_file = os.path.join(dirpath,file_path)
-                    with h5py.File(h5_file,'r') as f:
+                    with h5py.File(h5_file,'r',libver='latest', swmr=self.swmr) as f:
                         dset_list =  list(f.keys())
                     dset_list = [os.path.join(dirpath,x) for x in dset_list]
                     yield from dset_list
