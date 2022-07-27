@@ -11,6 +11,7 @@ import sys
 import glob
 import time
 from natsort import natsorted
+from io import BytesIO
 from skimage import io
 import dask.array as da
 from dask.delayed import delayed
@@ -35,19 +36,61 @@ else:
     jp2_location = r'/CBI_Hive/globus/pitt/bil/fMOST RAW'
 
 if os.name == 'nt':
-    out_location = r'Z:\testData\h5_zarr_test2'
+    out_location = r'Z:\testData\h5_zarr_test3'
 else:
-    out_location = r'/CBI_FastStore/testData/h5_zarr_test2'
+    out_location = r'/CBI_FastStore/testData/h5_zarr_test3'
 
-if os.name == 'nt':
-    out_location = r'H:\testData\h5_zarr_test2'
-else:
-    out_location = r'/CBI_Hive/testData/h5_zarr_test2'
+# if os.name == 'nt':
+#     out_location = r'H:\testData\h5_zarr_test3'
+# else:
+#     out_location = r'/CBI_Hive/testData/h5_zarr_test3'
 
-#Zarr conversion took 28.282779530154336 hours \\ storage_chunks = (1,1,1,1024,1024)
+sim_jobs = 8
+storage_chunks = (1,1,4,1024,1024)
 
-sim_jobs = 32//2
-storage_chunks = (1,1,1,1024,1024)
+def read(filepath):
+    with open(filepath, "rb") as fh:
+        buf = BytesIO(fh.read())
+    return io.imread(buf)
+
+def organize_by_groups(a_list,group_len):
+
+    new = []
+    for idx,aa in enumerate(a_list):
+        
+        if idx%group_len == 0:
+            working = []
+        
+        working.append(aa)
+        
+        if idx%group_len == 1 or idx == len(a_list)-1:
+            new.append(working)
+        
+        # print(new[-2:])
+    return new
+
+def read_a_stack(list_of_image_files,shape_of_each_file=None,dtype=None):
+    
+    if shape_of_each_file is None or dtype is None:
+        
+        image = read(list_of_image_files[0]).shape
+        
+        if shape_of_each_file is None:
+            shape_of_each_file = image.shape
+        if dtype is None:
+            dtype = image.dtype
+    
+    canvas = np.zeros(shape=(len(list_of_image_files),*shape_of_each_file),dtype=dtype)
+    for idx,ii in enumerate(list_of_image_files):
+        if idx==0 and 'image' in locals():
+            pass
+        else:
+            image = read(ii)
+        canvas[idx] = image
+        del image
+    return canvas
+
+
 def test():
     # os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
     colors = natsorted(glob.glob(os.path.join(jp2_location,'*')))
@@ -57,17 +100,24 @@ def test():
             natsorted(glob.glob(os.path.join(cc,'*.tif')))
             )
     
-    test_image = io.imread(files[0][0])
+    print('Reading Test Image')
+    test_image = read(files[0][0])
     
+    files = [organize_by_groups(x,storage_chunks[2]) for x in files]
+    
+    print('Building Virtual Stack')
     stack = []
     for color in files:
-            
-        s = [delayed(io.imread)(x) for x in color]
-        s = [da.from_delayed(x,test_image.shape,dtype=test_image.dtype) for x in s]
-        s = da.stack(s)
+        
+        s = [delayed(read_a_stack)(x,test_image.shape,test_image.dtype) for x in color]
+        s = [da.from_delayed(x,shape=(len(c),*test_image.shape),dtype=test_image.dtype) for x,c in zip(s,color)]
+        s = da.concatenate(s)
+        # s = da.stack(s)
         stack.append(s)
     stack = da.stack(stack)
     stack = stack[None,...]
+    print(stack)
+    # time.sleep(10)
     
     from numcodecs import Blosc
     compressor=Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE)
@@ -89,7 +139,8 @@ def test():
     # with Client('c001.cbiserver:8786') as client:
     
     with dask.config.set({'temporary_directory': '/CBI_FastStore/tmp_dask'}):
-        with Client(n_workers=16) as client:
+        with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
+        # with Client(n_workers=8) as client:
             # print(client.run(lambda: os.environ["HDF5_USE_FILE_LOCKING"]))
             da.store(stack, z,lock=False)
             # da.to_zarr(stack,store)

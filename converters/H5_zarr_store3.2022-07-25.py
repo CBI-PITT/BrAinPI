@@ -85,13 +85,54 @@ from zarr._storage.store import Store
 # z[0,0,7,0:2000,0:5000] = 42
 
 class H5Store(Store):
-    """
-    Storage class the uses HDF5 files to shard chunks accross axis [-3]
-    
-    Currently, the number of axes in the zarr array must be len(zarr_array) >= 4
+    """Storage class using directories and files on a standard file system.
+    Parameters
+    ----------
+    path : string
+        Location of directory to use as the root of the storage hierarchy.
+    normalize_keys : bool, optional
+        If True, all store keys will be normalized to use lower case characters
+        (e.g. 'foo' and 'FOO' will be treated as equivalent). This can be
+        useful to avoid potential discrepancies between case-sensitive and
+        case-insensitive file system. Default value is False.
+    dimension_separator : {'.', '/'}, optional
+        Separator placed between the dimensions of a chunk.
+    Examples
+    --------
+    Store a single array::
+        >>> import zarr
+        >>> store = zarr.DirectoryStore('data/array.zarr')
+        >>> z = zarr.zeros((10, 10), chunks=(5, 5), store=store, overwrite=True)
+        >>> z[...] = 42
+    Each chunk of the array is stored as a separate file on the file system,
+    i.e.::
+        >>> import os
+        >>> sorted(os.listdir('data/array.zarr'))
+        ['.zarray', '0.0', '0.1', '1.0', '1.1']
+    Store a group::
+        >>> store = zarr.DirectoryStore('data/group.zarr')
+        >>> root = zarr.group(store=store, overwrite=True)
+        >>> foo = root.create_group('foo')
+        >>> bar = foo.zeros('bar', shape=(10, 10), chunks=(5, 5))
+        >>> bar[...] = 42
+    When storing a group, levels in the group hierarchy will correspond to
+    directories on the file system, i.e.::
+        >>> sorted(os.listdir('data/group.zarr'))
+        ['.zgroup', 'foo']
+        >>> sorted(os.listdir('data/group.zarr/foo'))
+        ['.zgroup', 'bar']
+        >>> sorted(os.listdir('data/group.zarr/foo/bar'))
+        ['.zarray', '0.0', '0.1', '1.0', '1.1']
+    Notes
+    -----
+    Atomic writes are used, which means that data are first written to a
+    temporary file, then moved into place when the write is successfully
+    completed. Files are only held open while they are being read or written and are
+    closed immediately afterwards, so there is no need to manually close any files.
+    Safe to write in multiple threads or processes.
     """
 
-    def __init__(self, path, normalize_keys=True, dimension_separator='.',swmr=True,verbose=False):
+    def __init__(self, path, normalize_keys=True, dimension_separator='.',swmr=True):
 
         # guard conditions
         path = os.path.abspath(path)
@@ -103,7 +144,6 @@ class H5Store(Store):
         self._dimension_separator = dimension_separator
         self.chunk_depth = self._chunk_depth()
         self.swmr=swmr
-        self.verbose = verbose
 
     def _normalize_key(self, key):
         return key.lower() if self.normalize_keys else key
@@ -138,8 +178,7 @@ class H5Store(Store):
                 raise
             except:
                 trys += 1
-                if self.verbose:
-                    print('READ Failed for key {}, try #{} : Pausing 0.1 sec'.format(dset, trys))
+                print('READ Failed for key {}, try #{} : Pausing 0.1 sec'.format(dset, trys))
                 time.sleep(0.1)
                 if trys == 100:
                     raise
@@ -163,15 +202,13 @@ class H5Store(Store):
                 with h5py.File(file,'a',libver='latest') as f:
                     f.swmr_mode = self.swmr
                     if key in f:
-                        if self.verbose:
-                            print('Deleting existing dataset before writing new data : {}'.format(key))
+                        print('Deleting existing dataset before writing new data : {}'.format(key))
                         del f[key]
                     f.create_dataset(key, data=data)
                 break
             except:
                 trys += 1
-                if self.verbose:
-                    print('WRITE Failed for key {}, try #{} : Pausing 0.1 sec'.format(key, trys))
+                print('WRITE Failed for key {}, try #{} : Pausing 0.1 sec'.format(key, trys))
                 time.sleep(0.1)
                 if trys == 100:
                     raise
@@ -205,8 +242,7 @@ class H5Store(Store):
     
     def __getitem__(self, key):
         
-        if self.verbose:
-            print('GET : {}'.format(key))
+        # print('GET : {}'.format(key))
         
         #Special case for .zarray file which should be in file system
         if key == '.zarray':
@@ -228,8 +264,7 @@ class H5Store(Store):
         
         # key = self._normalize_key(key)
         
-        if self.verbose:
-            print('SET : {}'.format(key))
+        # print('SET : {}'.format(key))
         
         #Special case for .zarray file which should be in file system
         if key == '.zarray':
@@ -268,25 +303,11 @@ class H5Store(Store):
 
     def __delitem__(self, key):
         
-        '''
-        Does not yet handle situation where directorystore path is provided
-        as the key.
-        '''
-        
-        if self.verbose:
-            print('DEL : {}'.format(key))
-        if os.path.exists(key):
-            os.remove(key)
-        elif '.zarray' in key:
+        print('DEL : {}'.format(key))
+        if '.zarray' in key:
             file = os.path.join(self.path,key)
             if os.path.exists(file):
                 os.remove(file)
-        elif self.path in key:
-            key = path.split(location)[-1].split('/')[1:]
-            key = '.'.join(key)
-            h5_file, dset = self._dset_from_dirStoreFilePath(key)
-            with h5py.File(h5_file,'a',libver='latest', swmr=self.swmr) as f:
-                del f[dset]
         else:
             h5_file, dset = self._dset_from_dirStoreFilePath(key)
             #Delete datasets
@@ -295,8 +316,7 @@ class H5Store(Store):
 
     def __contains__(self, key):
         
-        if self.verbose:
-            print('CON : {}'.format(key))
+        print('CON : {}'.format(key))
         # print('in contains')
         key = self._normalize_key(key)
         filepath = os.path.join(self.path, key)
