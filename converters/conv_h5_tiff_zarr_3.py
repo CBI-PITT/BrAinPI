@@ -20,6 +20,12 @@ from distributed import Client
 import dask
 import tifffile
 
+'''
+45.49245145075851 hours for 2 color fmost
+compression_level = 8
+storage_chunks = (1,1,8,512,512)
+'''
+
 if os.name == 'nt':
     path = r'Z:\cbiPythonTools\bil_api\converters\H5_zarr_store3'
 else:
@@ -37,17 +43,18 @@ else:
     jp2_location = r'/CBI_Hive/globus/pitt/bil/fMOST RAW'
 
 if os.name == 'nt':
-    out_location = r'Z:\testData\h5_zarr_test3'
+    out_location = r'Z:\testData\h5_zarr_test4/0'
 else:
-    out_location = r'/CBI_FastStore/testData/h5_zarr_test3'
+    out_location = r'/CBI_FastStore/testData/h5_zarr_test4/0'
 
-jp2=True
+jp2=False
 if jp2==True:
     if os.name== 'nt':
         jp2_location = r'H:\globus\pitt\bil\jp2\download.brainimagelibrary.org\8a\d7\8ad742d9c0b886fd\Calb1_GFP_F_F5_200420\level1'
         out_location = r'H:\globus\pitt\bil\jp2\zarr_h5_test'
     else:
-        pass
+        jp2_location = r'/CBI_Hive/globus/pitt/bil/jp2/download.brainimagelibrary.org/8a/d7/8ad742d9c0b886fd/Calb1_GFP_F_F5_200420/level1'
+        out_location = r'/CBI_Hive/globus/pitt/bil/jp2/zarr_h5_test'
 
 # if os.name == 'nt':
 #     out_location = r'H:\testData\h5_zarr_test3'
@@ -155,7 +162,7 @@ def test():
     store = H5Store(out_location,verbose=True)
     # z = zarr.zeros(stack.shape, chunks=(1,1,1,1024,1024), store=store, overwrite=True, compressor=compressor)
     # z = zarr.zeros(stack.shape, chunks=stack.chunksize, store=store, overwrite=True, compressor=compressor)
-    z = zarr.zeros(stack.shape, chunks=storage_chunks, store=store, overwrite=True, compressor=compressor)
+    z = zarr.zeros(stack.shape, chunks=storage_chunks, store=store, overwrite=True, compressor=compressor,dtype=stack.dtype)
     
     # Align stack chunks with zarr chunks in z (since this is how the h5 files are stored)
     # Default values are to have y*4 and x*4 chunksize to reduce the number of chunks that dask has to manage by 16 fold (4*4)

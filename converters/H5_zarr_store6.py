@@ -9,6 +9,8 @@ Created on Tue Jul 19 10:29:42 2022
 Attempt at creating a custom HDF5 zarr data store (similar to ZIP store)
 but implemented in a directory store-like structure to limit the number of files
 per directory
+
+WORKS WITH MULTISCALE_SPATIAL_IMAGE PACKAGE
 '''
 
 
@@ -104,6 +106,7 @@ class H5Store(Store):
         self.chunk_depth = self._chunk_depth()
         self.swmr=swmr
         self.verbose = verbose
+        self._files = ['.zarray','.zgroup','.zattrs','.zmetadata']
 
     def _normalize_key(self, key):
         return key.lower() if self.normalize_keys else key
@@ -141,7 +144,7 @@ class H5Store(Store):
                 if self.verbose:
                     print('READ Failed for key {}, try #{} : Pausing 0.1 sec'.format(dset, trys))
                 time.sleep(0.1)
-                if trys == 100:
+                if trys == 500:
                     raise
 
     def _tofile(self,key, data, file):
@@ -171,9 +174,10 @@ class H5Store(Store):
             except:
                 trys += 1
                 if self.verbose:
-                    print('WRITE Failed for key {}, try #{} : Pausing 0.1 sec'.format(key, trys))
+                    pass
+                    # print('WRITE Failed for key {}, try #{} : Pausing 0.2 sec'.format(key, trys))
                 time.sleep(0.1)
-                if trys == 100:
+                if trys == 500:
                     raise
                 
     
@@ -189,18 +193,31 @@ class H5Store(Store):
         filepath will include self.path + key ('0.1.2.3.4')
         
         '''
+        
+        dirs, key = os.path.split(key)
+        dirs = os.path.split(dirs)
+        
         key = self._normalize_key(key)
+        # dirs = tuple([self._normalize_key(x) for x in dirs])
+        if key in self._files:
+            return os.path.join(self.path,*dirs,key), None
         
-        dirs = key.split('.')[:-3]
-        fname = key.split('.')[-3]
         
-        dset = key.split('.')[-2:]
         
-        h5_file = os.path.join(self.path,*dirs,fname + '.h5')
-        dset = '.'.join(dset)
-        
-        # print(h5_file)
-        return h5_file,dset
+        try:
+            dirs_2 = key.split('.')[:-3]
+            dirs = dirs + tuple(dirs_2)
+            fname = key.split('.')[-3]
+            
+            dset = key.split('.')[-2:]
+            
+            h5_file = os.path.join(self.path,*dirs,fname + '.h5')
+            dset = '.'.join(dset)
+            
+            # print(h5_file)
+            return h5_file, dset
+        except:
+            return os.path.join(self.path,*dirs,key), None
     
     
     def __getitem__(self, key):
@@ -208,20 +225,42 @@ class H5Store(Store):
         if self.verbose:
             print('GET : {}'.format(key))
         
-        #Special case for .zarray file which should be in file system
-        if key == '.zarray' or key == '.zgroup':
-            fn = os.path.join(self.path,key)
-            with open(fn, mode='rb') as f:
-                return f.read()
+        # #Special case for .zarray file which should be in file system
+        # if key == '.zarray' or key == '.zgroup' or key == '.zattrs':
+        #     fn = os.path.join(self.path,key)
+        #     with open(fn, mode='rb') as f:
+        #         return f.read()
         
-        h5_file, dset = self._dset_from_dirStoreFilePath(key)
+        file, dset = self._dset_from_dirStoreFilePath(key)
+        print(file)
+        print(dset)
         
-        if os.path.exists(h5_file):
-            return self._fromfile(h5_file,dset)
+        if dset is None:
+            print('Im HEre1')
+            try:
+                with open(file, mode='rb') as f:
+                    print('Im HEre2')
+                    return f.read()
+            except:
+                print('Im HEre3')
+                if os.path.exists(os.path.join(os.path.split(file)[0],'.zgroup')) and \
+                    os.path.exists(os.path.join(os.path.split(file)[0],'.zattrs')):
+                        try:
+                            print('Im HEre4')
+                            with open(os.path.join(os.path.split(file)[0],'.zattrs'), mode='rb') as f:
+                                return f.read()
+                        except:
+                            pass
+                raise KeyError(key)
+        
+        
+        if os.path.exists(file):
+            return self._fromfile(file,dset)
         
         # Must raise KeyError when key does not exist for zarr to load defult 'fill' values
         else:
             raise KeyError(key)
+                
         raise KeyError(key)
 
     def __setitem__(self, key, value):
@@ -230,41 +269,61 @@ class H5Store(Store):
         
         if self.verbose:
             print('SET : {}'.format(key))
+            # print('SET VALUE : {}'.format(value))
         
-        #Special case for .zarray file which should be in file system
-        if key == '.zarray' or key == '.zgroup':
-            if not os.path.exists(self.path):
-                os.makedirs(self.path)
-            fn = os.path.join(self.path,key)
-            with open(fn, mode='wb') as f:
+        # #Special case for .zarray file which should be in file system
+        # if key == '.zarray' or key == '.zgroup' or key == '.zattrs':
+        #     if not os.path.exists(self.path):
+        #         os.makedirs(self.path)
+        #     fn = os.path.join(self.path,key)
+        #     with open(fn, mode='wb') as f:
+        #         f.write(value)
+        #     return
+        
+        file, dset = self._dset_from_dirStoreFilePath(key)
+        print(file)
+        
+        if dset is None:
+            basePath = os.path.split(file)[0]
+            if not os.path.exists(basePath):
+                os.makedirs(basePath)
+            with open(file, mode='wb') as f:
                 f.write(value)
             return
         
         # coerce to flat, contiguous array (ideally without copying)
         value = ensure_contiguous_ndarray(value)
 
-        # destination path for key
-        h5_file, dset = self._dset_from_dirStoreFilePath(key)
-        # print(h5_file)
-        # print(dset)
-        # print(h5_file,dset)
-
-        # ensure there is no directory in the way
-        if os.path.isdir(h5_file):
-            shutil.rmtree(h5_file)
-
-        # ensure containing directory exists
-        dir_path, _ = os.path.split(h5_file)
-        if os.path.isfile(dir_path):
-            raise KeyError(key)
-            
-        os.makedirs(dir_path,exist_ok=True)
-
-        #Write to h5 file
         try:
-            self._tofile(dset, value, h5_file)
+            # destination path for key
+            # print(h5_file)
+            # print(dset)
+            # print(h5_file,dset)
+    
+            # ensure there is no directory in the way
+            if os.path.isdir(file):
+                shutil.rmtree(file)
+    
+            # ensure containing directory exists
+            dir_path, _ = os.path.split(file)
+            if os.path.isfile(dir_path):
+                raise KeyError(key)
+                
+            os.makedirs(dir_path,exist_ok=True)
+    
+            #Write to h5 file
+            try:
+                self._tofile(dset, value, file)
+            except:
+                pass
         except:
-            pass
+            # basePath = os.path.join(self.path,os.path.split(key)[0])
+            # if not os.path.exists(basePath):
+            #     os.makedirs(basePath)
+            # fullPath = os.path.join(self.path,key)
+            # with open(fullPath, mode='wb') as f:
+            #     f.write(value)
+            return
 
     def __delitem__(self, key):
         
@@ -273,50 +332,46 @@ class H5Store(Store):
         as the key.
         '''
         
-        print('__delitem__')
+        
         if self.verbose:
+            print('__delitem__')
             print('DEL : {}'.format(key))
+        
+        file, dset = self._dset_from_dirStoreFilePath(key)
+        
         if os.path.exists(key):
             os.remove(key)
-        elif '.zarray' in key or '.zgroup' in key:
-            file = os.path.join(self.path,key)
+        elif dset is None:
             if os.path.exists(file):
                 os.remove(file)
-        elif self.path in key:
-            key = path.split(location)[-1].split('/')[1:]
-            key = '.'.join(key)
-            h5_file, dset = self._dset_from_dirStoreFilePath(key)
-            with h5py.File(h5_file,'a',libver='latest', swmr=self.swmr) as f:
-                del f[dset]
+        # elif '.h5' in file:
+        #     with h5py.File(file,'a',libver='latest', swmr=self.swmr) as f:
+        #         del f[dset]
         else:
-            h5_file, dset = self._dset_from_dirStoreFilePath(key)
-            #Delete datasets
-            with h5py.File(h5_file,'a',libver='latest', swmr=self.swmr) as f:
+            with h5py.File(file,'a',libver='latest', swmr=self.swmr) as f:
                 del f[dset]
 
     def __contains__(self, key):
-        print('__contains__')
-        if self.verbose:
-            print('CON : {}'.format(key))
-        # print('in contains')
-        key = self._normalize_key(key)
-        filepath = os.path.join(self.path, key)
-        print(filepath)
         
-        if os.path.exists(filepath):
-            print('here 1')
+        if self.verbose:
+            print('__contains__')
+            print('CON : {}'.format(key))
+        
+        file, dset = self._dset_from_dirStoreFilePath(key)
+        
+        print(file)
+        
+        if os.path.exists(file):
+            print('HERE')
             return True
         try:
-            h5_file, dset = self._dset_from_dirStoreFilePath(key)
-            print('here 2')
-            print(h5_file)
-            if os.path.exists(h5_file):
-                with h5py.File(h5_file,'r',libver='latest', swmr=self.swmr) as f:
-                    print('here 3')
+            if os.path.exists(file):
+                with h5py.File(file,'r',libver='latest', swmr=self.swmr) as f:
                     return dset in f
         except:
             pass
-        print('here 4')
+                
+        print('Not Here')
         return False
     
     def __enter__(self):
@@ -325,25 +380,33 @@ class H5Store(Store):
 
 
     def __eq__(self, other):
-        print('eq')
+        if self.verbose:
+            print('eq')
         return (
             isinstance(other, H5Store) and
             self.path == other.path
         )
 
     def keys(self):
-        print('keys')
+        if self.verbose:
+            print('keys')
         if os.path.exists(self.path):
             yield from self._keys_fast(self.path)
 
 
     def _keys_fast(self,path, walker=os.walk):
         '''
-        For each h5 file, 
+        This will inspect each h5 file and yield keys in the form of paths.
+        
+        The paths must be translated into h5_file, key using the function:
+            self._dset_from_dirStoreFilePath
+        
+        Only returns relative paths to store
         '''
-        print('_keys_fast')
+        if self.verbose:
+            print('_keys_fast')
         for dirpath, _, filenames in walker(path):
-            # dirpath = os.path.relpath(dirpath, path)
+            relpath = os.path.relpath(dirpath, path)
             # print(dirpath)
             for f in filenames:
                 # print(f)
@@ -353,43 +416,62 @@ class H5Store(Store):
                     # h5_file = os.path.join(dirpath,file_path)
                     with h5py.File(h5_file,'r',libver='latest', swmr=self.swmr) as f:
                         dset_list =  list(f.keys())
-                    dset_list = [os.path.join(dirpath,x) for x in dset_list]
-                    yield from dset_list
+                    
                 else:
-                    yield f
+                    dset_list = [f]
+                
+                if relpath == os.curdir:
+                    dset_list = [os.path.join(relpath,x) for x in dset_list]
+                else:
+                    relpath = relpath.replace("\\", "/")
+                    dset_list = ["/".join((relpath, x)) for x in dset_list]
+                    # dset_list = [os.path.join(dirpath,x) for x in dset_list]
+                dset_list = [x[2:] if x[0:2] == './' else x for x in dset_list]
+                dset_list = [x[3:] if x[0:3] == '../' else x for x in dset_list]
+                yield from dset_list
                     # yield os.path.join(dirpath,f)
 
-    # def _keys_fast(self,path, walker=os.walk):
-    #     '''
-    #     For one h5 file, count number of keys and extrapolate to all h5 files
-    #     -a form of cheating to stop every h5 file from being inspected
-    #     '''
-    #     print('_keys_fast')
-    #     idx = 1
-    #     for dirpath, _, filenames in walker(path):
-    #         # dirpath = os.path.relpath(dirpath, path)
-    #         # print(dirpath)
-    #         for f in filenames:
-    #             # print(f)
-    #             if '.h5' in f and idx == 1:
-    #                 h5_file = os.path.join(dirpath,f)
-    #                 # print(h5_file)
-    #                 # h5_file = os.path.join(dirpath,file_path)
-    #                 with h5py.File(h5_file,'r',libver='latest', swmr=self.swmr) as f:
-    #                     dset_list =  list(f.keys())
-    #                 dset_list = [os.path.join(dirpath,x) for x in dset_list]
-    #                 h5_key_num = len(dset_list)
-    #             else:
-    #                 yield f
-    #                 # yield os.path.join(dirpath,f)
+    def _keys_num_estimate(self,walker=os.walk):
+        '''
+        For only the first h5 file, count number of keys and extrapolate to all h5 files
+        -a form of cheating to stop every h5 file from being inspected.  
+        This can improve performance by many fold for very large datasets.
+        
+        Estimates could be off if all keys are not written.  Perhaps a method
+        to estimate total keys based on shape + chunks would be better.
+        '''
+        if self.verbose:
+            print('_keys_num_estimate')
+        idx = True
+        for dirpath, _, filenames in walker(self.path):
+            # dirpath = os.path.relpath(dirpath, path)
+            # print(dirpath)
+            for f in filenames:
+                # print(f)
+                if idx and '.h5' in f:
+                    h5_file = os.path.join(dirpath,f)
+                    # print(h5_file)
+                    # h5_file = os.path.join(dirpath,file_path)
+                    with h5py.File(h5_file,'r',libver='latest', swmr=self.swmr) as f:
+                        dset_list =  list(f.keys())
+                    h5_key_num = len(dset_list)
+                    # print('len == {}'.format(h5_key_num))
+                    idx = False
+                    
+                if 'h5_key_num' in locals() and '.h5' in f:
+                    yield from range(h5_key_num)
+                else:
+                    yield 1
 
     def __iter__(self):
-        print('__iter__')
+        if self.verbose:
+            print('__iter__')
         return self.keys()
 
     def __len__(self):
-        print('__len__')
-        return sum(1 for _ in self.keys())
+        if self.verbose:
+            print('__len__')
+        return sum((1 for _ in self._keys_num_estimate()))
 
 #     def dir_path(self, path=None):
 #         store_path = normalize_storage_path(path)
