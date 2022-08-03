@@ -141,7 +141,7 @@ class H5Store(Store):
                 raise
             except:
                 trys += 1
-                if self.verbose:
+                if self.verbose == 2:
                     print('READ Failed for key {}, try #{} : Pausing 0.1 sec'.format(dset, trys))
                 time.sleep(0.1)
                 if trys == 500:
@@ -163,19 +163,19 @@ class H5Store(Store):
         trys = 0
         while True:
             try:
+                # with h5py.File(file,'a',libver='latest',locking=True) as f:
                 with h5py.File(file,'a',libver='latest') as f:
                     f.swmr_mode = self.swmr
                     if key in f:
-                        if self.verbose:
+                        if self.verbose == 2:
                             print('Deleting existing dataset before writing new data : {}'.format(key))
                         del f[key]
                     f.create_dataset(key, data=data)
                 break
             except:
                 trys += 1
-                if self.verbose:
-                    pass
-                    # print('WRITE Failed for key {}, try #{} : Pausing 0.2 sec'.format(key, trys))
+                if self.verbose == 2:
+                    print('WRITE Failed for key {}, try #{} : Pausing 0.1 sec'.format(key, trys))
                 time.sleep(0.1)
                 if trys == 500:
                     raise
@@ -232,21 +232,21 @@ class H5Store(Store):
         #         return f.read()
         
         file, dset = self._dset_from_dirStoreFilePath(key)
-        print(file)
-        print(dset)
+        # print(file)
+        # print(dset)
         
         if dset is None:
-            print('Im HEre1')
+            # print('Im HEre1')
             try:
                 with open(file, mode='rb') as f:
-                    print('Im HEre2')
+                    # print('Im HEre2')
                     return f.read()
             except:
-                print('Im HEre3')
+                # print('Im HEre3')
                 if os.path.exists(os.path.join(os.path.split(file)[0],'.zgroup')) and \
                     os.path.exists(os.path.join(os.path.split(file)[0],'.zattrs')):
                         try:
-                            print('Im HEre4')
+                            # print('Im HEre4')
                             with open(os.path.join(os.path.split(file)[0],'.zattrs'), mode='rb') as f:
                                 return f.read()
                         except:
@@ -281,7 +281,7 @@ class H5Store(Store):
         #     return
         
         file, dset = self._dset_from_dirStoreFilePath(key)
-        print(file)
+        # print(file)
         
         if dset is None:
             basePath = os.path.split(file)[0]
@@ -333,7 +333,7 @@ class H5Store(Store):
         '''
         
         
-        if self.verbose:
+        if self.verbose == 2:
             print('__delitem__')
             print('DEL : {}'.format(key))
         
@@ -353,16 +353,16 @@ class H5Store(Store):
 
     def __contains__(self, key):
         
-        if self.verbose:
+        if self.verbose == 2:
             print('__contains__')
             print('CON : {}'.format(key))
         
         file, dset = self._dset_from_dirStoreFilePath(key)
         
-        print(file)
+        # print(file)
         
         if os.path.exists(file):
-            print('HERE')
+            # print('HERE')
             return True
         try:
             if os.path.exists(file):
@@ -380,7 +380,7 @@ class H5Store(Store):
 
 
     def __eq__(self, other):
-        if self.verbose:
+        if self.verbose == 2:
             print('eq')
         return (
             isinstance(other, H5Store) and
@@ -388,7 +388,7 @@ class H5Store(Store):
         )
 
     def keys(self):
-        if self.verbose:
+        if self.verbose == 2:
             print('keys')
         if os.path.exists(self.path):
             yield from self._keys_fast(self.path)
@@ -403,7 +403,7 @@ class H5Store(Store):
         
         Only returns relative paths to store
         '''
-        if self.verbose:
+        if self.verbose == 2:
             print('_keys_fast')
         for dirpath, _, filenames in walker(path):
             relpath = os.path.relpath(dirpath, path)
@@ -440,7 +440,7 @@ class H5Store(Store):
         Estimates could be off if all keys are not written.  Perhaps a method
         to estimate total keys based on shape + chunks would be better.
         '''
-        if self.verbose:
+        if self.verbose == 2:
             print('_keys_num_estimate')
         idx = True
         for dirpath, _, filenames in walker(self.path):
@@ -464,12 +464,12 @@ class H5Store(Store):
                     yield 1
 
     def __iter__(self):
-        if self.verbose:
+        if self.verbose == 2:
             print('__iter__')
         return self.keys()
 
     def __len__(self):
-        if self.verbose:
+        if self.verbose == 2:
             print('__len__')
         return sum((1 for _ in self._keys_num_estimate()))
 

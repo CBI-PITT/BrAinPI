@@ -64,7 +64,7 @@ else:
 
 ## Testing
 # array = np.random.randint(0, 65534, size=(20,1280,1280), dtype=np.uint16)
-array = np.random.randint(0, 65534, size=(1,2,128,1280,1280), dtype=np.uint16)
+array = np.random.randint(0, 65534, size=(1,2,239,1280,1280), dtype=np.uint16)
 
 image = to_spatial_image(array,dims=('t', 'c', 'z', 'y', 'x'))
 # image = to_spatial_image(array,dims=('z','y', 'x'))
@@ -74,6 +74,14 @@ multiscale = to_multiscale(image, [2,4,8])
 # multiscale = to_multiscale(image, [{'z':2,'y':2,'x':2},{'z':4,'y':4,'x':4},{'z':8,'y':8,'x':8}])
 # multiscale = to_multiscale(image)
 print(multiscale)
+
+from numcodecs import Blosc
+compression_level = 8
+compressor=Blosc(cname='zstd', clevel=compression_level, shuffle=Blosc.BITSHUFFLE)
+
+import zarr.storage
+# switch to using Zstandard
+zarr.storage.default_compressor = compressor
 
 out_store = H5Store(out, verbose=True)
 # out_store = zarr.storage.DirectoryStore(out, dimension_separator='/')
