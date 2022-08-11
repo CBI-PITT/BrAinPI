@@ -48,7 +48,7 @@ from zarr.util import (buffer_size, json_loads, nolock, normalize_chunks,
 
 from zarr._storage.absstore import ABSStore  # noqa: F401
 
-from zarr._storage.store import Store
+from zarr._storage.store import Store, BaseStore
 
 
 # file = r'Z:\testData\test.h5'

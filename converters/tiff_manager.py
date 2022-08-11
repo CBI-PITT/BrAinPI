@@ -10,11 +10,28 @@ import numpy as np
 import tifffile
 # import imagecodecs
 from copy import deepcopy
+import dask
+from dask.delayed import delayed
 
 
 file = r'C:\code\testData\191817_05308_CH1.tif'
 file = r'H:\globus\pitt\bil\fMOST RAW\CH1\182725_03717_CH1.tif'
 
+'''
+Tiff managers can take a tiff file (tiff_manager) or list of files (tiff_manager_3d)
+and present them as sliceable arrays.  
+
+'desired_chunk_depth parameters' allow non-chunked tiff files to appear to be 
+chunked by a desireable number of lines for interacting with downstream libraries
+like dask array.
+
+Files are only opened during __init__ and when data is requested via slicing
+
+Cloning options are available to maintain the properties of a previously instantiated
+manager but with a different file.  This allows for rapid creation of 1000s of 
+managers without having to access the file system during __init__ to integrigate
+each file.
+'''
 class tiff_manager:
     def __init__(self,file,desired_chunk_depth=64):
         self.file = file
@@ -61,7 +78,9 @@ class tiff_manager:
         return new
         
     def _adjust_chunk_depth(self):
-        if self._desired_chunk_depth % self.chunks[0] == 0:
+        if self._desired_chunk_depth >= self.shape[0]:
+            self.chunks = (self.shape[0],*self.chunks[1:])
+        elif self._desired_chunk_depth % self.chunks[0] == 0:
                 self.chunks = (self._desired_chunk_depth,*self.chunks[1:])
     
 
@@ -152,9 +171,30 @@ class tiff_manager_3d:
         
     
     def _read_tiff(self,key,idx):
+        print('Read {}'.format(self.fileList[idx]))
         with tifffile.imread(self.fileList[idx],aszarr=True) as store:
             return zarr.open(store)[key]
         
+    # def _get_3d(self,key):
+    #     key = self._format_slice(key)
+    #     shape_of_output = self._slice_out_shape(key)
+    #     # canvas = np.zeros(shape_of_output,dtype=self.dtype)
+    #     # print(canvas.shape)
+        
+        
+    #     stack = []
+    #     for idx in range(shape_of_output[0]):
+    #         two_d = key[1:]
+    #         # print(two_d)
+    #         if len(two_d) == 1:
+    #             two_d = two_d[0]
+    #         # print(two_d)
+    #         stack.append(
+    #             delayed(self._read_tiff)(two_d,idx)
+    #             )
+    #     stack = delayed(np.stack)(stack)
+    #     return dask.compute(stack)[0]
+    
     def _get_3d(self,key):
         key = self._format_slice(key)
         shape_of_output = self._slice_out_shape(key)

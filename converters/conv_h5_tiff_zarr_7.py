@@ -10,6 +10,9 @@ import os
 import sys
 import glob
 import time
+import math
+from skimage import img_as_float32, img_as_uint
+from skimage.filters import gaussian
 from natsort import natsorted
 from io import BytesIO
 from skimage import io
@@ -82,10 +85,36 @@ def organize_by_groups(a_list,group_len):
         new.append(working)
     return new
 
+# chunk_limit_MB = 1024
+# cpu_number = 32
+# storage_chunks = (1,1,4,512,512)
+# chunk_depth = (test_image.shape[1]//4) - (test_image.shape[1]//4)%storage_chunks[3]
+# z_plane_shape = (30967,20654)
+
+def determine_read_depth(storage_chunks,num_workers,z_plane_shape,chunk_limit_MB=1024,cpu_number=os.cpu_count()):
+    chunk_depth = storage_chunks[3]
+    current_chunks = (storage_chunks[0],storage_chunks[1],storage_chunks[2],chunk_depth,z_plane_shape[1])
+    current_size = math.prod(current_chunks)*2/1024/1024
+    
+    if current_size >= chunk_limit_MB:
+        return chunk_depth
+    
+    while current_size <= chunk_limit_MB:
+        chunk_depth += storage_chunks[3]
+        current_chunks = (storage_chunks[0],storage_chunks[1],storage_chunks[2],chunk_depth,z_plane_shape[1])
+        current_size = math.prod(current_chunks)*2/1024/1024
+        
+        if chunk_depth >= z_plane_shape[0]:
+            chunk_depth = z_plane_shape[0]
+            break
+    return chunk_depth
+        
+
 sim_jobs = 8
 compression_level = 8
-storage_chunks = (1,1,4,512,512)
-read_depth = 512
+storage_chunks = (1,1,4,1024,1024)
+chunk_limit_MB = 2048
+# read_depth = 512
 
 def test():
     # os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
@@ -110,8 +139,9 @@ def test():
     for color in files:
         
         s = organize_by_groups(color,storage_chunks[2])
-        test_image = tiff_manager_3d(s[0],desired_chunk_depth_y=read_depth)
-        chunk_depth = (test_image.shape[1]//4) - (test_image.shape[1]//4)%storage_chunks[3]
+        test_image = tiff_manager_3d(s[0],desired_chunk_depth_y=storage_chunks[2])
+        # chunk_depth = (test_image.shape[1]//4) - (test_image.shape[1]//4)%storage_chunks[3]
+        chunk_depth = determine_read_depth(storage_chunks,num_workers=sim_jobs,z_plane_shape=test_image.shape[1:],chunk_limit_MB=chunk_limit_MB)
         test_image = tiff_manager_3d(s[0],desired_chunk_depth_y=chunk_depth)
         print(test_image.shape)
         print(test_image.chunks)
@@ -151,6 +181,7 @@ def test():
     store = H5Store(out_location,verbose=2)
     # z = zarr.zeros(stack.shape, chunks=(1,1,1,1024,1024), store=store, overwrite=True, compressor=compressor)
     # z = zarr.zeros(stack.shape, chunks=stack.chunksize, store=store, overwrite=True, compressor=compressor)
+    
     z = zarr.zeros(stack.shape, chunks=storage_chunks, store=store, overwrite=True, compressor=compressor,dtype=stack.dtype)
     
     # Align stack chunks with zarr chunks in z (since this is how the h5 files are stored)
@@ -169,8 +200,9 @@ def test():
     else:
         with dask.config.set({'temporary_directory': '/CBI_FastStore/tmp_dask'}):
             
-            with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
+            # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
             # with Client(n_workers=8,threads_per_worker=2) as client:
+            with Client(n_workers=16,threads_per_worker=1) as client:
                 # print(client.run(lambda: os.environ["HDF5_USE_FILE_LOCKING"]))
                 da.store(stack,z,lock=False)
                 # da.to_zarr(stack,store)
@@ -179,10 +211,103 @@ def test():
     # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
     #     da.store(stack, z,lock=False)
 
+def smooth(image):
+    working = img_as_float32(image)
+    working = gaussian(working,0.5)
+    working = img_as_uint(working)
+    return working
+
+def down_samp(parent_location,res):
+    out_location = parent_location[:-1] + '{}'.format(res)
+    
+    # parent_array = self.open_store(res-1)
+    print('Getting Parent Zarr as Dask Array')
+    # parent_array = da.from_zarr(self.get_store(res-1))
+    parent_array = zarr.open(H5Store(parent_location,verbose=2))
+    parent_array = da.from_array(
+        parent_array,
+        chunks=(1,1,parent_array.chunks[-3]*8,parent_array.chunks[-2],parent_array.chunks[-1]*8)
+        )
+    # parent_array_store = H5Store(parent_location,verbose=2)
+    # parent_array = da.from_zarr(parent_array_store)
+    print('parent_array')
+    print(parent_array)
+    new_array_store = H5Store(out_location,verbose=2)
+    
+    new_shape = (1, 1, 5732, 15400, 10410)
+    print(new_shape)
+    new_chunks = (1, 1, 16, 512, 4096)
+    # new_chunks = (1, 1, 16, 512, 512)
+    print(new_chunks)
+    
+    from numcodecs import Blosc
+    compressor=Blosc(cname='zstd', clevel=compression_level, shuffle=Blosc.BITSHUFFLE)
+    
+    
+    new_array = zarr.zeros(new_shape, chunks=new_chunks, store=new_array_store, overwrite=True, compressor=compressor,dtype=parent_array.dtype)
+    print('new_array, {}, {}'.format(new_array.shape,new_array.chunks))
+    # z = zarr.zeros(stack.shape, chunks=self.origionalChunkSize, store=store, overwrite=True, compressor=self.compressor,dtype=stack.dtype)
+
+    # to_run = []
+    for t in range(parent_array.shape[0]):
+        for c in range(parent_array.shape[1]):
+            print('Before Subset Parent')
+            print(parent_array)
+            working_array = parent_array[t,c]
+            print('Before Subset working')
+            print(working_array)
+            working_array = working_array.map_overlap(smooth,(1,1,1))
+            print('After Smooth working')
+            print(working_array)
+            working_array = working_array[
+                1::2,
+                1::2,
+                1::2
+                ]
+            print('After Subset')
+            print(working_array)
+            working_array = working_array[None, None, ...]
+            
+            print('working_array - AFTER subsampling')
+            print(working_array)
+            print('Storing t-{}, c-{}'.format(t,c))
+            # da.store(working_array,new_array)
+            working_array = working_array.map_blocks(write,new_array)
+            working_array.compute()
+            
+
+def write(image,to_array,block_info=None):
+    if block_info is None:
+        return
+    loc = block_info[0]['array-location']
+    print('Writing {}'.format(loc))
+    to_array[
+        loc[0][0]:loc[0][1],
+        loc[1][0]:loc[1][1],
+        loc[2][0]:loc[2][1],
+        loc[3][0]:loc[3][1],
+        loc[4][0]:loc[4][1]
+        ] = image
+    # to_array[loc] = image
+    return
+
 if __name__ == '__main__':
     print('Running')
     start = time.time()
-    test()
+    # test()
+    # if os.name == 'nt':
+    #     with Client(n_workers=1,threads_per_worker=1) as client:
+    #         pass
+    # else:
+    #     with dask.config.set({'temporary_directory': '/CBI_FastStore/tmp_dask'}):
+            
+    #         # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
+    #         # with Client(n_workers=8,threads_per_worker=2) as client:
+    #         with Client(n_workers=16,threads_per_worker=1) as client:
+
+    #             down_samp(out_location,1)
+    with dask.config.set({'temporary_directory': '/CBI_FastStore/tmp_dask'}):
+        down_samp(out_location,1)
     total = time.time() - start
     total_hours = total /60/60
     print('Zarr conversion took {} hours'.format(total_hours))

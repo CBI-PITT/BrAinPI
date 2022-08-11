@@ -10,6 +10,7 @@ import os
 import sys
 import glob
 import time
+import math
 from natsort import natsorted
 from io import BytesIO
 from skimage import io
@@ -82,10 +83,36 @@ def organize_by_groups(a_list,group_len):
         new.append(working)
     return new
 
+# chunk_limit_MB = 1024
+# cpu_number = 32
+# storage_chunks = (1,1,4,512,512)
+# chunk_depth = (test_image.shape[1]//4) - (test_image.shape[1]//4)%storage_chunks[3]
+# z_plane_shape = (30967,20654)
+
+def determine_read_depth(storage_chunks,num_workers,z_plane_shape,chunk_limit_MB=1024,cpu_number=os.cpu_count()):
+    chunk_depth = storage_chunks[3]
+    current_chunks = (storage_chunks[0],storage_chunks[1],storage_chunks[2],chunk_depth,z_plane_shape[1])
+    current_size = math.prod(current_chunks)*2/1024/1024
+    
+    if current_size >= chunk_limit_MB:
+        return chunk_depth
+    
+    while current_size <= chunk_limit_MB:
+        chunk_depth += storage_chunks[3]
+        current_chunks = (storage_chunks[0],storage_chunks[1],storage_chunks[2],chunk_depth,z_plane_shape[1])
+        current_size = math.prod(current_chunks)*2/1024/1024
+        
+        if chunk_depth >= z_plane_shape[0]:
+            chunk_depth = z_plane_shape[0]
+            break
+    return chunk_depth
+        
+
 sim_jobs = 8
 compression_level = 8
-storage_chunks = (1,1,4,512,512)
-read_depth = 512
+storage_chunks = (1,1,4,1024,1024)
+chunk_limit_MB = 2048
+# read_depth = 512
 
 def test():
     # os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
@@ -110,8 +137,9 @@ def test():
     for color in files:
         
         s = organize_by_groups(color,storage_chunks[2])
-        test_image = tiff_manager_3d(s[0],desired_chunk_depth_y=read_depth)
-        chunk_depth = (test_image.shape[1]//4) - (test_image.shape[1]//4)%storage_chunks[3]
+        test_image = tiff_manager_3d(s[0],desired_chunk_depth_y=storage_chunks[2])
+        # chunk_depth = (test_image.shape[1]//4) - (test_image.shape[1]//4)%storage_chunks[3]
+        chunk_depth = determine_read_depth(storage_chunks,num_workers=sim_jobs,z_plane_shape=test_image.shape[1:],chunk_limit_MB=chunk_limit_MB)
         test_image = tiff_manager_3d(s[0],desired_chunk_depth_y=chunk_depth)
         print(test_image.shape)
         print(test_image.chunks)
@@ -151,6 +179,7 @@ def test():
     store = H5Store(out_location,verbose=2)
     # z = zarr.zeros(stack.shape, chunks=(1,1,1,1024,1024), store=store, overwrite=True, compressor=compressor)
     # z = zarr.zeros(stack.shape, chunks=stack.chunksize, store=store, overwrite=True, compressor=compressor)
+    
     z = zarr.zeros(stack.shape, chunks=storage_chunks, store=store, overwrite=True, compressor=compressor,dtype=stack.dtype)
     
     # Align stack chunks with zarr chunks in z (since this is how the h5 files are stored)
@@ -169,8 +198,9 @@ def test():
     else:
         with dask.config.set({'temporary_directory': '/CBI_FastStore/tmp_dask'}):
             
-            with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
+            # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
             # with Client(n_workers=8,threads_per_worker=2) as client:
+            with Client(n_workers=16,threads_per_worker=1) as client:
                 # print(client.run(lambda: os.environ["HDF5_USE_FILE_LOCKING"]))
                 da.store(stack,z,lock=False)
                 # da.to_zarr(stack,store)
