@@ -29,18 +29,6 @@ Working with sef-contained delayed frunction, but small number of threads makes 
 2x downsamples only
 '''
 
-if os.name == 'nt':
-    path = r'Z:\cbiPythonTools\bil_api\converters\H5_zarr_store3'
-else:
-    path = r'/CBI_FastStore/cbiPythonTools/bil_api/converters/H5_zarr_store3'
-    
-if path not in sys.path:
-    sys.path.append(path)
-
-from H5_zarr_store6 import H5Store
-from tiff_manager import tiff_manager, tiff_manager_3d
-# from Z:\cbiPythonTools\bil_api\converters\H5_zarr_store3 import H5Store
-
 
 class builder:
     
@@ -553,14 +541,11 @@ class builder:
 
 if __name__ == '__main__':
     
-    if os.name == 'nt':
-        path = r'Z:\cbiPythonTools\bil_api\converters\H5_zarr_store3'
-    else:
-        path = r'/CBI_FastStore/cbiPythonTools/bil_api/converters/H5_zarr_store3'
+    path = '/bil/users/awatson/test_conv/BrAinPI/converters'
         
     if path not in sys.path:
         sys.path.append(path)
-
+    
     from H5_zarr_store6 import H5Store
     from tiff_manager import tiff_manager, tiff_manager_3d
     # from Z:\cbiPythonTools\bil_api\converters\H5_zarr_store3 import H5Store
@@ -575,6 +560,7 @@ if __name__ == '__main__':
         # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
         # with Client(n_workers=8,threads_per_worker=2) as client:
         with Client(n_workers=mr.sim_jobs,threads_per_worker=4) as client:
+            pass
             # mr.write_resolution_series(client)
             # mr.write_resolution(2,client)
             # mr.write_resolution(3,client)
@@ -584,240 +570,7 @@ if __name__ == '__main__':
     
     
     
-    
-    
-    
 ## https://download.brainimagelibrary.org/2b/da/2bdaf9e66a246844/mouseID_405429-182725/
 ## /bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725/
 
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-# ## Need to make this conform to ome-ngff
-# # https://ngff.openmicroscopy.org/latest/
-# def write_z_sharded_array_meta(location, pyramidMap, imageStack, resolution=(1,1,50,1,1), store='zip',axes='tczyx'):
-#     metadata = {}
-    
-#     metadata['shape'] = imageStack.shape
-#     metadata['axes'] = axes
-    
-#     metadata['resolution'] = {}
-#     metadata['resolution']['sampling'] = resolution #(t,c,z,y,x)
-#     metadata['resolution']['units'] = ('s','c','um','um','um')
-    
-#     metadata['series'] = {}
-#     for key in pyramidMap:
-#         metadata['series'][key] = {}
-#         metadata['series'][key]['chunks'] = pyramidMap[key][1]
-#         metadata['series'][key]['store'] = store
-#         metadata['series'][key]['shape'] = pyramidMap[key][0]
-#         metadata['series'][key]['dtype'] = str(imageStack.dtype)
-    
-#     with open(os.path.join(location,'.z_sharded_array'), 'w') as f:
-#         json.dump(metadata, f, indent=1)
-    
-#     return metadata
-
-
-# def write_to_zip_store(toWrite,location=None):
-#     print('In write')
-#     if toWrite.shape==(0,0,0):
-#         return True
-#     with zarr.ZipStore(location) as store:
-#         print('In with')
-#         print(toWrite.shape)
-#         array = zarr.open(store)
-#         print('Reading {}'.format(location))
-#         # toWrite = toWrite.compute()
-#         print('Writing {}'.format(location))
-#         array[0:toWrite.shape[0],0:toWrite.shape[1],0:toWrite.shape[2]] = toWrite
-#         print('Completed {}'.format(location))
-#         return True
-
-
-# ## Write first resolution 0 and 1 first
-# # zarrObjs = {} # Store all zarrObjects for easy write access
-# to_compute = []
-# for t in range(imageStack.shape[0]):
-#     for c in range(imageStack.shape[1]):
-#         current_stack = imageStack[t,c]
-#         for key in pyramidMap:
-#             if key > 0:
-#                 break
-#             currentShape = current_stack[::2**key,::2**key,::2**key].shape
-            
-#             for z_shards in range(0,currentShape[0],pyramidMap[key][1][0]):
-#                 print(z_shards)
-#                 location = os.path.join(out_location,store_location_formatter(key,t,c,z_shards))
-                
-#                 toWrite = current_stack[z_shards:z_shards+pyramidMap[key][1][0]]
-                
-#                 future = delayed(write_to_zip_store)(toWrite,location)
-#                 # future = toWrite.map_blocks(write_to_zip_store, location=location, dtype=bool)
-#                 to_compute.append(future)
-
-
-# total_jobs = len(to_compute)
-# print('Submitting {} of {}'.format(1,total_jobs))
-# submit = client.compute(to_compute[0], priority=1)
-# to_compute = to_compute[1:]
-# submitted = [submit]
-# del submit
-
-# idx = 2
-# while True:
-#     time.sleep(2)
-#     if len(to_compute) == 0:
-#         break
-    
-#     while sum( [x.status == 'pending' for x in submitted] ) >= sim_jobs:
-#         time.sleep(2)
-        
-#     print('Submitting {} of {}'.format(idx,total_jobs))
-#     submit = client.compute(to_compute[0], priority=idx)
-#     to_compute = to_compute[1:]
-#     submitted.append(submit)
-#     del submit
-#     idx += 1
-#     submitted = [x for x in submitted if x.status != 'finished']
-
-# submitted = client.gather(submitted)
-# del submitted
-
-
-
-
-
-# def build_array_res_level(location,res):
-#     '''
-#     Build a dask array representation of a specific resolution level
-#     Always output a 5-dim array (t,c,z,y,x)
-#     '''
-    
-#     # Determine the number of TimePoints (int)
-#     TimePoints = len(glob.glob(os.path.join(location,str(res),'[0-9]')))
-    
-#     # Determine the number of Channels (int)
-#     Channels = len(glob.glob(os.path.join(location,str(res),'0','[0-9]')))
-    
-#     # Build a dask array from underlying zarr ZipStores
-#     stack = None
-#     single_color_stack = None
-#     multi_color_stack = None
-#     for t in range(TimePoints):
-#         for c in range(Channels):
-#             z_shard_list = natsort.natsorted(glob.glob(os.path.join(location,str(res),str(t),str(c),'*.zip')))
-            
-#             single_color_stack = [da.from_zarr(zarr.ZipStore(file),name=file) for file in z_shard_list]
-#             single_color_stack = da.concatenate(single_color_stack,axis=0)
-#             if c == 0:
-#                 multi_color_stack = single_color_stack[None,None,:]
-#             else:
-#                 single_color_stack = single_color_stack[None,None,:]
-#                 multi_color_stack = da.concatenate([multi_color_stack,single_color_stack], axis=1)
-            
-#         if t == 0:
-#             stack = multi_color_stack
-#         else:
-#             stack = da.concatenate([stack,multi_color_stack], axis=0)
-    
-#     return stack
-
-# ## Build z_sharded_zip_store
-# to_compute = []
-# for key in pyramidMap:
-#     if key == 0:
-#         continue
-#     print('Assembling dask array at resolution level {}'.format(key))
-#     imageStack = build_array_res_level(out_location,key-1)
-    
-#     to_compute = []
-#     for t in range(imageStack.shape[0]):
-#         for c in range(imageStack.shape[1]):
-            
-#             current_stack = imageStack[t,c] #Previous stack to be downsampled
-            
-#             mean_downsampled_stack = []
-#             # min_shape = current_stack[1::2,1::2,1::2].shape
-#             min_shape = pyramidMap[key][0]
-#             for z,y,x in product(range(2),range(2),range(2)):
-#                 downsampled = current_stack[z::2,y::2,x::2][:min_shape[0],:min_shape[1],:min_shape[2]]
-#                 downsampled = downsampled.rechunk()
-#                 mean_downsampled_stack.append(downsampled)
-#                 del downsampled
-            
-#             mean_downsampled_stack = da.stack(mean_downsampled_stack)
-#             mean_downsampled_stack = mean_downsampled_stack.map_blocks(img_as_float32, dtype=float)
-#             mean_downsampled_stack = mean_downsampled_stack.mean(axis=0)
-#             mean_downsampled_stack = mean_downsampled_stack.map_blocks(img_as_uint, dtype=np.uint16)
-#             # mean_downsampled_stack = mean_downsampled_stack.rechunk(pyramidMap[key][1])
-                
-            
-#             for z_shards in range(0,pyramidMap[key][0][0],pyramidMap[key][1][0]):
-#                 print(z_shards)
-#                 location = os.path.join(out_location,store_location_formatter(key,t,c,z_shards))
-                
-#                 toWrite = mean_downsampled_stack[z_shards:z_shards+pyramidMap[key][1][0]]
-                
-#                 future = delayed(write_to_zip_store)(toWrite,location)
-#                 # future = toWrite.map_blocks(write_to_zip_store, location=location, dtype=bool)
-#                 # print('Computing Res {}, time {}, channel {}, shard {}'.format(key,t,c,z_shards))
-#                 # future = client.compute(future)
-#                 # future = client.gather(future)
-                
-#                 to_compute.append(future)
-            
-            
-#     total_jobs = len(to_compute)
-#     print('Submitting {} of {}'.format(1,total_jobs))
-#     submit = client.compute(to_compute[0], priority=1)
-#     to_compute = to_compute[1:]
-#     submitted = [submit]
-#     del submit
-
-#     idx = 2
-#     while True:
-#         time.sleep(2)
-#         if len(to_compute) == 0:
-#             break
-        
-#         while sum( [x.status == 'pending' for x in submitted] ) >= sim_jobs:
-#             time.sleep(2)
-        
-#         print('Submitting {} of {}'.format(idx,total_jobs))
-#         submit = client.compute(to_compute[0], priority=idx)
-#         to_compute = to_compute[1:]
-#         submitted.append(submit)
-#         del submit
-#         idx += 1
-#         submitted = [x for x in submitted if x.status != 'finished']
-
-#     submitted = client.gather(submitted)
-#     del submitted
-
-
-# client.close()
-
-
-# # if __name__ == "__main__":
-# #     client = Client()
-# #     build()
-# #     client.close()
-# # else:
-# #     print('NOPE')
-# #     exit()
-
-
-
