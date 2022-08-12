@@ -554,15 +554,23 @@ if __name__ == '__main__':
     in_location = '/bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725'
     out_location = '/bil/users/awatson/test_h5_conv_2bdaf9e66a246844'
         
-        
+    
     mr = builder(in_location,out_location,tmp_dir='/bil/users/awatson/test_conv/tmp')
+    
+    
+    # 4 workers per core = 20 workers with lnode of 80 cores
+    # 4 Threads per workers
     with dask.config.set({'temporary_directory': mr.tmp_dir}):
             
         # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
         # with Client(n_workers=8,threads_per_worker=2) as client:
-        with Client(n_workers=mr.sim_jobs,threads_per_worker=4) as client:
+        workers = 20
+        threads = 4
+        workers = 1
+        threads = 4
+        with Client(n_workers=workers,threads_per_worker=threads) as client:
             pass
-            # mr.write_resolution_series(client)
+            mr.write_resolution_series(client)
             # mr.write_resolution(2,client)
             # mr.write_resolution(3,client)
             # mr.write_resolution(4,client)
