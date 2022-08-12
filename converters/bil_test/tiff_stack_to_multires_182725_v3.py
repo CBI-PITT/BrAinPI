@@ -555,7 +555,8 @@ if __name__ == '__main__':
     out_location = '/bil/users/awatson/test_h5_conv_2bdaf9e66a246844'
         
     
-    mr = builder(in_location,out_location,tmp_dir='/bil/users/awatson/test_conv/tmp')
+    # mr = builder(in_location,out_location,tmp_dir='/bil/users/awatson/test_conv/tmp')
+    mr = builder(in_location,out_location,tmp_dir='/local')
     
     
     # 4 workers per core = 20 workers with lnode of 80 cores
@@ -564,7 +565,7 @@ if __name__ == '__main__':
             
         # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
         # with Client(n_workers=8,threads_per_worker=2) as client:
-        workers = 20
+        workers = 10
         threads = 4
         # workers = 18
         # threads = 4
