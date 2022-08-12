@@ -566,8 +566,8 @@ if __name__ == '__main__':
         # with Client(n_workers=8,threads_per_worker=2) as client:
         workers = 20
         threads = 4
-        workers = 18
-        threads = 4
+        # workers = 18
+        # threads = 4
         with Client(n_workers=workers,threads_per_worker=threads) as client:
             pass
             mr.write_resolution_series(client)
