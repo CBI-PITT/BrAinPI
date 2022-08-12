@@ -549,7 +549,8 @@ class builder:
 
 if __name__ == '__main__':
     
-
+    start = time.time()
+    
     
     in_location = '/bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725'
     out_location = '/bil/users/awatson/test_h5_conv_2bdaf9e66a246844'
@@ -565,11 +566,12 @@ if __name__ == '__main__':
             
         # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
         # with Client(n_workers=8,threads_per_worker=2) as client:
-        workers = 10
+        workers = 1
         threads = 4
         # workers = 18
         # threads = 4
-        with Client(n_workers=workers,threads_per_worker=threads,memory_target_fraction=0.95,memory_limit='60GB') as client:
+        # with Client(n_workers=workers,threads_per_worker=threads,memory_target_fraction=0.95,memory_limit='60GB') as client:
+        with Client(n_workers=workers,threads_per_worker=threads) as client:
             
             mr.write_resolution_series(client)
             # mr.write_resolution(2,client)
@@ -577,8 +579,8 @@ if __name__ == '__main__':
             # mr.write_resolution(4,client)
             # mr.write_resolution(5,client)
             # mr.write_resolution(6,client)
-    
-    
+    stop = time.time()
+    print((stop - start)/60/60)
     
 ## https://download.brainimagelibrary.org/2b/da/2bdaf9e66a246844/mouseID_405429-182725/
 ## /bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725/
