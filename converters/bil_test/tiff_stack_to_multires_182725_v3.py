@@ -44,7 +44,7 @@ class builder:
             self,in_location,out_location,fileType='tif',
             geometry=(0.35,0.35,1),origionalChunkSize=(1,1,4,1024,1024),finalChunkSize=(1,1,128,128,128),
             sim_jobs=8, compressor=Blosc(cname='zstd', clevel=9, shuffle=Blosc.BITSHUFFLE),
-            zarr_store_type=H5Store, chunk_limit_MB=2048, tmp_dir='/CBI_FastStore/tmp_dask', build_imediately = False
+            zarr_store_type=H5Store, chunk_limit_MB=2048, tmp_dir='/local', build_imediately = False
             ):
                 
         self.in_location = in_location
@@ -555,7 +555,7 @@ if __name__ == '__main__':
     out_location = '/bil/users/awatson/test_h5_conv_2bdaf9e66a246844'
         
         
-    mr = builder(in_location,out_location)
+    mr = builder(in_location,out_location,tmp_dir='/bil/users/awatson/test_conv/tmp')
     with dask.config.set({'temporary_directory': mr.tmp_dir}):
             
         # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
