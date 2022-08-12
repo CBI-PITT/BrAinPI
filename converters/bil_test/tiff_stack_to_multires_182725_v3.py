@@ -29,6 +29,14 @@ Working with sef-contained delayed frunction, but small number of threads makes 
 2x downsamples only
 '''
 
+path = '/bil/users/awatson/test_conv/BrAinPI/converters'
+    
+if path not in sys.path:
+    sys.path.append(path)
+
+from H5_zarr_store6 import H5Store
+from tiff_manager import tiff_manager, tiff_manager_3d
+# from Z:\cbiPythonTools\bil_api\converters\H5_zarr_store3 import H5Store
 
 class builder:
     
@@ -541,14 +549,7 @@ class builder:
 
 if __name__ == '__main__':
     
-    path = '/bil/users/awatson/test_conv/BrAinPI/converters'
-        
-    if path not in sys.path:
-        sys.path.append(path)
-    
-    from H5_zarr_store6 import H5Store
-    from tiff_manager import tiff_manager, tiff_manager_3d
-    # from Z:\cbiPythonTools\bil_api\converters\H5_zarr_store3 import H5Store
+
     
     in_location = '/bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725'
     out_location = '/bil/users/awatson/test_h5_conv_2bdaf9e66a246844'
