@@ -67,8 +67,12 @@ class builder:
         ##  LIST ALL FILES TO BE CONVERTED  ##
         ## Assume files are laid out as "color_dir/images"
         filesList = []
-        for ii in sorted(glob.glob(os.path.join(self.in_location,'CH[0-9]'))):
-            filesList.append(sorted(glob.glob(os.path.join(ii,'*.{}'.format(self.fileType)))))
+        if isinstance(self.in_location,(list,tuple)):
+            for ii in self.in_location:
+                filesList.append(sorted(glob.glob(os.path.join(ii,'*.{}'.format(self.fileType)))))
+        else:
+            for ii in sorted(glob.glob(os.path.join(self.in_location,'*'))):
+                filesList.append(sorted(glob.glob(os.path.join(ii,'*.{}'.format(self.fileType)))))
         
         # print(filesList)
         
@@ -554,8 +558,11 @@ if __name__ == '__main__':
     start = time.time()
     
     
-    in_location = '/bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725'
-    out_location = '/bil/users/awatson/test_h5_conv_2bdaf9e66a246844'
+    in_location = [
+        '/bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725/CH1',
+        '/bil/data/2b/da/2bdaf9e66a246844/mouseID_405429-182725/CH2'
+        ]
+    out_location = '/bil/users/awatson/conv/2bdaf9e66a246844'
         
     
     # mr = builder(in_location,out_location,tmp_dir='/bil/users/awatson/test_conv/tmp')
@@ -568,10 +575,8 @@ if __name__ == '__main__':
             
         # with Client(n_workers=sim_jobs,threads_per_worker=os.cpu_count()//sim_jobs) as client:
         # with Client(n_workers=8,threads_per_worker=2) as client:
-        workers = 8
+        workers = 20
         threads = 4
-        # workers = 18
-        # threads = 4
         # with Client(n_workers=workers,threads_per_worker=threads,memory_target_fraction=0.95,memory_limit='60GB') as client:
         with Client(n_workers=workers,threads_per_worker=threads) as client:
             
