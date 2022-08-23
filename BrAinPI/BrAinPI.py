@@ -20,6 +20,7 @@ import zarrLoader
 import zarr_zip_sharded_loader
 import neuroGlancer
 import imaris_ims_file_reader as ims
+from ome_zarr_loader import ome_zarr_loader
 
 
 
@@ -115,6 +116,8 @@ def api_meta():
             z = ims.ims(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.zarr':
             z = zarrLoader.zarrSeries(dsetPath)
+        elif '.ome.zarr' in os.path.split(dsetPath)[-1]:
+            z = ome_zarr_loader(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.z_sharded':
             z = zarr_zip_sharded_loader.zarr_zip_sharded(dsetPath)
         elif os.path.exists(os.path.join(dsetPath,'weave.json')):
@@ -150,6 +153,8 @@ def meta(req_path):
         
         if os.path.splitext(dsetPath)[1] == '.ims':
             z = ims.ims(dsetPath)
+        elif '.ome.zarr' in os.path.split(dsetPath)[-1]:
+            z = ome_zarr_loader(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.zarr':
             z = zarrLoader.zarrSeries(dsetPath)
         elif os.path.splitext(dsetPath)[1] == '.z_sharded':

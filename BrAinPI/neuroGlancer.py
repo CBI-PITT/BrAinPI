@@ -323,6 +323,7 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https:/
 def neuroglancer_dtypes():
     return [
         '.ims',
+        '.ome.zarr',
         '.zarr',
         '.weave',
         '.z_sharded'

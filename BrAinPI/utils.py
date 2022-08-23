@@ -20,6 +20,8 @@ import zarr
 # from bil_api.dataset_info import dataset_info
 import zarrLoader
 import zarr_zip_sharded_loader4 as zarr_zip_sharded_loader
+from ome_zarr_loader import ome_zarr_loader
+
 # from BrAinPI import config
 # from numcodecs import Blosc
 import blosc
@@ -249,6 +251,9 @@ class config:
                 self.opendata[dataPath].open()
         
         
+        elif '.ome.zarr' in os.path.split(dataPath)[-1]:
+            self.opendata[dataPath] = ome_zarr_loader(dataPath)
+            
         elif os.path.splitext(dataPath)[-1] == '.zarr':
             print('Is Zarr')
             print('Creating zarrSeries object')
