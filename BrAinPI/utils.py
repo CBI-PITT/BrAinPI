@@ -251,7 +251,7 @@ class config:
                 self.opendata[dataPath].open()
         
         
-        elif '.ome.zarr' in os.path.split(dataPath)[-1]:
+        elif '.omezarr' in os.path.split(dataPath)[-1]:
             self.opendata[dataPath] = ome_zarr_loader(dataPath)
             
         elif os.path.splitext(dataPath)[-1] == '.zarr':

@@ -46,10 +46,14 @@ def ng_shader(numpy_like_object):
     channelMins = []
     channelMaxs = []
     for ii in range(metadata['Channels']):
-        lowestResVolume = numpy_like_object[res-1,0,ii,:,:,:]
-        lowestResVolume = lowestResVolume[lowestResVolume > 0]
-        channelMins.append(lowestResVolume.min())
-        channelMaxs.append(lowestResVolume.max())
+        try:
+            channelMins.append(numpy_like_object.metadata[0,0,0,'min'])
+            channelMaxs.append(numpy_like_object.metadata[0,0,0,'max'])
+        except:
+            lowestResVolume = numpy_like_object[res-1,0,ii,:,:,:]
+            lowestResVolume = lowestResVolume[lowestResVolume > 0]
+            channelMins.append(lowestResVolume.min())
+            channelMaxs.append(lowestResVolume.max())
     
     shaderStr = ''
     shaderStr = shaderStr + '// Init for each channel:\n\n'
@@ -173,7 +177,10 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     current_scale = {}
     for res in range(metadata['ResolutionLevels']):
         print('Creating JSON')
-        chunks = list(reversed(list(metadata[(res,0,0,'chunks')][-3:]))) #<-- [x,y,z] orientation
+        try:
+            chunks = list(reversed(list(metadata[(res,0,0,'chunks')][-3:]))) #<-- [x,y,z] orientation
+        except:
+            chunks = list(reversed(list(metadata[(res,'chunks')][-3:]))) #<-- [x,y,z] orientation
         print(chunks)
         if different_chunks == False:
             current_scale["chunk_sizes"] = [
@@ -323,7 +330,7 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https:/
 def neuroglancer_dtypes():
     return [
         '.ims',
-        '.ome.zarr',
+        '.omezarr',
         '.zarr',
         '.weave',
         '.z_sharded'
