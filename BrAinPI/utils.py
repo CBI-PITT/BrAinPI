@@ -252,7 +252,7 @@ class config:
         
         
         elif '.omezarr' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath)
+            self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False)
             
         elif os.path.splitext(dataPath)[-1] == '.zarr':
             print('Is Zarr')
