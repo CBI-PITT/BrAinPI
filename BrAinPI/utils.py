@@ -22,6 +22,7 @@ import zarrLoader
 import zarr_zip_sharded_loader4 as zarr_zip_sharded_loader
 from ome_zarr_loader import ome_zarr_loader
 
+
 # from BrAinPI import config
 # from numcodecs import Blosc
 import blosc
@@ -252,7 +253,10 @@ class config:
         
         
         elif '.omezarr' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False)
+            self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False,zarr_store_type='hss',cache=self.cache)
+        
+        elif '.omezans' in os.path.split(dataPath)[-1]:
+            self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False,zarr_store_type='ans',cache=self.cache)
             
         elif os.path.splitext(dataPath)[-1] == '.zarr':
             print('Is Zarr')

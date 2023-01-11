@@ -9,6 +9,8 @@ import zarr, os, glob, itertools
 import numpy as np
 
 from stack_to_multiscale_ngff.h5_shard_store import H5_Shard_Store
+from stack_to_multiscale_ngff.archived_nested_store import Archived_Nested_Store
+from zarr_chunk_cache import disk_cache_store
 
 # location = r'H:\globus\pitt\bil'
 
@@ -24,13 +26,22 @@ from stack_to_multiscale_ngff.h5_shard_store import H5_Shard_Store
 
 
 class ome_zarr_loader:
-    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type=H5_Shard_Store, verbose=None, squeeze=True):
+    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type=H5_Shard_Store, verbose=None, squeeze=True, cache=None):
         
+        location = location
         self.location = location
         self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
-        self.zarr_store_type = zarr_store_type
+        
+        if isinstance(zarr_store_type,str):
+            if zarr_store_type=='ans':
+                self.zarr_store_type = Archived_Nested_Store
+            if zarr_store_type=='hss':
+                self.zarr_store_type = H5_Shard_Store
+        else:
+            self.zarr_store_type = zarr_store_type
         self.verbose = verbose
         self.squeeze = squeeze
+        self.cache = cache
         self.metaData = {}
         
         store = self.zarr_store_type(self.location)
@@ -79,6 +90,10 @@ class ome_zarr_loader:
                     pass
         
         self.change_resolution_lock(self.ResolutionLevelLock)
+        
+        self.arrays = {}
+        for res in range(self.ResolutionLevels):
+            self.arrays[res] = self.open_array(res)
     
 
     def change_resolution_lock(self,ResolutionLevelLock):
@@ -126,7 +141,7 @@ class ome_zarr_loader:
         print(key)
         
         
-        return self.getSlice(
+        array = self.getSlice(
                         r=res,
                         t = key[0],
                         c = key[1],
@@ -135,24 +150,46 @@ class ome_zarr_loader:
                         x = key[4]
                         )
         
-
-
-    def getSlice(self,r,t,c,z,y,x):
-        
-        '''
-        IMS stores 3D datasets ONLY with Resolution, Time, and Color as 'directory'
-        structure witing HDF5.  Thus, data access can only happen accross dims XYZ
-        for a specific RTC.  
-        '''
-        
-        incomingSlices = (r,t,c,z,y,x)
-        print(incomingSlices)
-        
-        array = self.open_array(r)[t,c,z,y,x]
         if self.squeeze:
             return np.squeeze(array)
         else:
             return array
+        
+    
+    def _get_memorize_cache(self, name=None, typed=False, expire=None, tag=None, ignore=()):
+        if tag is None: tag = self.location
+        return self.cache.memorize(
+            name=name,
+            typed=typed,
+            expire=expire,
+            tag=tag,
+            ignore=ignore
+            ) if self.cache is not None else lambda x: x
+    
+    # @_get_memorize_cache(tag=location)
+    def getSlice(self,r,t,c,z,y,x):
+        
+        '''
+        Access the requested slice based on resolution level and 
+        5-dimentional (t,c,z,y,x) access to zarr array.
+        '''
+        
+        incomingSlices = (r,t,c,z,y,x)
+        print(incomingSlices)
+        if self.cache is not None:
+            key = self.location + '_getSlice_' + str(incomingSlices)
+            result = self.cache.get(key, default='NO RESULT RETURNED', retry=True)
+            if result != 'NO RESULT RETURNED':
+                return result
+        
+        result = self.arrays[r][t,c,z,y,x]
+        
+        if self.cache is not None:
+            # print('Caching slice')
+            self.cache.set(key, result, expire=None, tag=self.location, retry=True)
+        
+        return result
+        # return self.open_array(r)[t,c,z,y,x]
     
     
     def locationGenerator(self,res):
@@ -160,6 +197,13 @@ class ome_zarr_loader:
     
     def open_array(self,res):
         store = self.zarr_store_type(self.locationGenerator(res))
+        try:
+            if self.cache is not None:
+                store = disk_cache_store(store=store, uuid=self.locationGenerator(res), diskcache_object=self.cache, persist=None, meta_data_expire_min=15)
+        except Exception as e:
+            print('Caught Exception')
+            print(e)
+            pass
         return zarr.open(store)
     
     

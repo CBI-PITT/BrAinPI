@@ -35,6 +35,7 @@ import shutil
 import time
 import psutil
 import numpy as np
+import gc
 
 from collections import OrderedDict
 from collections.abc import MutableMapping
@@ -144,16 +145,16 @@ class disk_cache_store(Store):
     #     self._mutex = Lock()
 
     def __len__(self):
-        print('__len__')
+        # print('__len__')
         return len(self._keys())
 
     def __iter__(self):
-        print('__iter__')
+        # print('__iter__')
         return self.keys()
 
     def __contains__(self, key):
-        print('__contains__')
-        print(key)
+        # print('__contains__')
+        # print(key)
         cache_key = self.cache_key('CONTAINS_'+ key)
         if cache_key not in self._diskcache_object:
             self._diskcache_object.set(cache_key, self._store.__contains__(key), expire=self._meta_data_expire, tag=self.uuid + '_CONTAINS')
@@ -164,15 +165,15 @@ class disk_cache_store(Store):
     #     self.invalidate()
 
     def keys(self):
-        print('keys')
+        # print('keys')
         with self._mutex:
             return iter(self._keys())
 
     def _keys(self):
-        print('_keys')
+        # print('_keys')
         cache_key = self.cache_key('KEYS')
         if cache_key not in self._diskcache_object:
-            print('Setting Keys from Cache')
+            # print('Setting Keys from Cache')
             self._diskcache_object.set(cache_key, list(self._store.keys()),tag=self.uuid)
         return self._diskcache_object.get(cache_key)
 
@@ -186,16 +187,16 @@ class disk_cache_store(Store):
     #             return listing
 
     def cache_key(self,key):
-        print('cache_key')
+        # print('cache_key')
         return self._cache_key_prefix+key
 
     def __getitem__(self, key):
-        print('__getitem__')
+        # print('__getitem__')
         cache_key = self.cache_key(key)
         try:
             # first try to obtain the value from the cache
             value = self._diskcache_object[cache_key]
-            print('GOT FROM CACHE: {}'.format(cache_key))
+            # print('GOT FROM CACHE: {}'.format(cache_key))
             # treat the end as most recently used
             if key in self._metadata_keys:
                 self._diskcache_object.touch(cache_key, expire=self._meta_data_expire)
@@ -210,13 +211,13 @@ class disk_cache_store(Store):
             else:
                 # Chunks do not expire
                 self._diskcache_object.add(cache_key, value, tag=self.uuid)
-            print('SET TO CACHE: {}'.format(cache_key))
+            # print('SET TO CACHE: {}'.format(cache_key))
 
         return value
 
     
     def _invalidate(self):
-        print('_invalidate')
+        # print('_invalidate')
         self._invalidate_keys()
         self._invalidate_listdir()
         self._invalidate_contains()
@@ -236,8 +237,8 @@ class disk_cache_store(Store):
         
         
     def __setitem__(self, key, value):
-        print('__setitem__')
-        print(key)
+        # print('__setitem__')
+        # print(key)
         cache_key = self.cache_key(key)
         self._store[key] = value
         if key in self._metadata_keys:
@@ -254,7 +255,7 @@ class disk_cache_store(Store):
     
     def __del__(self):
         if self.persist == False:
-            print('Cleaning up cache for uuid: {}'.format(self.uuid))
+            # print('Cleaning up cache for uuid: {}'.format(self.uuid))
             self._invalidate()
             self._diskcache_object.evict(self.uuid)
     
@@ -356,6 +357,7 @@ class LRUStoreCache_HeadSpace(Store):
 
     
     def _remaining_space_GB(self):
+        # return psutil.virtual_memory().free/1024**3
         return psutil.virtual_memory().free/1024**3
     
     def _pop_value(self):
@@ -366,17 +368,25 @@ class LRUStoreCache_HeadSpace(Store):
         return v
 
     def _remove_value(self):
-        print(len(self._values_cache))
-        _, v = self._values_cache.popitem(last=False)
-        return v
+        # print(len(self._values_cache))
+        for ii in tuple(self._values_cache.keys()):
+            del self._values_cache[ii]
+            # gc.collect()
+            break
+    
+    def _is_room(self,value_size):
+        return self._remaining_space_GB() - (value_size/1024**3) > self._head_space_GB
     
     def _accommodate_value(self, value_size):
-        print('_accommodate_value')
+        # print('_accommodate_value')
+        print(self._remaining_space_GB())
+        print(len(self._values_cache))
         # ensure there is enough space in the cache for a new value
-        while self._remaining_space_GB() - (value_size/1024**3) < self._head_space_GB:
+        while len(self._values_cache) > 0 and not self._is_room(value_size):
             self._remove_value()
             # self._pop_value()
             print('Pop Value')
+            break
             
 
     def _cache_value(self, key: Path, value):
@@ -389,7 +399,8 @@ class LRUStoreCache_HeadSpace(Store):
         #     self._values_cache[key] = value
         #     # self._current_size += value_size
         self._accommodate_value(value_size)
-        self._values_cache[key] = value
+        if self._is_room(value_size):
+            self._values_cache[key] = value
 
     def invalidate(self):
         """Completely clear the cache."""

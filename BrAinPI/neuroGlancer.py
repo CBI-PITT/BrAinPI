@@ -336,6 +336,7 @@ def neuroglancer_dtypes():
     return [
         '.ims',
         '.omezarr',
+        '.omezans',
         '.zarr',
         '.weave',
         '.z_sharded'
