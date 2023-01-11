@@ -156,7 +156,7 @@ def ng_shader(numpy_like_object):
 # }
 
 ## Build neuroglancer json
-def ng_json(numpy_like_object,file=None, different_chunks=False):
+def ng_json(numpy_like_object,file=None, different_chunks=(64,64,64)):
     '''
     Save a json from a 5d numpy like volume
     file = None saves to a BytesIO buffer
@@ -165,7 +165,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     '''
 
     # Alternative chunking depth along axial plane    
-    offDimSize = 1
+    offDimSize = different_chunks
     
     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
     
@@ -186,12 +186,17 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
             current_scale["chunk_sizes"] = [
                         list(chunks)
                 ]
-        else:
+        elif isinstance(different_chunks,int):
             current_scale["chunk_sizes"] = [
                         [chunks[0],chunks[1],offDimSize],
                         [chunks[0],offDimSize,chunks[1]],
                         [offDimSize,chunks[0],chunks[1]]
                 ]
+        elif isinstance(different_chunks,tuple) and len(different_chunks) == 3:
+            current_scale["chunk_sizes"] = [
+                list(different_chunks)
+                ]
+            
         
         current_scale["encoding"] = 'raw'
         current_scale["key"] = str(res)
@@ -477,12 +482,15 @@ def setup_neuroglancer(app, config):
     
     ngPath = '/ng/' #<--- final slash is required for proper navigation through dir tree
     
+    #################################################################
+    ## ** TURN ON CACHING OF NG END POINT BY UNCOMMENTING BELOW ** ##
+    #################################################################
     ## Decorating neuro_glancer_entry to allow caching ##
     if config.cache is not None:
         print('Caching setup')
         neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
         print(neuro_glancer_entry)
-    # neuro_glancer_entry = login_required(neuro_glancer_entry)
+    # # neuro_glancer_entry = login_required(neuro_glancer_entry)
     
     
    
