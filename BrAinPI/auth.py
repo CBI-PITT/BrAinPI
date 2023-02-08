@@ -66,7 +66,10 @@ def setup_auth(app):
     # Configure login rate limiter
     ##########################################################
     
-    limiter = Limiter(app, key_func=get_remote_address)
+    # limiter = Limiter(app, key_func=get_remote_address)
+    ##TODO Rate limiter needs to be in place where all workers can access
+    #https://flask-limiter.readthedocs.io/en/stable/configuration.html#RATELIMIT_STORAGE_URI
+    limiter = Limiter(get_remote_address,app=app,storage_uri="memory://")
     
     @app.errorhandler(429)
     def ratelimit_handler(e):
@@ -90,8 +93,7 @@ def setup_auth(app):
         return render_template('login.html', user=user_info())
     
     
-    
-    
+
     @app.route('/login', methods=['POST'])
     @limiter.limit(settings.get('auth','login_limit'))
     def login_post():

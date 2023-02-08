@@ -233,9 +233,14 @@ class config:
             # self.cache = FanoutCache(self.cacheLocation,shards=16)
             self.cache = FanoutCache(self.cacheLocation, shards=self.shards, timeout=self.timeout, size_limit=self.cacheSizeBytes)
             ## Consider removing this and always leaving open to improve performance
-            self.cache.close()
+            # self.cache.close()
         else:
             self.cache = None
+
+        def __del__(self):
+            if self.cache is not None:
+                self.cache.close()
+
 
     
     def loadDataset(self, dataPath:str):

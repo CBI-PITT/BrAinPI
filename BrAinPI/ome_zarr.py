@@ -100,8 +100,8 @@ def pad_chunk(chunk, chunk_size):
 
 
 def get_compressor():
-    # return Blosc(cname='lz4',clevel=3)
-    return Blosc(cname='lz4', clevel=3, shuffle=Blosc.SHUFFLE, blocksize=0)
+    return Blosc(cname='lz4',clevel=3)
+    # return Blosc(cname='lz4', clevel=3, shuffle=Blosc.SHUFFLE, blocksize=0)
     # return Blosc(cname='zstd', clevel=5, shuffle=Blosc.SHUFFLE, blocksize=0)
 
 
@@ -126,7 +126,8 @@ def get_compressor():
 def compress_zarr_chunk(np_array,compressor=get_compressor()):
     # buf = np.asarray(np_array).astype(np_array.dtype, casting="safe")
     buf = np_array.tobytes('C')
-    buf = compressor.encode(buf)
+    if compressor is not None:
+        buf = compressor.encode(buf)
     img_ram = io.BytesIO()
     img_ram.write(buf)
     img_ram.seek(0)
@@ -487,7 +488,6 @@ def setup_omezarr(app, config):
             datapath = open_omezarr_dataset(config,datapath)
             config.opendata[datapath].metadata
 
-            dataset_shape = config.opendata[datapath].metadata[(resolution,0,0,'shape')]
             if isNeuroGlancer:
                 # print(451)
                 chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
@@ -498,6 +498,7 @@ def setup_omezarr(app, config):
                 # print(456)
 
             # Determine where the chunk is in the actual dataset
+            dataset_shape = config.opendata[datapath].metadata[(resolution, 0, 0, 'shape')]
             # print(dataset_shape)
             locationDict = where_is_that_chunk(chunk_name=chunk_name, dataset_shape=dataset_shape, chunk_size=chunk_size)
             # print('Chunk is here:')
@@ -575,10 +576,10 @@ def setup_omezarr(app, config):
     zarrpath = '/omezarr/' #<--- final slash is required for proper navigation through dir tree
 
     # Decorating neuro_glancer_entry to allow caching ##
-    if config.cache is not None:
-        print('Caching setup')
-        omezarr_entry = config.cache.memoize()(omezarr_entry)
-        print(omezarr_entry)
+    # if config.cache is not None:
+    #     print('Caching setup')
+    #     omezarr_entry = config.cache.memoize()(omezarr_entry)
+    #     print(omezarr_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
 
     omezarr_entry = cross_origin(allow_headers=['Content-Type'])(omezarr_entry)

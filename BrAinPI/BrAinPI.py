@@ -12,7 +12,9 @@ import numpy as np
 # import dask.array as da
 
 ## Project imports
-import utils, auth
+import auth
+import utils
+
 
 ## File-type handler imports (some are project specific)
 import tifffile as tf

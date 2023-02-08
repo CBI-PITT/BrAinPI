@@ -176,16 +176,23 @@ class ome_zarr_loader:
         incomingSlices = (r,t,c,z,y,x)
         print(incomingSlices)
         if self.cache is not None:
-            key = self.location + '_getSlice_' + str(incomingSlices)
-            result = self.cache.get(key, default='NO RESULT RETURNED', retry=True)
-            if result != 'NO RESULT RETURNED':
+            key = f'{self.location}_getSlice_{str(incomingSlices)}'
+            # key = self.location + '_getSlice_' + str(incomingSlices)
+            result = self.cache.get(key, default=None, retry=True)
+            if result is not None:
                 return result
         
         result = self.arrays[r][t,c,z,y,x]
-        
+
         if self.cache is not None:
-            # print('Caching slice')
             self.cache.set(key, result, expire=None, tag=self.location, retry=True)
+            # test = True
+            # while test:
+            #     # print('Caching slice')
+            #     self.cache.set(key, result, expire=None, tag=self.location, retry=True)
+            #     if result == self.getSlice(*incomingSlices):
+            #         test = False
+
         
         return result
         # return self.open_array(r)[t,c,z,y,x]
@@ -196,13 +203,13 @@ class ome_zarr_loader:
     
     def open_array(self,res):
         store = self.zarr_store_type(self.locationGenerator(res))
-        try:
-            if self.cache is not None:
-                store = disk_cache_store(store=store, uuid=self.locationGenerator(res), diskcache_object=self.cache, persist=None, meta_data_expire_min=15)
-        except Exception as e:
-            print('Caught Exception')
-            print(e)
-            pass
+        # try:
+        #     if self.cache is not None:
+        #         store = disk_cache_store(store=store, uuid=self.locationGenerator(res), diskcache_object=self.cache, persist=None, meta_data_expire_min=15)
+        # except Exception as e:
+        #     print('Caught Exception')
+        #     print(e)
+        #     pass
         return zarr.open(store)
     
     
