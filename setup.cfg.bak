@@ -36,6 +36,7 @@ install_requires =
 	flask-cors
 	flask-login
 	flask_limiter
+	Flask-Caching
 	ldap3
 	gunicorn
 	diskcache
@@ -54,4 +55,8 @@ install_requires =
 	pebble
 	natsort
 	blosc
+	
+	dask
+	distributed
+	numcodecs
 	

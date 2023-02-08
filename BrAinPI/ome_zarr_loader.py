@@ -166,7 +166,6 @@ class ome_zarr_loader:
             ignore=ignore
             ) if self.cache is not None else lambda x: x
     
-    # @_get_memorize_cache(tag=location)
     def getSlice(self,r,t,c,z,y,x):
         
         '''

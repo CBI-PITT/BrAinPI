@@ -13,6 +13,9 @@ from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
 import numpy as np
 import os
 
+from functools import lru_cache
+
+
 ## Project imports
 # from dataset_info import dataset_info
 import utils
@@ -156,7 +159,7 @@ def ng_shader(numpy_like_object):
 # }
 
 ## Build neuroglancer json
-def ng_json(numpy_like_object,file=None, different_chunks=(64,64,64)):
+def ng_json(numpy_like_object,file=None, different_chunks=False):
     '''
     Save a json from a 5d numpy like volume
     file = None saves to a BytesIO buffer
@@ -490,8 +493,10 @@ def setup_neuroglancer(app, config):
     if config.cache is not None:
         print('Caching setup')
         neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
+        # neuro_glancer_entry = config.fcache.cached(timeout=3600)(neuro_glancer_entry)
+        # neuro_glancer_entry = lru_cache(maxsize=5000)(neuro_glancer_entry) #Causing some IO errors not sure why
         print(neuro_glancer_entry)
-    # # neuro_glancer_entry = login_required(neuro_glancer_entry)
+    # neuro_glancer_entry = login_required(neuro_glancer_entry)
     
     
    

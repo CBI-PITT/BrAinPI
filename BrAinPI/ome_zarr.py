@@ -88,19 +88,21 @@ def pad_chunk(chunk, chunk_size):
         return chunk
     
     canvas = np.zeros(chunk_size,dtype=chunk.dtype)
-    if len(chunk.shape)==2:
-        canvas[0:chunk.shape[0],0:chunk.shape[1]] = chunk
-    elif len(chunk.shape)==3:
-        canvas[0:chunk.shape[0],0:chunk.shape[1],0:chunk.shape[2]] = chunk
+    if len(chunk.shape)==5:
+        canvas[0:chunk.shape[0],0:chunk.shape[1],0:chunk.shape[2],0:chunk.shape[3],0:chunk.shape[4]] = chunk
     elif len(chunk.shape)==4:
         canvas[0:chunk.shape[0],0:chunk.shape[1],0:chunk.shape[2],0:chunk.shape[3]] = chunk
-    elif len(chunk.shape)==5:
-        canvas[0:chunk.shape[0],0:chunk.shape[1],0:chunk.shape[2],0:chunk.shape[3],0:chunk.shape[4]] = chunk
+    elif len(chunk.shape)==3:
+        canvas[0:chunk.shape[0],0:chunk.shape[1],0:chunk.shape[2]] = chunk
+    elif len(chunk.shape) == 2:
+        canvas[0:chunk.shape[0], 0:chunk.shape[1]] = chunk
     return canvas
 
 
 def get_compressor():
-    return Blosc(cname='zstd', clevel=4, shuffle=Blosc.BITSHUFFLE, blocksize=0)
+    # return Blosc(cname='lz4',clevel=3)
+    return Blosc(cname='lz4', clevel=3, shuffle=Blosc.SHUFFLE, blocksize=0)
+    # return Blosc(cname='zstd', clevel=5, shuffle=Blosc.SHUFFLE, blocksize=0)
 
 
 # def compress_zarr_chunk(np_array,compressor=get_compressor()):
@@ -122,23 +124,37 @@ def get_compressor():
 #     return compressed
 
 def compress_zarr_chunk(np_array,compressor=get_compressor()):
-    buf = np.asarray(np_array).astype(np_array.dtype, casting="safe")
+    # buf = np.asarray(np_array).astype(np_array.dtype, casting="safe")
     buf = np_array.tobytes('C')
     buf = compressor.encode(buf)
     img_ram = io.BytesIO()
     img_ram.write(buf)
     img_ram.seek(0)
-    
+
     return img_ram
 
-def get_zarray_file(numpy_like_dataset,resolution_level):
-    
+def chunks_combine_channels(metadata,resolution_level):
+    '''
+    Assumes 5 dimensions and replaces channel dim (t,c,z,y,x) with the number of channels.
+    This is good for neuroglancer compatibility because it enables all channels to be delivered with each chunk
+    enabling a shader to mix all channels into RGB representation
+
+    return new chunk_size tuple
+    '''
+    chunks = list(metadata[(resolution_level, 0, 0, 'chunks')])
+    chunks[1] = metadata['Channels']
+    return tuple(chunks)
+
+def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False):
+
     metadata = utils.metaDataExtraction(numpy_like_dataset,strKey=False)
-    # metadata = metaDataExtraction(numpy_like_dataset,strKey=False)
-    
+
     zarray = {}
-    zarray['chunks'] = metadata[(resolution_level,0,0,'chunks')]
-    
+    if combine_channels:
+        zarray['chunks'] = chunks_combine_channels(metadata,resolution_level)
+    else:
+        zarray['chunks'] = metadata[(resolution_level,0,0,'chunks')]
+
     compressor = get_compressor()
     zarray['compressor'] = {}
     zarray['compressor']['blocksize'] = compressor.blocksize
@@ -146,17 +162,16 @@ def get_zarray_file(numpy_like_dataset,resolution_level):
     zarray['compressor']['cname'] = compressor.cname
     zarray['compressor']['id'] = compressor.codec_id
     zarray['compressor']['shuffle'] = compressor.shuffle
-    
-    print(metadata[(0, 0, 0, 'dtype')])
-    print(encoding_values[metadata[(0, 0, 0, 'dtype')]])
-    zarray['dimension_separator'] = '.'
+
+    # zarray['dimension_separator'] = '.'
+    zarray['dimension_separator'] = '/' #<-- required for compatibility with ome-zarr 4.0
     zarray['dtype'] = encoding_values[metadata[(0, 0, 0, 'dtype')]]#'<u2' if numpy_like_dataset.dtype == np.uint16 else '<u2'  ## Need to figure out other dtype opts for uint8, float et al
     zarray['fill_value'] = 0
     zarray['filters'] = None
     zarray['order'] = 'C'
-    zarray['shape'] = metadata['TimePoints'],metadata['Channels'],*metadata[(resolution_level,0,0,'shape')][-3:] 
+    zarray['shape'] = metadata['TimePoints'],metadata['Channels'],*metadata[(resolution_level,0,0,'shape')][-3:]
     zarray['zarr_format'] = 2
-    
+
     return zarray
 
 
@@ -207,23 +222,23 @@ encoding_values = {
     'float64':'<f8'
     }
 
-###################################
-### OME-NGFF Complient .zattr   ###
-###################################
+#####################################
+### OME-NGFF 0.4 Complient .zattr ###
+#####################################
 
 def get_zattr_file(numpy_like_dataset):
-    
+
     metadata = utils.metaDataExtraction(numpy_like_dataset,strKey=False)
     # metadata = metaDataExtraction(numpy_like_dataset,strKey=False)
-    
+
     zattr = {}
-    
+
     ### Build creator info ###
     zattr['_creator'] = {
         'name':'BrAinPI',
         'version':'0.3.0'
         }
-    
+
     ###################
     ### MULTISCALES ###
     ###################
@@ -248,7 +263,7 @@ def get_zattr_file(numpy_like_dataset):
          'unit':'micrometer'
             }
         ]
-    
+
     datasets = []
     for res in range(metadata['ResolutionLevels']):
         level = {
@@ -261,7 +276,7 @@ def get_zattr_file(numpy_like_dataset):
                 ]
             }
         datasets.append(level)
-    
+
     zattr['multiscales'] = [
         {
         'axes':axes,
@@ -277,27 +292,27 @@ def get_zattr_file(numpy_like_dataset):
             }
         }
         ]
-    
+
     colors * math.ceil(metadata['Channels']/len(colors))
-    
-    
+
+
     # lowest_res_level = numpy_like_dataset[metadata['ResolutionLevels']-1,0,0,:,:,:]
-    
-    
+
+
     #############
     ### OMERO ###
     #############
     channels = []
     for ch in range(metadata['Channels']):
         current_channel_data = numpy_like_dataset[metadata['ResolutionLevels']-1,0,ch,:,:,:]
-        
+
         end = int(current_channel_data.max()) if not value_types[current_channel_data.dtype] == float else float(current_channel_data.max())
         start = int(current_channel_data.min()) if not value_types[current_channel_data.dtype] == float else float(current_channel_data.min())
-        
+
         if value_types[current_channel_data.dtype] == float and \
             ((end > 1 or end < 1) or \
                 (start < 1 or start > 1)): #<---  May need to look at this more closely
-            
+
             if end > 1:
                 max_window = end*2
             if end < 1:
@@ -306,11 +321,11 @@ def get_zattr_file(numpy_like_dataset):
                 min_window = start / 2
             if start <= 0:
                 min_window = start*2
-                
+
         else:
             max_window = end*2 if end*2 <= values[current_channel_data.dtype][1] else values[current_channel_data.dtype][1]
             min_window = start//2 if start//2 >= values[current_channel_data.dtype][0] else values[current_channel_data.dtype][0]
-        
+
         channel = {
             'active':True,
             'coefficient': 1.0,
@@ -325,10 +340,10 @@ def get_zattr_file(numpy_like_dataset):
                 'start':start
                 }
             }
-        
+
         channels.append(channel)
-    
-    
+
+
     zattr['omero'] = {
         'id':1,
         'name':"Need to add file name.ext",
@@ -340,112 +355,127 @@ def get_zattr_file(numpy_like_dataset):
             'model':'color' #'color' or 'greyscale'
             }
         }
-    
-    
+
+
     return zattr
-    
+
 
 
 
 def open_omezarr_dataset(config,datapath):
-    
+
     datapath = config.loadDataset(datapath)
-    
+
     # if not hasattr(config.opendata[datapath],'ng_json'):
         # or not hasattr(config.opendata[datapath],'ng_files'):
-            
+
             ## Forms a comrehensive file list for all chunks
             ## Not necessary for neuroglancer to function and take a long time
             # config.opendata[datapath].ng_files = \
             #     neuroGlancer.ng_files(config.opendata[datapath])
-            
+
             ## Temp ignoring of ng_files
             ## Add attribute so this constantly repeated
             # config.opendata[datapath].ng_files = True
-            
+
             # config.opendata[datapath].ng_json = \
             #     ng_json(config.opendata[datapath],file='dict')
-    
+
     return datapath
-
-
-
-
-
 
 
 file_name_template = '{}.{}.{}.{}.{}'
 file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
 
+# OME-Zarr extensions to enable arbitrary use of extension for ome zarr compatibility in various apps
+# NOTE: .ng.ome.zarr causes a change in the represented chunk size by combining channels into each chunk using func chunks_combine_channels
+exts = ['.ng.ome.zarr','.ome.zarr','.omezarr','.ome.ngff','.ngff']
 
 def setup_omezarr(app, config):
-    
+
     def omezarr_entry(req_path):
-        
+
         path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
-        
-        print(path_split)
+
+        # print(path_split)
+        # print(datapath)
         ##  HAck if ignores '.' as dimension_sperator
         try:
             new_path = path_split[-5:]
-            print(new_path)
+            # print(new_path)
             if all([isinstance(int(x),int) for x in new_path]):
-                print('in if')
+                # print('in if')
                 new_path = '.'.join(new_path)
-                print(new_path)
+                # print(new_path)
                 request.path = '/' + os.path.join(*path_split[:-5],new_path)
-                print(request.path)
+                # print(request.path)
                 path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
             else:
                 pass
         except Exception:
             pass
-        
+
+        # Attempt to enable ome.zarr ext for compatibility with omezarr utils
+        isNeuroGlancer = False
+        for ext in exts:
+            if len(datapath.split(ext)) > 1:
+                datapath = datapath.replace(ext,'')
+                if ext == '.ng.ome.zarr': isNeuroGlancer = True
+                # print(f'DATAPATH MINUS EXT: {datapath}')
+                break
+
         print(path_split)
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
-        # If only the file name is requested this will redirect to a 
+        # If only the file name is requested this will redirect to a
         if isinstance(re.match(file_pattern,path_split[-1]),re.Match):
             # Find requested chunk name
             chunk_name = path_split[-1]
             resolution = int(datapath.split('/')[-2])
-            
+
             # Open dataset
             datapath = '/' + os.path.join(*datapath.split('/')[:-2])
             datapath = open_omezarr_dataset(config,datapath)
             config.opendata[datapath].metadata
-            
+
             dataset_shape = config.opendata[datapath].metadata[(resolution,0,0,'shape')]
-            chunk_size = config.opendata[datapath].metadata[(resolution,0,0,'chunks')]
-            
+            if isNeuroGlancer:
+                # print(451)
+                chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
+                # print(453)
+                # print(chunk_size)
+            else:
+                chunk_size = config.opendata[datapath].metadata[(resolution,0,0,'chunks')]
+                # print(456)
+
             # Determine where the chunk is in the actual dataset
-            print(dataset_shape)
+            # print(dataset_shape)
             locationDict = where_is_that_chunk(chunk_name=chunk_name, dataset_shape=dataset_shape, chunk_size=chunk_size)
-            print('Chunk is here:')
-            print(locationDict)
-            
-            
+            # print('Chunk is here:')
+            # print(locationDict)
+
+
             chunk = get_chunk(locationDict,resolution,config.opendata[datapath],chunk_size)
-            print(chunk.shape)
+            # print(chunk.shape)
             chunk = pad_chunk(chunk, chunk_size)
-            print(chunk.shape)
+            # print(chunk.shape)
             # chunk = np.squeeze(chunk)
             # print(chunk.shape)
             chunk = compress_zarr_chunk(chunk,compressor=get_compressor())
-            
+
             # Flask return of bytesIO as file
-            
+
             return Response(response=chunk, status=200,
                             mimetype="application/octet_stream")
-        
+
             # return send_file(
             #     chunk,
             #     as_attachment=True,
             #     download_name=path_split[-1], # name needs to match chunk
             #     mimetype='application/octet-stream'
             # )
-        
-        
+
+
         elif path_split[-1] == 'labels':
             abort(404)
         elif path_split[-1] == '.zarray':
@@ -455,7 +485,9 @@ def setup_omezarr(app, config):
                 resolution = int(datapath.split('/')[-2])
                 datapath = '/' + os.path.join(*datapath.split('/')[:-2])
                 datapath = open_omezarr_dataset(config,datapath)
-                return jsonify(get_zarray_file(config.opendata[datapath],resolution))
+                # return Response(response=get_zarray_file(config.opendata[datapath],resolution), status=200,
+                #                 mimetype="application/octet_stream")
+                return jsonify(get_zarray_file(config.opendata[datapath],resolution,combine_channels=isNeuroGlancer))
             except:
                 abort(404)
         elif path_split[-1] == '.zattrs':
@@ -463,28 +495,42 @@ def setup_omezarr(app, config):
                 abort(404)
             datapath = '/' + os.path.join(*datapath.split('/')[:-1])
             datapath = open_omezarr_dataset(config,datapath)
+            # return Response(response=get_zattr_file(config.opendata[datapath]), status=200,
+            #                 mimetype="application/octet_stream")
             return jsonify(get_zattr_file(config.opendata[datapath]))
         elif path_split[-1] == '.zgroup':
+            # return Response(response={'zarr_format':2}, status=200,
+            #                 mimetype="application/octet_stream")
             return jsonify(
                 {'zarr_format':2}
                 )
-        
+
+        # files = ['.zattrs','.zgroup']
+        # path_join = '/'.join(path_split)
+        # tmp = '<html><body><pre>'
+        # file_template = '''<a href="{}">{}</a> '''
+        # for ii in files:
+        #     # tmp_join = '/'.join([path_join, ii])
+        #     tmp = tmp + file_template.format(ii,ii)
+        # tmp = tmp + '</pre></body></html>'
+
+        # return Response(tmp)
         abort(404)
-        
+
         #####  FUNCTION END  ######
-        
-    
-    
+
+
+
     zarrpath = '/omezarr/' #<--- final slash is required for proper navigation through dir tree
-    
+
     # Decorating neuro_glancer_entry to allow caching ##
     if config.cache is not None:
         print('Caching setup')
         omezarr_entry = config.cache.memoize()(omezarr_entry)
         print(omezarr_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
-    
-    # omezarr_entry = cross_origin(allow_headers=['Content-Type'])(omezarr_entry)
+
+    omezarr_entry = cross_origin(allow_headers=['Content-Type'])(omezarr_entry)
     # omezarr_entry = login_required(omezarr_entry)
     omezarr_entry = app.route(zarrpath + '<path:req_path>')(omezarr_entry)
     omezarr_entry = app.route(zarrpath, defaults={'req_path': ''})(omezarr_entry)

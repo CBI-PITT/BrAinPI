@@ -22,6 +22,9 @@ import neuroGlancer
 import imaris_ims_file_reader as ims
 from ome_zarr_loader import ome_zarr_loader
 
+from functools import lru_cache
+
+
 
 
 os.chdir(sys.path[0])
@@ -425,6 +428,11 @@ def grabArray(datapath,intArgs):
     return out
 
 ###############################################################################
+# ## INIT FlaskCache
+# from flask_caching import Cache
+# fcache = Cache(config={'CACHE_TYPE': 'SimpleCache','CACHE_THRESHOLD': 1000000})
+# config.fcache.init_app(app)
+
 print('Importing Neuroglancer endpoints')
 app = neuroGlancer.setup_neuroglancer(app, config)
 
@@ -444,6 +452,9 @@ if config.cache is not None:
 array_base = '/array/'
 get_compressed_array = app.route(array_base + '<path:req_path>')(get_compressed_array)
 get_compressed_array = app.route(array_base, defaults={'req_path': ''})(get_compressed_array)
+
+
+
 
 # CORS(app)
 
