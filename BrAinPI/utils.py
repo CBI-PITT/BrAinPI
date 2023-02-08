@@ -14,6 +14,7 @@ import urllib
 import json
 import sys
 import math
+from skimage import img_as_float32, img_as_float64, img_as_uint, img_as_ubyte
 
 import imaris_ims_file_reader as ims
 import zarr
@@ -60,6 +61,18 @@ def get(location,baseURL):
     with urllib.request.urlopen(baseURL + location, timeout=5) as url:
         data = dict(json.loads(url.read().decode()))
     return data
+
+def conv_np_dtypes(array,tdtype):
+    if array.dtype == tdtype:
+        return array
+    if tdtype == 'uint8' or tdtype == np.dtype('uint8'):
+        return img_as_ubyte(array)
+    if tdtype == 'uint16' or tdtype == np.dtype('uint16'):
+        return img_as_uint(array)
+    if tdtype == 'float32' or tdtype == np.dtype('float32'):
+        return img_as_float32(array)
+    if tdtype == float or tdtype == 'float64' or tdtype == np.dtype('float64'):
+        return img_as_float64(array)
 
 def compress_np(nparr):
     """

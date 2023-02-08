@@ -145,7 +145,7 @@ def chunks_combine_channels(metadata,resolution_level):
     chunks[1] = metadata['Channels']
     return tuple(chunks)
 
-def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False):
+def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False,force8Bit=False):
 
     metadata = utils.metaDataExtraction(numpy_like_dataset,strKey=False)
 
@@ -165,7 +165,10 @@ def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False):
 
     # zarray['dimension_separator'] = '.'
     zarray['dimension_separator'] = '/' #<-- required for compatibility with ome-zarr 4.0
-    zarray['dtype'] = encoding_values[metadata[(0, 0, 0, 'dtype')]]#'<u2' if numpy_like_dataset.dtype == np.uint16 else '<u2'  ## Need to figure out other dtype opts for uint8, float et al
+    if force8Bit:
+        zarray['dtype'] = encoding_values['uint8']
+    else:
+        zarray['dtype'] = encoding_values[metadata[(0, 0, 0, 'dtype')]]#'<u2' if numpy_like_dataset.dtype == np.uint16 else '<u2'  ## Need to figure out other dtype opts for uint8, float et al
     zarray['fill_value'] = 0
     zarray['filters'] = None
     zarray['order'] = 'C'
@@ -210,23 +213,52 @@ value_types = {
     }
 
 encoding_values = {
-    np.dtype('uint8'):'<u1',
+    np.dtype('uint8'):'|u1',
     np.dtype('uint16'):'<u2',
     np.dtype('float'):'<f4',
     np.dtype('float32'):'<f4',
     np.dtype('float64'):'<f8',
-    'uint8':'<u1',
+    'uint8':'|u1',
     'uint16':'<u2',
     'float':'<f4',
     'float32':'<f4',
     'float64':'<f8'
     }
 
+max_values = {
+    np.dtype('uint8'):254,
+    np.dtype('uint16'):65534,
+    np.dtype('float'):1,
+    np.dtype('float32'):1,
+    np.dtype('float64'):1,
+    'uint8':254,
+    'uint16':65534,
+    'float':1,
+    'float32':1,
+    'float64':1
+}
+
+# def conv_np_dtypes(array,tdtype):
+#     if array.dtype == tdtype:
+#         return array
+#     if tdtype == 'uint8' or tdtype == np.dtype('uint8'):
+#         return img_as_ubyte(array)
+#     if tdtype == 'uint16' or tdtype == np.dtype('uint16'):
+#         return img_as_uint(array)
+#     if tdtype == 'float32' or tdtype == np.dtype('float32'):
+#         return img_as_float32(array)
+#     if tdtype == float or tdtype == 'float64' or tdtype == np.dtype('float64'):
+#         return img_as_float64(array)
+
+def conv_dtype_value(value,fdtype,tdtype):
+    ratio = max_values[tdtype]/max_values[fdtype]
+    return round(ratio * value)
+
 #####################################
 ### OME-NGFF 0.4 Complient .zattr ###
 #####################################
 
-def get_zattr_file(numpy_like_dataset):
+def get_zattr_file(numpy_like_dataset,force8Bit=False):
 
     metadata = utils.metaDataExtraction(numpy_like_dataset,strKey=False)
     # metadata = metaDataExtraction(numpy_like_dataset,strKey=False)
@@ -305,11 +337,16 @@ def get_zattr_file(numpy_like_dataset):
     channels = []
     for ch in range(metadata['Channels']):
         current_channel_data = numpy_like_dataset[metadata['ResolutionLevels']-1,0,ch,:,:,:]
+        dtype = current_channel_data.dtype
 
-        end = int(current_channel_data.max()) if not value_types[current_channel_data.dtype] == float else float(current_channel_data.max())
-        start = int(current_channel_data.min()) if not value_types[current_channel_data.dtype] == float else float(current_channel_data.min())
+        end = int(current_channel_data.max()) if not value_types[dtype] == float else float(current_channel_data.max())
+        start = int(current_channel_data.min()) if not value_types[dtype] == float else float(current_channel_data.min())
 
-        if value_types[current_channel_data.dtype] == float and \
+        if force8Bit:
+            end = conv_dtype_value(end, dtype, 'uint8')
+            start = conv_dtype_value(start, dtype, 'uint8')
+
+        if value_types[dtype] == float and \
             ((end > 1 or end < 1) or \
                 (start < 1 or start > 1)): #<---  May need to look at this more closely
 
@@ -323,8 +360,12 @@ def get_zattr_file(numpy_like_dataset):
                 min_window = start*2
 
         else:
-            max_window = end*2 if end*2 <= values[current_channel_data.dtype][1] else values[current_channel_data.dtype][1]
-            min_window = start//2 if start//2 >= values[current_channel_data.dtype][0] else values[current_channel_data.dtype][0]
+            max_window = end*2 if end*2 <= values[dtype][1] else values[dtype][1]
+            min_window = start//2 if start//2 >= values[dtype][0] else values[dtype][0]
+
+            if force8Bit:
+                max_window = conv_dtype_value(max_window, dtype, 'uint8')
+                min_window = conv_dtype_value(min_window, dtype, 'uint8')
 
         channel = {
             'active':True,
@@ -391,6 +432,7 @@ file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0
 # NOTE: .ng.ome.zarr causes a change in the represented chunk size by combining channels into each chunk using func chunks_combine_channels
 exts = ['.ng.ome.zarr','.ome.zarr','.omezarr','.ome.ngff','.ngff']
 
+
 def setup_omezarr(app, config):
 
     def omezarr_entry(req_path):
@@ -414,6 +456,13 @@ def setup_omezarr(app, config):
                 pass
         except Exception:
             pass
+
+        # Flag to deliver 8bit data to NG
+        force8Bit = False
+        if '.8.' in datapath or '.8bit.' in datapath:
+            force8Bit = True
+            datapath = datapath.replace('.8.', '.')
+            datapath = datapath.replace('.8bit.', '.')
 
         # Attempt to enable ome.zarr ext for compatibility with omezarr utils
         isNeuroGlancer = False
@@ -458,6 +507,8 @@ def setup_omezarr(app, config):
             chunk = get_chunk(locationDict,resolution,config.opendata[datapath],chunk_size)
             # print(chunk.shape)
             chunk = pad_chunk(chunk, chunk_size)
+            if force8Bit:
+                chunk = utils.conv_np_dtypes(chunk, 'uint8')
             # print(chunk.shape)
             # chunk = np.squeeze(chunk)
             # print(chunk.shape)
@@ -487,7 +538,7 @@ def setup_omezarr(app, config):
                 datapath = open_omezarr_dataset(config,datapath)
                 # return Response(response=get_zarray_file(config.opendata[datapath],resolution), status=200,
                 #                 mimetype="application/octet_stream")
-                return jsonify(get_zarray_file(config.opendata[datapath],resolution,combine_channels=isNeuroGlancer))
+                return jsonify(get_zarray_file(config.opendata[datapath],resolution,combine_channels=isNeuroGlancer,force8Bit=force8Bit))
             except:
                 abort(404)
         elif path_split[-1] == '.zattrs':
@@ -497,7 +548,7 @@ def setup_omezarr(app, config):
             datapath = open_omezarr_dataset(config,datapath)
             # return Response(response=get_zattr_file(config.opendata[datapath]), status=200,
             #                 mimetype="application/octet_stream")
-            return jsonify(get_zattr_file(config.opendata[datapath]))
+            return jsonify(get_zattr_file(config.opendata[datapath],force8Bit=force8Bit))
         elif path_split[-1] == '.zgroup':
             # return Response(response={'zarr_format':2}, status=200,
             #                 mimetype="application/octet_stream")
