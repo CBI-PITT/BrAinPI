@@ -20,7 +20,7 @@ import utils
 import tifffile as tf
 import zarrLoader
 import zarr_zip_sharded_loader
-import neuroGlancer
+import neuroGlancer_old
 import imaris_ims_file_reader as ims
 from ome_zarr_loader import ome_zarr_loader
 
@@ -436,6 +436,7 @@ def grabArray(datapath,intArgs):
 # config.fcache.init_app(app)
 
 print('Importing Neuroglancer endpoints')
+import neuroGlancer
 app = neuroGlancer.setup_neuroglancer(app, config)
 
 

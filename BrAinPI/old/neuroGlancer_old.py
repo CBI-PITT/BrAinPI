@@ -13,8 +13,6 @@ from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
 import numpy as np
 import os
 
-import neuroglancer
-
 from functools import lru_cache
 
 
@@ -47,7 +45,7 @@ def ng_shader(numpy_like_object):
     res = numpy_like_object.ResolutionLevels
     
     # Use the lowest resolution volume to predict low and high LUT values
-    # This may impose a dataset opening penalty, but the viewing experience should be better
+    # This may impose a dataset opening penelty, but the viewing experience should be better
     channelMins = []
     channelMaxs = []
     for ii in range(metadata['Channels']):
@@ -61,14 +59,13 @@ def ng_shader(numpy_like_object):
             channelMaxs.append(lowestResVolume.max())
     
     shaderStr = ''
-    # shaderStr = shaderStr + '// Init for each channel:\n\n'
-    # shaderStr = shaderStr + '// Channel visability check boxes\n'
+    shaderStr = shaderStr + '// Init for each channel:\n\n'
+    shaderStr = shaderStr + '// Channel visability check boxes\n'
     
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + '#uicontrol bool channel{}_visable checkbox(default=true);\n'.format(ii)
-    shaderStr = shaderStr + '\n'
-
-    # shaderStr = shaderStr + '\n// Lookup tables\n'
+    
+    shaderStr = shaderStr + '\n// Lookup tables\n'
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}]'.format(
             ii,
@@ -86,27 +83,26 @@ def ng_shader(numpy_like_object):
             shaderStr = shaderStr + ',channel=[{}]);\n'.format(ii)
         else:
             shaderStr = shaderStr + ');\n'
-
-    shaderStr = shaderStr + '\n'
-    # shaderStr = shaderStr + '\n// Colors\n'
+    
+    shaderStr = shaderStr + '\n// Colors\n'
     
     defaultColors = ['green','red','purple','blue','yellow','orange'] * 10
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + '#uicontrol vec3 channel{}_color color(default="{}");\n'.format(ii, defaultColors[ii])
-    shaderStr = shaderStr + '\n'
-    # shaderStr = shaderStr + '\n//RGB vector at 0 (ie channel off)\n'
+    
+    shaderStr = shaderStr + '\n//RGB vector at 0 (ie channel off)\n'
     
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + 'vec3 channel{} = vec3(0);\n'.format(ii)
     
     shaderStr = shaderStr + '\n\nvoid main() {\n\n'
-    # shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
+    shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
     
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + 'if (channel{}_visable == true)\n'.format(ii)
         shaderStr = shaderStr + 'channel{} = channel{}_color * ((toNormalized(getDataValue({})) + lut_{}()));\n\n'.format(ii,ii,ii,ii)
     
-    # shaderStr = shaderStr + '// Add RGB values of all channels\n'
+    shaderStr = shaderStr + '// Add RGB values of all channels\n'
     shaderStr = shaderStr + 'vec3 rgb = ('
     for ii in range(metadata['Channels']):
         shaderStr = shaderStr + 'channel{}'.format(ii)
@@ -114,16 +110,53 @@ def ng_shader(numpy_like_object):
             shaderStr = shaderStr + ' + '
     shaderStr = shaderStr + ');\n\n'
     
-    # shaderStr = shaderStr + '//Retain RGB value with max of 1\n'
+    shaderStr = shaderStr + '//Retain RGB value with max of 1\n'
     shaderStr = shaderStr + 'vec3 render = min(rgb,vec3(1));\n\n'
-    # shaderStr = shaderStr + '// Render the resulting pixel map\n'
+    shaderStr = shaderStr + '// Render the resulting pixel map\n'
     shaderStr = shaderStr + 'emitRGB(render);\n'
     shaderStr = shaderStr + '}'
     
     return shaderStr
     
     
+# // Init for each channel:
 
+# // Channel visability check boxes
+# #uicontrol bool channel0_visable checkbox(default=true)
+# #uicontrol bool channel1_visable checkbox(default=true)
+
+# // Lookup tables
+# #uicontrol invlerp lut_0 (range=[0,10000],window=[0,20000],channel=[0]);
+# #uicontrol invlerp lut_1 (range=[0,10000],window=[0,20000],channel=[1]);
+
+# // Colors
+# #uicontrol vec3 channel0_color color(default="green");
+# #uicontrol vec3 channel1_color color(default="red");
+
+# //RGB vector at 0 (ie channel off)
+# vec3 channel0 = vec3(0);
+# vec3 channel1 = vec3(0);
+
+# void main() {
+  
+#   // For each color, if visable, get data, adjust with lut, then apply to color
+#   if (channel0_visable == true) 
+#     channel0 = channel0_color * ((toNormalized(getDataValue(0)) + lut_0()));
+  
+#   if (channel1_visable == true) 
+#     channel1 = channel1_color * ((toNormalized(getDataValue(1)) + lut_1()));
+  
+#   // Add RGB values of all channels
+#   vec3 rgb = (channel0 + channel1);
+  
+#   //Retain RGB value with max of 1
+#   vec3 render = min(rgb,vec3(1));
+  
+#   // Render the resulting pixel map
+#   emitRGB(
+#     render
+#   );
+# }
 
 ## Build neuroglancer json
 def ng_json(numpy_like_object,file=None, different_chunks=False):
@@ -209,6 +242,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
 
 
 
+
 def ng_files(numpy_like_object):
     '''
     Takes numpy_like_object representing a supported filetype
@@ -248,113 +282,55 @@ def ng_files(numpy_like_object):
     return fileLists
 
 
+
+
+
+
 def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https://neuroglancer-demo.appspot.com/'):
     '''
     Attempts to build a fully working link to ng dataset
     '''
-    import neuroglancer
-
-    print('HEREHREHREHREHREHEHEHRHERHERHERHEHEHR')
-
-    # Start server simply to build viewer state
-    token = 'qwertysplithereqwertysplithereqwerty'
-    viewer = neuroglancer.UnsynchronizedViewer(token=token)
-
-    source = 'precomputed://' + 'https://brain-api.cbi.pitt.edu' + compatible_file_link
-
-    with viewer.txn() as s:
-        # name = compatible_file_link.split('/')[-1].split('.')[0]
-        name = os.path.split(compatible_file_link)[-1]
-        s.layers[name] = neuroglancer.ImageLayer(
-            source=source,
-            tab='rendering',
-            shader=ng_shader(open_dataset_with_ng_json)
-        )
-
-    #Neuroglancer CoordinateSpace
-    #https://github.com/google/neuroglancer/blob/2200afbb85ab69550eeb3d2e089154d0ebc8a647/python/neuroglancer/coordinate_space.py#L146
-    coord = neuroglancer.CoordinateSpace(names=('x', 'y', 'z'), scales=(
-        open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0]/1000,
-        open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1]/1000,
-        open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2]/1000
-                                ),
-                                 units=('um', 'um', 'um')
-                                 )
-    viewer.state.dimensions = coord
-    # I think this is units (microns) scale / pixel
-    viewer.state.crossSectionScale = 50
-    # ~ crossSectionScale*600 produces the same size projection x-section
-    viewer.state.projection_scale = viewer.state.crossSectionScale * 600
-
-    viewer.state.selected_layer.layer = name
-    viewer.state.selected_layer.visible = True
-    viewer.state.prefetch = False
-    viewer.state.concurrent_downloads = 100
-    viewer.state.layout.type = 'xy'  # Options: ['xy', 'yz', 'xz', 'xy-3d', 'yz-3d', 'xz-3d', '4panel', '3d'] default=4panel
-
-    url = viewer.get_viewer_url()
-    state = url.split('/v/' + token + '/')[-1]
-
-
+    stateDict = {}
+    stateDict['dimensions'] = {'x': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0]/1000,'um' ],
+                               'y': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1]/1000,'um' ],
+                               'z': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2]/1000,'um' ]
+                               }
+    stateDict['position'] = [ open_dataset_with_ng_json.ng_json['scales'][0]['size'][0]//2,
+                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][1]//2,
+                             open_dataset_with_ng_json.ng_json['scales'][0]['size'][2]//2
+                             ]
+    
+    stateDict['crossSectionScale'] = 50
+    stateDict['projectionScale'] = 50 * stateDict['dimensions']['z'][0]
+    
+    stateDict['layers'] = []
+    
+    layer = {}
+    layer['type'] = 'image'
+    layer['source'] = 'precomputed://' + 'https://brain-api.cbi.pitt.edu' + compatible_file_link #<-- Needs to be imported intellegently
+    # layer['tab'] = 'rendering'
+    layer['shader'] = ng_shader(open_dataset_with_ng_json) # Includes controls and defaults
+    # layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
+    # layer['channelDimensions'] = {'c^': [1, '']}
+    layer['name'] = os.path.split(compatible_file_link)[-1]
+    # layer['selectedLayer'] = {'visible': True, 'layer': layer['name']}
+    layer['layout'] = '4panel'
+    
+    stateDict['layers'].append(layer)
+    
     ## If source URL is not secure, use the non-secure version of neuroglancer
-    if 'https://' in source == False:
-        ngURL = ngURL.replace('https://', 'http://')
-
-    outURL = ngURL + state
+    if 'https://' in stateDict['layers'][0]['source'] == False:
+        ngURL = ngURL.replace('https://','http://')
+    
+    outURL = ngURL + r'#!'
+    outURL = outURL + str(stateDict)
+    # outURL = outURL.replace(',','%2C')
+    # outURL = outURL.replace('\\','')
+    outURL = outURL.replace('True','true')
+    outURL = outURL.replace('False','false')
     print(outURL)
-
-    # Cleanup to unsure that the neuroglancer server is no longer running
-    if neuroglancer.server.is_server_running():
-        neuroglancer.server.stop()
-    del viewer
-    del neuroglancer
-
+    
     return outURL
-# def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https://neuroglancer-demo.appspot.com/'):
-#     '''
-#     Attempts to build a fully working link to ng dataset
-#     '''
-#     stateDict = {}
-#     stateDict['dimensions'] = {'x': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0]/1000,'um' ],
-#                                'y': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1]/1000,'um' ],
-#                                'z': [ open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2]/1000,'um' ]
-#                                }
-#     stateDict['position'] = [ open_dataset_with_ng_json.ng_json['scales'][0]['size'][0]//2,
-#                              open_dataset_with_ng_json.ng_json['scales'][0]['size'][1]//2,
-#                              open_dataset_with_ng_json.ng_json['scales'][0]['size'][2]//2
-#                              ]
-#
-#     stateDict['crossSectionScale'] = 50
-#     stateDict['projectionScale'] = 50 * stateDict['dimensions']['z'][0]
-#
-#     stateDict['layers'] = []
-#
-#     layer = {}
-#     layer['type'] = 'image'
-#     layer['source'] = 'precomputed://' + 'https://brain-api.cbi.pitt.edu' + compatible_file_link #<-- Needs to be imported intellegently
-#     # layer['tab'] = 'rendering'
-#     layer['shader'] = ng_shader(open_dataset_with_ng_json) # Includes controls and defaults
-#     # layer['shaderControls'] = {'normalized': {'range': [0, 9814], 'channel': [0]}} #<-- include an intellegent way to adjust shader
-#     # layer['channelDimensions'] = {'c^': [1, '']}
-#     layer['name'] = os.path.split(compatible_file_link)[-1]
-#     # layer['selectedLayer'] = {'visible': True, 'layer': layer['name']}
-#     layer['layout'] = '4panel'
-#
-#     stateDict['layers'].append(layer)
-#
-#     ## If source URL is not secure, use the non-secure version of neuroglancer
-#     if 'https://' in stateDict['layers'][0]['source'] == False:
-#         ngURL = ngURL.replace('https://','http://')
-#
-#     outURL = ngURL + r'#!'
-#     outURL = outURL + str(stateDict)
-#     # outURL = outURL.replace(',','%2C')
-#     # outURL = outURL.replace('\\','')
-#     outURL = outURL.replace('True','true')
-#     outURL = outURL.replace('False','false')
-#     print(outURL)
-#
-#     return outURL
 
     
 

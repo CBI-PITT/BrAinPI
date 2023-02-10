@@ -14,8 +14,9 @@ another process
 '''
 
 import utils
-import neuroGlancer
+import neuroGlancer_old
 from flask import url_for
+import neuroGlancer
 
 def ng_links(req_path):
     '''

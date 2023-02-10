@@ -18,7 +18,7 @@ import utils, auth
 import tifffile as tf
 import zarrLoader
 import zarr_zip_sharded_loader
-import neuroGlancer
+import neuroGlancer_old
 import imaris_ims_file_reader as ims
 
 
