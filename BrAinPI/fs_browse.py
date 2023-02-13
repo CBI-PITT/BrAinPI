@@ -304,7 +304,7 @@ def get_path_data(base, request):
     
 
 
-def initiate_browseable(app):
+def initiate_browseable(app,config):
     from BrAinPI import login_manager
     
     # base entrypoint must always begin and end with '/' --> /my_entry/
@@ -323,7 +323,8 @@ def initiate_browseable(app):
             return render_template(
                 'fl_browse_table_dir.html',
                 current_path={**page_description, **current_path}, 
-                user=auth.user_info()
+                user=auth.user_info(),
+                gtag=config.settings.get('GA4', 'gtag')
                 )
         else:
             return out

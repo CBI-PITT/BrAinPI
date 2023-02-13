@@ -82,7 +82,7 @@ app,login_manager = setup_auth(app)
 
 ## Initiate browser functionality
 from fs_browse import initiate_browseable
-app = initiate_browseable(app)
+app = initiate_browseable(app,config)
 
 from ome_zarr import setup_omezarr
 app = setup_omezarr(app,config)
@@ -93,7 +93,11 @@ app = setup_omezarr(app,config)
 
 @app.route('/', methods=['GET'])
 def home():
-    return render_template('home.html', user=auth.user_info(),app_name=settings.get('app','name'),page_name='Home')
+    return render_template('home.html',
+                           user=auth.user_info(),
+                           app_name=settings.get('app','name'),
+                           page_name='Home',
+                           gtag=settings.get('GA4','gtag'))
 #     return '''<h1>Brain Image Library Archive API</h1>
 # <p>A prototype API for chunked loading of large Brain Image Library datasets.</p>'''
 
