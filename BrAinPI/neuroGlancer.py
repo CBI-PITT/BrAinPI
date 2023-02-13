@@ -273,12 +273,13 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https:/
 
     #Neuroglancer CoordinateSpace
     #https://github.com/google/neuroglancer/blob/2200afbb85ab69550eeb3d2e089154d0ebc8a647/python/neuroglancer/coordinate_space.py#L146
-    coord = neuroglancer.CoordinateSpace(names=('x', 'y', 'z'), scales=(
+    coord = neuroglancer.CoordinateSpace(names=('c^','x', 'y', 'z'), scales=(
+        1,
         open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][0]/1000,
         open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][1]/1000,
         open_dataset_with_ng_json.ng_json['scales'][0]['resolution'][2]/1000
                                 ),
-                                 units=('um', 'um', 'um')
+                                 units=('','um', 'um', 'um')
                                  )
     viewer.state.dimensions = coord
     # I think this is units (microns) scale / pixel
@@ -417,7 +418,8 @@ def setup_neuroglancer(app, config):
         elif utils.is_file_type(neuroglancer_dtypes(), datapath):
             datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
             link_to_ng = make_ng_link(config.opendata[datapath], request.path, ngURL='https://neuroglancer-demo.appspot.com/')
-            return redirect(link_to_ng) # Redirect browser to fully formed neuroglancer link
+            return render_template('redirect.html',redirect_url=link_to_ng, redirect_name='Neuroglancer',description=datapath)
+            # return redirect(link_to_ng) # Redirect browser to fully formed neuroglancer link
         else:
             return 'No path to neuroglancer supported dataset'
         

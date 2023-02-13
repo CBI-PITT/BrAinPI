@@ -90,7 +90,7 @@ def setup_auth(app):
                   If this is not you, please logout
                   '''.format(current_user.id))
             return redirect(url_for('profile'))
-        return render_template('login.html', user=user_info())
+        return render_template('login.html', user=user_info(),app_name=settings.get('app','name'),page_name='Login')
     
     
 
@@ -146,7 +146,7 @@ def setup_auth(app):
     @app.route('/profile')
     @login_required
     def profile():
-        return render_template('profile.html', user=user_info())
+        return render_template('profile.html', user=user_info(),app_name=settings.get('app','name'),page_name='Profile')
     
     
     

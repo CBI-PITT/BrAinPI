@@ -20,7 +20,6 @@ import utils
 import tifffile as tf
 import zarrLoader
 import zarr_zip_sharded_loader
-import neuroGlancer_old
 import imaris_ims_file_reader as ims
 from ome_zarr_loader import ome_zarr_loader
 
@@ -94,7 +93,7 @@ app = setup_omezarr(app,config)
 
 @app.route('/', methods=['GET'])
 def home():
-    return render_template('home.html', user=auth.user_info())
+    return render_template('home.html', user=auth.user_info(),app_name=settings.get('app','name'),page_name='Home')
 #     return '''<h1>Brain Image Library Archive API</h1>
 # <p>A prototype API for chunked loading of large Brain Image Library datasets.</p>'''
 

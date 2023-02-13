@@ -264,7 +264,7 @@ def get_path_data(base, request):
             elif os.path.isfile(to_browse):
                 current_path['isFile'] = True
                 # return jsonify(current_path)
-                return send_file(to_browse, attachment_filename=os.path.split(to_browse)[1], as_attachment=True)
+                return send_file(to_browse, download_name=os.path.split(to_browse)[1], as_attachment=True)
             
             else:
                 # If a non-file / dir is passed, move backward to the nearest file/dir
@@ -286,7 +286,7 @@ def get_path_data(base, request):
         files_json[file]['files_name'] = current_path['files_name'][idx]
         files_json[file]['files_size'] = current_path['files_size'][idx]
         files_json[file]['files_modtime'] = current_path['files_modtime'][idx]
-        files_json[file]['files_ng_slug'] = current_path['files_ng_slug'][idx]
+        files_json[file]['files_ng_slug'] = current_path['files_ng_slug'][idx] #+ '/?neuroglancer' if isinstance(current_path['files_ng_slug'][idx],str) else ''  #Assist with google analytics
         files_json[file]['files_ng_info'] = current_path['files_ng_info'][idx]
         files_json[file]['files_dl'] = current_path['files_dl'][idx]
     

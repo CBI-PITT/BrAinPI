@@ -14,7 +14,6 @@ another process
 '''
 
 import utils
-import neuroGlancer_old
 from flask import url_for
 import neuroGlancer
 
