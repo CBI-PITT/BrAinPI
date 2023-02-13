@@ -248,11 +248,14 @@ def ng_files(numpy_like_object):
     return fileLists
 
 
-def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https://neuroglancer-demo.appspot.com/'):
+def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
     '''
     Attempts to build a fully working link to ng dataset
     '''
     import neuroglancer
+
+    brainpi_url = config.settings.get('app', 'url')
+    ngURL = config.settings.get('neuroglancer', 'url')
 
     print('HEREHREHREHREHREHEHEHRHERHERHERHEHEHR')
 
@@ -260,7 +263,7 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, ngURL='https:/
     token = 'qwertysplithereqwertysplithereqwerty'
     viewer = neuroglancer.UnsynchronizedViewer(token=token)
 
-    source = 'precomputed://' + 'https://brain-api.cbi.pitt.edu' + compatible_file_link
+    source = 'precomputed://' + brainpi_url + compatible_file_link
 
     with viewer.txn() as s:
         # name = compatible_file_link.split('/')[-1].split('.')[0]
@@ -397,7 +400,14 @@ def open_ng_dataset(config,datapath):
 #######################################################################################
 
 def setup_neuroglancer(app, config):
-    
+
+    # get_server will only open 1 server if it does not already exist.
+    if config.settings.getboolean('neuroglancer','use_local_server'):
+        from neuroglancer_server import get_server
+        ng_server = get_server()
+        config.ng_server = ng_server
+
+
     def neuro_glancer_entry(req_path):
         
         path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
@@ -417,7 +427,7 @@ def setup_neuroglancer(app, config):
             datapath = '/' + os.path.join(*datapath.split('/')[:-1])
         elif utils.is_file_type(neuroglancer_dtypes(), datapath):
             datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
-            link_to_ng = make_ng_link(config.opendata[datapath], request.path, ngURL='https://neuroglancer-demo.appspot.com/')
+            link_to_ng = make_ng_link(config.opendata[datapath], request.path, config=config)
             return render_template('redirect.html',redirect_url=link_to_ng, redirect_name='Neuroglancer',description=datapath)
             # return redirect(link_to_ng) # Redirect browser to fully formed neuroglancer link
         else:
