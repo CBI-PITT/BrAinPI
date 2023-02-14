@@ -76,7 +76,7 @@ def get_path_data(base, request):
                 continue
             for oo in groups[ii]: # Users in each group
                 if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
-                    print('Line 168')
+                    # print('Line 168')
                     allowed_list.append(ii.lower())
         print(allowed_list)
     
@@ -86,7 +86,36 @@ def get_path_data(base, request):
         
         to_browse = [x for x in path_map]
         to_browse = natsorted(to_browse)
-        
+        # print(to_browse)
+
+        # Limit the paths that are seen by an authenticated user based on the contents of the next directory
+        # limit by username and groups
+        limited_list = []
+        if current_user.is_authenticated:
+            real_paths = [path_map[x] for x in to_browse]  # converts to real path
+            # print(real_paths)
+            for browse,path in zip(to_browse,real_paths):
+                # print(browse)
+                # print(path)
+                interior_listing = glob.glob(os.path.join(path, '*'))
+                # print(interior_listing)
+                interior_listing = [os.path.relpath(x,path).lower() for x in interior_listing]
+                # print(interior_listing)
+                if browse in settings['dir_anon']:
+                    limited_list.append(browse)
+                elif current_user.id.lower() in groups['all']:
+                    limited_list.append(browse)
+                elif settings.getboolean('auth', 'restrict_paths_to_matched_username') and current_user.id.lower() in interior_listing:
+                    limited_list.append(browse)
+                elif not settings.getboolean('auth', 'restrict_paths_to_matched_username'):
+                    limited_list.append(browse)
+                elif any([x.lower() in interior_listing for x in allowed_list]):
+                    limited_list.append(browse)
+
+                # print(interior_listing)
+                to_browse = limited_list
+
+
         current_path = {}
         # current_path['root'] = base[:-1]
         current_path['files'] = []
@@ -315,6 +344,12 @@ def initiate_browseable(app,config):
         
         
         print(request.path)
+        # print(request.remote_addr)
+        # print(request.environ.get('HTTP_X_REAL_IP', request.remote_addr))
+        # print(request.environ['REMOTE_ADDR'])
+        # import pprint
+        # pprint.pprint(request.environ)
+        # print(request.access_route[-1])
         
         out = get_path_data(base, request)
         
