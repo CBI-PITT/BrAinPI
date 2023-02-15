@@ -30,6 +30,10 @@ def get_server():
             print(viewer)
             return viewer
         except OSError:
+            del viewer
+            return
+        except:
+            del viewer
             return
 
 # if __name__ == '__main__':
