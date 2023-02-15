@@ -428,7 +428,11 @@ def setup_neuroglancer(app, config):
         elif utils.is_file_type(neuroglancer_dtypes(), datapath):
             datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
             link_to_ng = make_ng_link(config.opendata[datapath], request.path, config=config)
-            return render_template('redirect.html',redirect_url=link_to_ng, redirect_name='Neuroglancer',description=datapath)
+            # redirect.html URLs are not necessary, but they facilitate the inclusion of gtag for google analytics
+            return render_template('redirect.html',gtag=config.settings.get('GA4','gtag'),
+                                   redirect_url=link_to_ng,
+                                   redirect_name='Neuroglancer',
+                                   description=datapath)
             # return redirect(link_to_ng) # Redirect browser to fully formed neuroglancer link
         else:
             return 'No path to neuroglancer supported dataset'

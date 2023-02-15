@@ -1,14 +1,16 @@
 <!DOCTYPE html>
 <html>
   <head>
+    {% if gtag %}
     <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZX9TCXH925"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{gtag}}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', 'G-ZX9TCXH925');
+      gtag('config', '{{gtag}}');
     </script>
+    {% endif %}
     <title>{{ redirect_name }}:{{ description }}</title>
     <meta http-equiv="refresh" content="0; url='{{ redirect_url }}'" />
   </head>
