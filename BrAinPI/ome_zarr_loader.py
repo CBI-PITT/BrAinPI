@@ -10,6 +10,7 @@ import numpy as np
 
 from stack_to_multiscale_ngff.h5_shard_store import H5_Shard_Store
 from stack_to_multiscale_ngff.archived_nested_store import Archived_Nested_Store
+from stack_to_multiscale_ngff.h5_nested_store3 import H5_Nested_Store
 from zarr_chunk_cache import disk_cache_store
 
 # location = r'H:\globus\pitt\bil'
@@ -35,8 +36,10 @@ class ome_zarr_loader:
         if isinstance(zarr_store_type,str):
             if zarr_store_type=='ans':
                 self.zarr_store_type = Archived_Nested_Store
-            if zarr_store_type=='hss':
+            elif zarr_store_type=='hss':
                 self.zarr_store_type = H5_Shard_Store
+            elif zarr_store_type=='hns':
+                self.zarr_store_type = H5_Nested_Store
         else:
             self.zarr_store_type = zarr_store_type
         self.verbose = verbose
@@ -180,6 +183,7 @@ class ome_zarr_loader:
             # key = self.location + '_getSlice_' + str(incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
+                print(f'Returned from cache: {incomingSlices}')
                 return result
         
         result = self.arrays[r][t,c,z,y,x]
