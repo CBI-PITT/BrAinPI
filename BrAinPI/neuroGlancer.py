@@ -43,74 +43,101 @@ def encode_ng_file(numpy_array,channels):
 
 def ng_shader(numpy_like_object):
     
-    metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
+    # metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
+    # metadata should have been appended to object during opening utils.config.loadDataset
+    metadata = numpy_like_object.metadata
+    try:
+        omero = numpy_like_object.omero
+    except Exception:
+        omero = None
+
     res = numpy_like_object.ResolutionLevels
     
-    # Use the lowest resolution volume to predict low and high LUT values
-    # This may impose a dataset opening penalty, but the viewing experience should be better
+    #Extract values for setting LUTs in proper range
+    #User omero values if they exist otherwise determine from lowest resolution multiscale
     channelMins = []
     channelMaxs = []
+    windowMins = []
+    windowMaxs = []
     for ii in range(metadata['Channels']):
-        try:
-            channelMins.append(numpy_like_object.metadata[0,0,0,'min'])
-            channelMaxs.append(numpy_like_object.metadata[0,0,0,'max'])
-        except:
-            lowestResVolume = numpy_like_object[res-1,0,ii,:,:,:]
-            lowestResVolume = lowestResVolume[lowestResVolume > 0]
-            channelMins.append(lowestResVolume.min())
-            channelMaxs.append(lowestResVolume.max())
-    
+        if omero:
+            print(omero)
+            channelMins.append(omero['channels'][ii]['window']['start'])
+            channelMaxs.append(omero['channels'][ii]['window']['end'])
+            windowMins.append(omero['channels'][ii]['window']['min'])
+            windowMaxs.append(omero['channels'][ii]['window']['max'])
+        else:
+            try:
+                # FORCE DEFAULT TO CALCULATING VALUE FROM LOWEST RESOLUTION
+                raise Exception
+                # channelMins.append(numpy_like_object.metadata[0,0,ii,'min'])
+                # channelMaxs.append(numpy_like_object.metadata[0,0,ii,'max'])
+            except:
+                lowestResVolume = numpy_like_object[res-1,0,ii,:,:,:]
+                lowestResVolume = lowestResVolume[lowestResVolume > 0]
+                channelMins.append(lowestResVolume.min())
+                channelMaxs.append(lowestResVolume.max())
+            windowMins.append(0)
+            if numpy_like_object.dtype == 'uint16':
+                windowMaxs.append(65535)
+            elif numpy_like_object.dtype == 'uint':
+                windowMaxs.append(255)
+            elif numpy_like_object.dtype == float:
+                windowMaxs.append(1)
+
+    labels = []
+    colors = []
+    if omero:
+        for idx in range(metadata['Channels']):
+            labels.append(omero['channels'][idx]['label'].replace(' ','_').lower())
+            #Expect HEX RGB
+            colors.append('#' + omero['channels'][idx]['color'].upper())
+    else:
+        defaultColors = ['green', 'red', 'purple', 'blue', 'yellow', 'orange']
+        for idx in range(metadata['Channels']):
+            labels.append(f'channel{idx}')
+            colors.append(defaultColors[idx%len(defaultColors)])
+
     shaderStr = ''
     # shaderStr = shaderStr + '// Init for each channel:\n\n'
     # shaderStr = shaderStr + '// Channel visability check boxes\n'
     
-    for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + '#uicontrol bool channel{}_visable checkbox(default=true);\n'.format(ii)
+    for idx in range(metadata['Channels']):
+        shaderStr = shaderStr + f'#uicontrol bool {labels[idx]}_visable checkbox(default=true);\n'
     shaderStr = shaderStr + '\n'
 
     # shaderStr = shaderStr + '\n// Lookup tables\n'
-    for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + '#uicontrol invlerp lut_{} (range=[{},{}],window=[{},{}]'.format(
-            ii,
-            # metadata[(res-1,0,ii,'HistogramMin')],
-            channelMins[ii],
-            channelMaxs[ii],
-            # metadata[(res-1,0,ii,'HistogramMax')],
-            # metadata[(res-1,0,ii,'HistogramMin')] - metadata[(res-1,0,ii,'HistogramMin')]//2,
-            channelMins[ii] - channelMins[ii]//2,
-            min( channelMaxs[ii] + channelMaxs[ii]//2, 65535 )
-            
-            # min( metadata[(res-1,0,ii,'HistogramMax')] + metadata[(res-1,0,ii,'HistogramMax')]//2, 65535 ), #<-- ToDo: code max based on dtype
-            )
+    for idx in range(metadata['Channels']):
+        shaderStr = shaderStr + f'#uicontrol invlerp {labels[idx]}_lut (range=[{channelMins[idx]},{channelMaxs[idx]}],window=[{windowMins[idx]},{windowMaxs[idx]}]'
         if metadata['Channels'] > 1:
-            shaderStr = shaderStr + ',channel=[{}]);\n'.format(ii)
+            shaderStr = shaderStr + f',channel=[{idx}]);\n'
         else:
             shaderStr = shaderStr + ');\n'
 
     shaderStr = shaderStr + '\n'
     # shaderStr = shaderStr + '\n// Colors\n'
-    
-    defaultColors = ['green','red','purple','blue','yellow','orange'] * 10
-    for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + '#uicontrol vec3 channel{}_color color(default="{}");\n'.format(ii, defaultColors[ii])
+
+    for idx in range(metadata['Channels']):
+        shaderStr = shaderStr + f'#uicontrol vec3 {labels[idx]}_color color(default="{colors[idx]}");\n'
+
     shaderStr = shaderStr + '\n'
     # shaderStr = shaderStr + '\n//RGB vector at 0 (ie channel off)\n'
     
-    for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + 'vec3 channel{} = vec3(0);\n'.format(ii)
+    for idx in range(metadata['Channels']):
+        shaderStr = shaderStr + f'vec3 {labels[idx]} = vec3(0);\n'
     
     shaderStr = shaderStr + '\n\nvoid main() {\n\n'
     # shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
     
-    for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + 'if (channel{}_visable == true)\n'.format(ii)
-        shaderStr = shaderStr + 'channel{} = channel{}_color * ((toNormalized(getDataValue({})) + lut_{}()));\n\n'.format(ii,ii,ii,ii)
+    for idx in range(metadata['Channels']):
+        shaderStr = shaderStr + f'if ({labels[idx]}_visable == true)\n'
+        shaderStr = shaderStr + f'{labels[idx]} = {labels[idx]}_color * ((toNormalized(getDataValue({idx})) + {labels[idx]}_lut()));\n\n'
     
     # shaderStr = shaderStr + '// Add RGB values of all channels\n'
     shaderStr = shaderStr + 'vec3 rgb = ('
-    for ii in range(metadata['Channels']):
-        shaderStr = shaderStr + 'channel{}'.format(ii)
-        if ii < metadata['Channels']-1:
+    for idx in range(metadata['Channels']):
+        shaderStr = shaderStr + f'{labels[idx]}'
+        if idx < metadata['Channels']-1:
             shaderStr = shaderStr + ' + '
     shaderStr = shaderStr + ');\n\n'
     
@@ -257,8 +284,6 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
     brainpi_url = config.settings.get('app', 'url')
     ngURL = config.settings.get('neuroglancer', 'url')
 
-    print('HEREHREHREHREHREHEHEHRHERHERHERHEHEHR')
-
     # Start server simply to build viewer state
     token = 'qwertysplithereqwertysplithereqwerty'
     viewer = neuroglancer.UnsynchronizedViewer(token=token)
@@ -292,7 +317,7 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
 
     viewer.state.selected_layer.layer = name
     viewer.state.selected_layer.visible = True
-    viewer.state.prefetch = False
+    viewer.state.prefetch = True
     viewer.state.concurrent_downloads = 100
     viewer.state.layout.type = 'xy'  # Options: ['xy', 'yz', 'xz', 'xy-3d', 'yz-3d', 'xz-3d', '4panel', '3d'] default=4panel
 
@@ -365,10 +390,11 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
 
 def neuroglancer_dtypes():
     return [
-        '.ims',
-        '.omezarr',
-        '.omezans',
-        '.zarr',
+        '.ims', #imaris
+        '.omezarr', #ome.zarr
+        '.omezans', #Archived_Nested_Store
+        '.omehans', #H5_Nested_Store
+        '.zarr', #Custom multiscale zarr implementation
         '.weave',
         '.z_sharded'
         ]
@@ -413,8 +439,9 @@ def setup_neuroglancer(app, config):
         path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
         
         # Test for different patterns
-        file_name_template = '{}-{}_{}-{}_{}-{}'
-        file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
+        # file_name_template = '{}-{}_{}-{}_{}-{}'
+        # file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
+        file_pattern = '[0-9]+-[0-9]+_[0-9]+-[0-9]+_[0-9]+-[0-9]+'
         ## NEED to figure out how to extract the datapath from any version of ng request:
             # /hdshjk/file.ims : /hdshjk/file.ims/info : /hdshjk/file.ims/info/0/0-1_2-3_4-5
         
@@ -532,7 +559,7 @@ def setup_neuroglancer(app, config):
     ## Decorating neuro_glancer_entry to allow caching ##
     if config.cache is not None:
         print('Caching setup')
-        neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
+        # neuro_glancer_entry = config.cache.memoize()(neuro_glancer_entry)
         # neuro_glancer_entry = config.fcache.cached(timeout=3600)(neuro_glancer_entry)
         # neuro_glancer_entry = lru_cache(maxsize=5000)(neuro_glancer_entry) #Causing some IO errors not sure why
         print(neuro_glancer_entry)

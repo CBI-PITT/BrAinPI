@@ -257,7 +257,7 @@ class config:
         print(dataPath)
         
         if dataPath in self.opendata:
-            pass
+            return dataPath
         
         elif os.path.splitext(dataPath)[-1] == '.ims':
             print('Is IMS')
