@@ -36,6 +36,5 @@ def get_server():
             del viewer
             return
 
-# if __name__ == '__main__':
-#     viewer = get_server()
-#     print(viewer)
+if __name__ == '__main__':
+        viewer = get_server()

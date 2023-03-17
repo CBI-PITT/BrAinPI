@@ -59,6 +59,7 @@ def ng_shader(numpy_like_object):
     channelMaxs = []
     windowMins = []
     windowMaxs = []
+    isVisable = []
     for ii in range(metadata['Channels']):
         if omero:
             print(omero)
@@ -66,6 +67,11 @@ def ng_shader(numpy_like_object):
             channelMaxs.append(omero['channels'][ii]['window']['end'])
             windowMins.append(omero['channels'][ii]['window']['min'])
             windowMaxs.append(omero['channels'][ii]['window']['max'])
+            isVisable.append(
+                bool(
+                    omero['channels'][ii]['active']
+                )
+            )
         else:
             try:
                 # FORCE DEFAULT TO CALCULATING VALUE FROM LOWEST RESOLUTION
@@ -77,6 +83,7 @@ def ng_shader(numpy_like_object):
                 lowestResVolume = lowestResVolume[lowestResVolume > 0]
                 channelMins.append(lowestResVolume.min())
                 channelMaxs.append(lowestResVolume.max())
+                isVisable.append(True)
             windowMins.append(0)
             if numpy_like_object.dtype == 'uint16':
                 windowMaxs.append(65535)
@@ -89,7 +96,7 @@ def ng_shader(numpy_like_object):
     colors = []
     if omero:
         for idx in range(metadata['Channels']):
-            labels.append(omero['channels'][idx]['label'].replace(' ','_').lower())
+            labels.append(omero['channels'][idx]['label'].replace(' ','_').replace('-','_').lower())
             #Expect HEX RGB
             colors.append('#' + omero['channels'][idx]['color'].upper())
     else:
@@ -103,7 +110,7 @@ def ng_shader(numpy_like_object):
     # shaderStr = shaderStr + '// Channel visability check boxes\n'
     
     for idx in range(metadata['Channels']):
-        shaderStr = shaderStr + f'#uicontrol bool {labels[idx]}_visable checkbox(default=true);\n'
+        shaderStr = shaderStr + f'#uicontrol bool {labels[idx]}_visable checkbox(default={str(isVisable[idx]).lower()});\n'
     shaderStr = shaderStr + '\n'
 
     # shaderStr = shaderStr + '\n// Lookup tables\n'
@@ -158,7 +165,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     Save a json from a 5d numpy like volume
     file = None saves to a BytesIO buffer
     file == str saves to that file name
-    file == 'dict' ourputs a dictionary
+    file == 'dict' outputs a dictionary
     '''
 
     # Alternative chunking depth along axial plane    
