@@ -520,23 +520,34 @@ def setup_neuroglancer(app, config):
             x = [int(x) for x in x]
             y = [int(x) for x in y]
             z = [int(x) for x in z]
-            
-            img = config.opendata[datapath][
-                int(path_split[-2]),
-                slice(0,1),
-                slice(None),
-                slice(z[0],z[1]),
-                slice(y[0],y[1]),
-                slice(x[0],x[1])
-                ]
-            
-            while img.ndim > 4:
-                img = np.squeeze(img,axis=0)
-                
-            print(img.shape)
-            
-            img = encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
-            
+
+            img = None
+            if config.cache:
+                key = f'ng_{datapath}-{x}-{y}-{z}'
+                img = config.cache.get(key,default=None)
+                if img:
+                    print('Cache HIT')
+
+            if not img:
+                img = config.opendata[datapath][
+                    int(path_split[-2]),
+                    slice(0,1),
+                    slice(None),
+                    slice(z[0],z[1]),
+                    slice(y[0],y[1]),
+                    slice(x[0],x[1])
+                    ]
+
+                while img.ndim > 4:
+                    img = np.squeeze(img,axis=0)
+
+                print(img.shape)
+
+                img = encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
+
+                if config.cache:
+                    config.cache.set(key, img)
+
             # Flask return of bytesIO as file
             return send_file(
                 img,
