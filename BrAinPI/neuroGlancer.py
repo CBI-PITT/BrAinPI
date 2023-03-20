@@ -521,16 +521,18 @@ def setup_neuroglancer(app, config):
             y = [int(x) for x in y]
             z = [int(x) for x in z]
 
+            res = int(path_split[-2])
+
             img = None
             if config.cache:
-                key = f'ng_{datapath}-{x}-{y}-{z}'
+                key = f'ng_{datapath}-{res}-{x}-{y}-{z}'
                 img = config.cache.get(key,default=None)
                 if img:
                     print('Cache HIT')
 
             if not img:
                 img = config.opendata[datapath][
-                    int(path_split[-2]),
+                    res,
                     slice(0,1),
                     slice(None),
                     slice(z[0],z[1]),
