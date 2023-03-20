@@ -524,11 +524,12 @@ def setup_neuroglancer(app, config):
             res = int(path_split[-2])
 
             img = None
-            if config.cache:
+            # key = f'ng_{datapath}-{res}-{x}-{y}-{z}'
+            if config.cache is not None:
                 key = f'ng_{datapath}-{res}-{x}-{y}-{z}'
-                img = config.cache.get(key,default=None)
+                img = config.cache.get(key, default=None, retry=True)
 
-            if not img:
+            if img is None:
                 img = config.opendata[datapath][
                     res,
                     slice(0,1),
@@ -545,8 +546,8 @@ def setup_neuroglancer(app, config):
 
                 img = encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
 
-                if config.cache:
-                    config.cache.set(key, img)
+                if config.cache is not None:
+                    config.cache.set(key, img, expire=None, tag=datapath, retry=True)
 
             # Flask return of bytesIO as file
             return send_file(
