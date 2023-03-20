@@ -527,8 +527,6 @@ def setup_neuroglancer(app, config):
             if config.cache:
                 key = f'ng_{datapath}-{res}-{x}-{y}-{z}'
                 img = config.cache.get(key,default=None)
-                if img:
-                    print('Cache HIT')
 
             if not img:
                 img = config.opendata[datapath][
