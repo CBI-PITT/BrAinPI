@@ -421,9 +421,21 @@ def open_ng_dataset(config,datapath):
             ## Temp ignoring of ng_files
             ## Add attribute so this constantly repeated
             # config.opendata[datapath].ng_files = True
-            
-            config.opendata[datapath].ng_json = \
-                ng_json(config.opendata[datapath],file='dict')
+
+            settings = utils.get_config('settings.ini')
+            chunk_type = settings.get('neuroglancer', 'chunk_type')
+
+            if chunk_type.lower() == 'isotropic':
+                chunk_depth = settings.getint('neuroglancer', 'chunk_depth')
+                config.opendata[datapath].ng_json = \
+                    ng_json(config.opendata[datapath], file='dict',different_chunks=(chunk_depth,chunk_depth,chunk_depth))
+            elif chunk_type.lower() == 'anisotropic':
+                chunk_depth = settings.getint('neuroglancer', 'chunk_depth')
+                config.opendata[datapath].ng_json = \
+                    ng_json(config.opendata[datapath], file='dict',different_chunks=chunk_depth)
+            else:
+                config.opendata[datapath].ng_json = \
+                    ng_json(config.opendata[datapath],file='dict')
     
     return datapath
     
