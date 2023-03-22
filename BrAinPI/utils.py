@@ -23,6 +23,15 @@ import zarrLoader
 import zarr_zip_sharded_loader4 as zarr_zip_sharded_loader
 from ome_zarr_loader import ome_zarr_loader
 
+from flask import (
+    render_template,
+    request,
+    send_file,
+    redirect,
+    jsonify,
+    url_for
+    )
+
 
 # from BrAinPI import config
 # from numcodecs import Blosc
@@ -159,6 +168,73 @@ def from_path_to_html(path, path_map, req_path, entry_point):
         return path.replace(path_map[html_path[0]],entry_point)
     else:
         return path.replace(path_map[html_path[1]],entry_point + html_path[1])
+
+def dict_key_value_match(a_dict,key_or_value,specific=True):
+    '''
+    Searches both key and values in dict and return the cooresponding value
+    Key --> value
+    value --> key
+    '''
+
+    if key_or_value in a_dict:
+        return a_dict[key_or_value]
+    for key,value in a_dict.items():
+        if key_or_value.lower() == value.lower():
+            return key
+        if value.lower() == key_or_value.lower():
+            return value
+
+    if not specific:
+        'Behavior can be hard to predict'
+        for key,value in a_dict.items():
+            if key_or_value.lower() in value.lower():
+                return key
+            if value.lower() in key_or_value.lower():
+                return value
+
+
+def strip_leading_training_slash(string):
+    assert isinstance(string,str), 'Must pass a string'
+    if string[-1] == '/':
+        string = string[:-1]
+    if string[0] == '/':
+        string = string[1:]
+    return string
+
+
+import difflib
+def from_path_to_browser_html(path, path_map, html_base):
+    '''
+    Take a file system path and return a html browser location
+    '''
+    matches = {}
+    for key, value in path_map.items():
+        if value in path:
+            matches[value] = key
+    if len(matches) == 0:
+        return
+    print(matches)
+    match = list(difflib.get_close_matches(path,matches,cutoff=0.01))
+    print(match)
+    best_match = match if len(match) == 0 else match[0]
+    print(best_match)
+    end = path.replace(best_match,matches[best_match])
+    print(end)
+    end = strip_leading_training_slash(end)
+
+    main = f'{url_for("browse_fs")}/{end}'.replace('//','/')
+    main = strip_leading_training_slash(main)
+
+    html_base = strip_leading_training_slash(html_base)
+
+
+    html_path = f'{html_base}/{main}'
+    print(html_path)
+    return html_path
+    # if len(html_path) == 1:
+    #     return path.replace(path_map[html_path[0]],entry_point)
+    # else:
+    #     return path.replace(path_map[html_path[1]],entry_point + html_path[1])
 
 def get_base_paths(settings_config_parser_object,user_authenticated=False):
     '''

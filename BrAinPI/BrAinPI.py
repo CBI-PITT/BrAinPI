@@ -87,6 +87,9 @@ app = initiate_browseable(app,config)
 from ome_zarr import setup_omezarr
 app = setup_omezarr(app,config)
 
+from coordination_endpoints import inititate
+app = inititate(app, config)
+
 # ## Initiate development_browser functionality
 # from fs_browse_new import initiate_browseable
 # app = initiate_browseable(app)
