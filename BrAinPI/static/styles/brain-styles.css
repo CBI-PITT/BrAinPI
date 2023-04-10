@@ -6,11 +6,12 @@ body{
   height:100vh;
   
 }
+
 .header, .footer
 {
   display:grid;
   grid-template-columns: 1fr 3fr 1fr;
-  background-color: #343;
+  background-color: #212529;
   color:#fff;
   padding:1.5em;
   justify-content: flex-start;
