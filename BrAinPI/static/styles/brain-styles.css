@@ -7,7 +7,7 @@ body{
   
 }
 
-.header, .footer
+.header, footer
 {
   display:grid;
   grid-template-columns: 1fr 3fr 1fr;
@@ -18,7 +18,7 @@ body{
 
 }
 
-.header a, .footer a{
+.header a, footer a{
   color:#fff;
   text-decoration: none;
 }
@@ -27,7 +27,10 @@ body{
   margin-bottom:.5em;
 }
 
-
+.bil_logo {
+  height: 50px;
+  margin-right: 5px;
+}
 
 a.cb-button{
   display:inline-block;
@@ -164,4 +167,8 @@ a.cb-button{
 
   .hide-row {
     display: none;
+  }
+
+  .file_explorer {
+    margin-bottom: 5em;
   }
