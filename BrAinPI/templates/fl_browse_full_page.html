@@ -22,7 +22,7 @@
   <body>
     <nav class="navbar navbar-expand-lg header">
       <div class="container-fluid">
-        <img src="{{ url_for('static', filename='images/brainicon.png')}}" class="bil_logo" />
+        <img src="{{ url_for('static', filename=current_path['logo'])}}" class="logo" />
         <a class="navbar-brand" href="{{ url_for('browse_fs') }}"> {{ current_path['header'] }} </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarText" aria-controls="navbarText" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
