@@ -96,7 +96,7 @@ def ng_shader(numpy_like_object):
     colors = []
     if omero:
         for idx in range(metadata['Channels']):
-            labels.append(omero['channels'][idx]['label'].replace(' ','_').replace('-','_').lower())
+            labels.append(omero['channels'][idx]['label'].replace(' ','_').replace('-','_').replace('.','_').lower())
             #Expect HEX RGB
             colors.append('#' + omero['channels'][idx]['color'].upper())
     else:
