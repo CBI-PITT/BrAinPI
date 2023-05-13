@@ -10,7 +10,7 @@ import numpy as np
 
 from stack_to_multiscale_ngff.h5_shard_store import H5_Shard_Store
 from stack_to_multiscale_ngff.archived_nested_store import Archived_Nested_Store
-from stack_to_multiscale_ngff.h5_nested_store3 import H5_Nested_Store
+from stack_to_multiscale_ngff.h5_nested_store4 import H5_Nested_Store
 from zarr_chunk_cache import disk_cache_store
 
 # location = r'H:\globus\pitt\bil'
