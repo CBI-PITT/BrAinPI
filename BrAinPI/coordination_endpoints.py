@@ -26,20 +26,19 @@ def inititate(app,config):
 
     @app.route('/path_to_html_options/', methods=['GET'])
     def html_options():
-        return path_to_html_options(request.args)
-    def path_to_html_options(args):
+        print(request.remote_addr)
+        assert(isinstance(request.args, dict)), 'Expects a dictionary'
+        assert 'path' in request.args, 'Expects a path key'
+        return path_to_html_options(request.args['path'])
+    def path_to_html_options(path):
         path_map = get_path_map(settings,
                                 user_authenticated=True)  # <-- Force user_auth=True to get all possible paths, in this way all ng links will be shareable to anyone
-        # print(path_map)
-        # print(url_for('neuro_glancer_entry'))
-        for key in args:
-            break
-        # print(key)
-        # print(from_path_to_html(key,path_map,'world',url_for('neuro_glancer_entry').replace('/','')))
-        print(path_map)
-        print(key)
-        if key[-1] == '/':
+        key = path
+        if len(key) > 1 and key[-1] == '/':
             key = key[:-1]
+
+        if len(key.strip()) == 0 or len(key.strip()) == '/':
+            key = '/'
 
         paths = {}
         paths['path'] = key
