@@ -7,7 +7,10 @@ Created on Mon May 16 22:48:44 2022
 
 # import zarr
 import numpy as np
+import numcodecs
 from numcodecs import Blosc
+from imagecodecs.numcodecs import Jpegxl
+numcodecs.register_codec(Jpegxl)
 import io
 import re
 import os
@@ -100,7 +103,7 @@ def pad_chunk(chunk, chunk_size):
 
 
 def get_compressor():
-    return Blosc(cname='zstd', clevel=4, shuffle=Blosc.BITSHUFFLE, blocksize=0)
+    return Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE, blocksize=0)
 
 
 # def compress_zarr_chunk(np_array,compressor=get_compressor()):

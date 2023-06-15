@@ -51,14 +51,20 @@ class ome_zarr_loader:
         zgroup = zarr.open(store)
         self.zattrs = zgroup.attrs
         
-        assert 'omero' in self.zattrs
-        self.omero = zgroup.attrs['omero']
+        if 'omero' in self.zattrs:
+            self.omero = zgroup.attrs['omero']
+        # assert 'omero' in self.zattrs
+        # self.omero = zgroup.attrs['omero']
         assert 'multiscales' in self.zattrs
         self.multiscales = zgroup.attrs['multiscales']
+        print(self.multiscales)
         del zgroup
         del store
         
-        self.multiscale_datasets = self.multiscales[0]['datasets']
+        try:
+            self.multiscale_datasets = self.multiscales[0]['datasets']
+        except:
+            self.multiscale_datasets = self.multiscales['datasets']
         self.ResolutionLevels = len(self.multiscale_datasets)
         
         self.dataset_paths = []

@@ -7,7 +7,20 @@ Created on Mon May 16 22:48:44 2022
 
 # import zarr
 import numpy as np
+import numcodecs
 from numcodecs import Blosc
+try:
+    from imagecodecs.numcodecs import JpegXl
+    numcodecs.register_codec(JpegXl)
+    # print('Imported JpegXl')
+except:
+    pass
+try:
+    from imagecodecs.numcodecs import Jpegxl
+    numcodecs.register_codec(Jpegxl)
+    # print('Imported Jpegxl')
+except:
+    pass
 import io
 import re
 import os
@@ -63,7 +76,7 @@ def where_is_that_chunk(chunk_name='0.0.1.3.14', dataset_shape=(1,1,2,23857,1462
 
 
 def get_chunk(locationDict,res,dataset, chunk_size):
-    
+
     return dataset[
         res,
         slice(locationDict['tStart'],locationDict['tStop']),
@@ -72,15 +85,6 @@ def get_chunk(locationDict,res,dataset, chunk_size):
         slice(locationDict['yStart'],locationDict['yStop']),
         slice(locationDict['xStart'],locationDict['xStop'])
         ]
-
-    # return dataset[
-    #     res,
-    #     locationDict['tStart']:locationDict['tStop'],
-    #     locationDict['cStart']:locationDict['cStop'],
-    #     locationDict['zStart']:locationDict['zStop'],
-    #     locationDict['yStart']:locationDict['yStop'],
-    #     locationDict['xStart']:locationDict['xStop']
-    #     ]
 
 
 def pad_chunk(chunk, chunk_size):
@@ -100,9 +104,9 @@ def pad_chunk(chunk, chunk_size):
 
 
 def get_compressor():
-    return Blosc(cname='lz4',clevel=3)
+    # return Blosc(cname='lz4',clevel=3)
     # return Blosc(cname='lz4', clevel=3, shuffle=Blosc.SHUFFLE, blocksize=0)
-    # return Blosc(cname='zstd', clevel=5, shuffle=Blosc.SHUFFLE, blocksize=0)
+    return Blosc(cname='zstd', clevel=5, shuffle=Blosc.SHUFFLE, blocksize=0)
 
 
 # def compress_zarr_chunk(np_array,compressor=get_compressor()):
@@ -503,7 +507,6 @@ def setup_omezarr(app, config):
             locationDict = where_is_that_chunk(chunk_name=chunk_name, dataset_shape=dataset_shape, chunk_size=chunk_size)
             # print('Chunk is here:')
             # print(locationDict)
-
 
             chunk = get_chunk(locationDict,resolution,config.opendata[datapath],chunk_size)
             # print(chunk.shape)

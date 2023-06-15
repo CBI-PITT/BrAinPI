@@ -456,6 +456,129 @@ def profile(func):
 
     return wrapper
     
-    
-    
-    
+
+
+# class dataset_projection:
+#     '''
+#     Takes a multi-scale loaded dataset with dims (t,c,z,y,x) and presents it as a max, min or mean intensity projection
+#     of itself in the 3 spatial dimensions (z,y,x). Projection_dict is the final resolution of z,y,x in microns for the projection.
+#     '''
+#     def __init__(self,reference_dataset, projection_dict={'z':100, 'y':None, 'x':None}, projection_type='max', ResolutionLevelLock=0):
+#         # Store reference dataset
+#         self.reference_dataset = reference_dataset
+#         self.reference_dataset_full_res = self.reference_dataset.metaData[0, t, c, 'resolution']
+#
+#         # Store desired projection
+#         self.projection_dict = projection_dict
+#         self.projection_type = projection_type
+#         self.projection_resolution = []
+#         for axis,calib in projection_dict.items():
+#             if axis.lower() == 'z':
+#                 if calib is not None:
+#                     self.projection_resolution.append(calib)
+#                 else:
+#                     self.projection_resolution.append(self.reference_dataset_full_res[0])
+#             if axis.lower() == 'y':
+#                 if calib is not None:
+#                     self.projection_resolution.append(calib)
+#                 else:
+#                     self.projection_resolution.append(self.reference_dataset_full_res[1])
+#             if axis.lower() == 'x':
+#                 if calib is not None:
+#                     self.projection_resolution.append(calib)
+#                 else:
+#                     self.projection_resolution.append(self.reference_dataset_full_res[2])
+#
+#         self.projection_resolution = tuple(self.projection_resolution)
+#
+#         self.ResolutionLevels = self.reference_dataset.ResolutionLevels
+#         self.ResolutionLevelLock = ResolutionLevelLock
+#
+#         self.shape = self.reference_dataset.metaData[0, 0, 0, 'shape']
+#         self.ndim = len(self.shape)
+#         self.chunks = self.reference_dataset.metaData[0, 0, 0, 'chunks']
+#         self.resolution = self.reference_dataset.metaData[0, 0, 0, 'resolution']
+#         self.dtype = self.reference_dataset.metaData[0, 0, 0, 'dtype']
+#
+#         self.metaData = {}
+#         for r in range(self.ResolutionLevels):
+#             if r == 0:
+#                 self.TimePoints = self.reference_dataset.TimePoints
+#                 self.Channels = self.reference_dataset.Channels
+#                 resolution_proportion_of_full = (1,1,1)
+#             else:
+#                 resolution_proportion_of_full = [x/y for x,y in
+#                                                  zip(self.reference_dataset.metaData[r, t, c, 'resolution'],
+#                                                      self.reference_dataset_full_res)]
+#
+#             for t, c in itertools.product(range(self.TimePoints), range(self.Channels)):
+#
+#                 # Determine resolution for specific projection multiscale based on proportional change of multiscale in
+#                 # origional dataset
+#                 out_resolution = [x*y for x,y in zip(self.projection_resolution,resolution_proportion_of_full)]
+#                 new_shape = self.three_d_shape_to_projection_shape(self.reference_dataset.metaData[r, t, c, 'shape'],
+#                                                                    self.reference_dataset.metaData[r, t, c, 'resolution'], out_resolution)
+#                 self.metaData[r, t, c, 'shape'] = new_shape
+#                 self.metaData[r, t, c, 'resolution'] = out_resolution
+#
+#                 # Collect dataset info
+#                 self.metaData[r, t, c, 'chunks'] = self.reference_dataset.metaData[r, t, c, 'chunks'] # May need to adjust chunks later for now this is ok
+#                 self.metaData[r, t, c, 'dtype'] = self.reference_dataset.metaData[r, t, c, 'dtype']
+#                 self.metaData[r, t, c, 'ndim'] = self.reference_dataset.metaData[r, t, c, 'ndim']
+#
+#                 try:
+#                     self.metaData[r, t, c, 'max'] = self.metaData[r, t, c, 'max']
+#                     self.metaData[r, t, c, 'min'] = self.metaData[r, t, c, 'min']
+#                 except:
+#                     pass
+#
+#         self.change_resolution_lock(self.ResolutionLevelLock)
+#
+#     def change_resolution_lock(self,ResolutionLevelLock):
+#         self.ResolutionLevelLock = ResolutionLevelLock
+#         self.shape = self.metaData[self.ResolutionLevelLock,0,0,'shape']
+#         self.ndim = len(self.shape)
+#         self.chunks = self.metaData[self.ResolutionLevelLock,0,0,'chunks']
+#         self.resolution = self.metaData[self.ResolutionLevelLock,0,0,'resolution']
+#         self.dtype = self.metaData[self.ResolutionLevelLock,0,0,'dtype']
+#
+#     @staticmethod
+#     def three_d_shape_to_projection_shape(in_shape, in_resolution, out_resolution):
+#         '''
+#         Takes 3D shape (z,y,z) and resolution in microns for that shape and outputs the projection shape
+#         '''
+#
+#         # Ensure that projection out_resolution(s) are lower (higher value) than in_resolution(s)
+#         assert in_resolution[0] < out_resolution[0], 'projection must be from a higher resolution to a lower resolution''
+#         assert in_resolution[1] < out_resolution[1], 'projection must be from a higher resolution to a lower resolution''
+#         assert in_resolution[2] < out_resolution[2], 'projection must be from a higher resolution to a lower resolution''
+#
+#         # Calculate proportion change for each dimension based on resolution
+#         z_change = in_resolution[0] / out_resolution[0] if out_resolution[0] is not None else 1
+#         y_change = in_resolution[1] / out_resolution[1] if out_resolution[1] is not None else 1
+#         x_change = in_resolution[2] / out_resolution[2] if out_resolution[2] is not None else 1
+#
+#         # Calculate new dimension shape. Always use floor function
+#         z = math.floor(in_shape[0] * z_change)
+#         y = math.floor(in_shape[1] * y_change)
+#         x = math.floor(in_shape[2] * x_change)
+#
+#         return (z,y,x)
+#
+#     @staticmethod
+#     def slice_resizer(key, in_shape, out_shape):
+#         '''
+#         Given a slice key for in_shape
+#         return a slice key fit to out_shape
+#         '''
+#         # All shape math must use floor function to create integer
+#         offset_factor = [y/x for x,y in zip(in_shape,out_shape)]
+#         new_key = []
+#         for k in key:
+#             pass
+#
+#
+#
+
+
+
