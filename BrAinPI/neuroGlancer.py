@@ -27,7 +27,9 @@ from flask import (
     request,
     send_file,
     redirect,
-    jsonify
+    jsonify,
+    make_response,
+    Response
     )
 
 from flask_login import login_required
@@ -438,7 +440,7 @@ def open_ng_dataset(config,datapath):
                     ng_json(config.opendata[datapath],file='dict')
     
     return datapath
-    
+
 
 #######################################################################################
 ##  Neuroglancer entry point : decorated separately below to enable caching and flask entry
@@ -549,13 +551,18 @@ def setup_neuroglancer(app, config):
                 if config.cache is not None:
                     config.cache.set(key, img, expire=None, tag=datapath, retry=True)
 
-            # Flask return of bytesIO as file
-            return send_file(
-                img,
-                as_attachment=True,
-                download_name=path_split[-1], # name needs to match chunk
-                mimetype='application/octet-stream'
-            )
+            #Flask return of bytesIO as file
+            return Response(response=img, status=200,
+                            mimetype="application/octet_stream")
+            # res = make_response(
+            #     send_file(
+            #     img,
+            #     as_attachment=True,
+            #     download_name=path_split[-1], # name needs to match chunk
+            #     mimetype='application/octet-stream'
+            # )
+            # )
+            # return res
         
         # # Not necessary with config.opendata[datapath].ng_files not being built
         # # Build appropriate File List in base path

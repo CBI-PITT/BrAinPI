@@ -9,6 +9,7 @@ import flask, json, os, ast, re, io, sys
 from flask import request, Response, send_file, render_template, jsonify
 from flask_cors import cross_origin, CORS
 import numpy as np
+from datetime import datetime, timedelta
 # import dask.array as da
 
 ## Project imports
@@ -380,7 +381,20 @@ array_base = '/array/'
 get_compressed_array = app.route(array_base + '<path:req_path>')(get_compressed_array)
 get_compressed_array = app.route(array_base, defaults={'req_path': ''})(get_compressed_array)
 
+@app.after_request
+def add_header(response):
+    '''
+    Add cache-control headers to all responses to reduce burden on server
+    Changing seconds object will determine how long the response is valid
+    '''
+    seconds = 600
+    then = datetime.now() + timedelta(seconds=seconds)
+    response.headers.add('Expires', then.strftime("%a, %d %b %Y %H:%M:%S GMT"))
+    response.headers.add('Cache-Control', 'public,max-age=%d' % seconds)
+    return response
 
+# @app.route('/test/route/**/', methods=['GET'])
+# def fmostCompress():
 
 
 # CORS(app)
