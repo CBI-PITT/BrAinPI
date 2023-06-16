@@ -508,27 +508,32 @@ def setup_omezarr(app, config):
             # print('Chunk is here:')
             # print(locationDict)
 
-            chunk = get_chunk(locationDict,resolution,config.opendata[datapath],chunk_size)
-            # print(chunk.shape)
-            chunk = pad_chunk(chunk, chunk_size)
-            if force8Bit:
-                chunk = utils.conv_np_dtypes(chunk, 'uint8')
-            # print(chunk.shape)
-            # chunk = np.squeeze(chunk)
-            # print(chunk.shape)
-            chunk = compress_zarr_chunk(chunk,compressor=get_compressor())
+            chunk = None
+            if config.cache is not None:
+                key = f'omezarr_{locationDict}-{resolution}-{chunk_size}-{isNeuroGlancer}-{force8Bit}'
+                chunk = config.cache.get(key, default=None, retry=True)
 
-            # Flask return of bytesIO as file
+            if chunk is None:
+                chunk = get_chunk(locationDict,resolution,config.opendata[datapath],chunk_size)
+                # print(chunk.shape)
+                chunk = pad_chunk(chunk, chunk_size)
+                if force8Bit:
+                    chunk = utils.conv_np_dtypes(chunk, 'uint8')
+                # print(chunk.shape)
+                # chunk = np.squeeze(chunk)
+                # print(chunk.shape)
+                chunk = compress_zarr_chunk(chunk,compressor=get_compressor())
+
+                # Add to cache
+                if config.cache is not None:
+                    # a = dask.delayed(config.cache.set)(key, chunk, expire=None, tag=datapath, retry=True)
+
+                    config.cache.set(key, chunk, expire=None, tag=datapath, retry=True)
+
+                # Flask return of bytesIO as file
 
             return Response(response=chunk, status=200,
                             mimetype="application/octet_stream")
-
-            # return send_file(
-            #     chunk,
-            #     as_attachment=True,
-            #     download_name=path_split[-1], # name needs to match chunk
-            #     mimetype='application/octet-stream'
-            # )
 
 
         elif path_split[-1] == 'labels':
