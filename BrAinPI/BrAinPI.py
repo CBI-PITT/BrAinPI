@@ -9,7 +9,7 @@ import flask, json, os, ast, re, io, sys
 from flask import request, Response, send_file, render_template, jsonify
 from flask_cors import cross_origin, CORS
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 # import dask.array as da
 
 ## Project imports
@@ -387,10 +387,12 @@ def add_header(response):
     Add cache-control headers to all responses to reduce burden on server
     Changing seconds object will determine how long the response is valid
     '''
-    seconds = 600
-    then = datetime.now() + timedelta(seconds=seconds)
-    response.headers.add('Expires', then.strftime("%a, %d %b %Y %H:%M:%S GMT"))
-    response.headers.add('Cache-Control', 'public,max-age=%d' % seconds)
+    seconds = 3000
+    # then = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    # response.headers.add('Expires', then.strftime("%a, %d %b %Y %H:%M:%S GMT"))
+    response.headers.add('Cache-Control', f'public,max-age={seconds}')
+    # response.headers.add('Access-Control-Max-Age', str(seconds))
+    # response.headers.add('Last-Modified', datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
     return response
 
 # @app.route('/test/route/**/', methods=['GET'])
