@@ -309,8 +309,8 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
             # Proportional difference in spacing between current and previous scale
             translation = [x/y for x,y in zip(metadata[(res, 0, 0, 'resolution')],metadata[(res-1, 0, 0, 'resolution')])]
             # Determine micron shift in origin by dividing current resoluton by proportional difference
-            translation = [x/y for x,y in zip(metadata[(res, 0, 0, 'resolution')], translation)]
-            translation = [x if x!=1 else 0 for x in translation]
+            translation = [x/y if y!=1 else 0 for x,y in zip(metadata[(res, 0, 0, 'resolution')], translation)]
+            # translation = [x if x!=1 else 0 for x in translation]
             translation = (0,0,*translation)
 
             # # I think we can just pass the previous resolution here (need to test carefully)
