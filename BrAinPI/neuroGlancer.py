@@ -454,7 +454,8 @@ def setup_neuroglancer(app, config):
         ng_server = get_server()
         config.ng_server = ng_server
 
-
+    # Establish file_pattern once so it isn't created on each request.
+    file_pattern = '[0-9]+-[0-9]+_[0-9]+-[0-9]+_[0-9]+-[0-9]+'
     def neuro_glancer_entry(req_path):
         
         path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
@@ -462,7 +463,7 @@ def setup_neuroglancer(app, config):
         # Test for different patterns
         # file_name_template = '{}-{}_{}-{}_{}-{}'
         # file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
-        file_pattern = '[0-9]+-[0-9]+_[0-9]+-[0-9]+_[0-9]+-[0-9]+'
+        # file_pattern = '[0-9]+-[0-9]+_[0-9]+-[0-9]+_[0-9]+-[0-9]+'
         ## NEED to figure out how to extract the datapath from any version of ng request:
             # /hdshjk/file.ims : /hdshjk/file.ims/info : /hdshjk/file.ims/info/0/0-1_2-3_4-5
         
