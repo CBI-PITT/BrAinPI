@@ -138,43 +138,27 @@ def compress_zarr_chunk(np_array,compressor=get_compressor()):
 
     return img_ram
 
-def chunks_combine_channels(metadata,resolution_level, currentChunks=None):
+def chunks_combine_channels(metadata,resolution_level):
     '''
     Assumes 5 dimensions and replaces channel dim (t,c,z,y,x) with the number of channels.
     This is good for neuroglancer compatibility because it enables all channels to be delivered with each chunk
     enabling a shader to mix all channels into RGB representation
 
     return new chunk_size tuple
-
-    currentChunks must be 5-dim (t,c,z,y,x)
     '''
-    if currentChunks:
-        chunks = currentChunks
-    else:
-        chunks = list(metadata[(resolution_level, 0, 0, 'chunks')])
-    chunks = list(chunks)
-    print(metadata['Channels'])
+    chunks = list(metadata[(resolution_level, 0, 0, 'chunks')])
     chunks[1] = metadata['Channels']
-    print(chunks)
-
     return tuple(chunks)
 
-def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False,force8Bit=False, forceChunks=None):
-    # forchChunks must be a tuple of len 5 (dims)
+def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False,force8Bit=False):
 
     metadata = utils.metaDataExtraction(numpy_like_dataset,strKey=False)
-    chunks = list(metadata[(resolution_level, 0, 0, 'chunks')])
-
-    if isinstance(forceChunks,tuple):
-        chunks = forceChunks
 
     zarray = {}
     if combine_channels:
-        print('IN COMBINE CHANNELS')
-        zarray['chunks'] = chunks_combine_channels(metadata,resolution_level,currentChunks=chunks)
-        print(zarray['chunks'])
+        zarray['chunks'] = chunks_combine_channels(metadata,resolution_level)
     else:
-        zarray['chunks'] = chunks
+        zarray['chunks'] = metadata[(resolution_level,0,0,'chunks')]
 
     compressor = get_compressor()
     zarray['compressor'] = {}
@@ -473,9 +457,6 @@ exts = ['.ng.ome.zarr','.ome.zarr','.omezarr','.ome.ngff','.ngff']
 
 def setup_omezarr(app, config):
 
-    chunks_size_pattern = '^.*[0-9]+x[0-9]+x[0-9]+.*$'  # desired chunk size designated as .##x##x##. where ## are int
-    # designated as axes (z,y,x)
-
     def omezarr_entry(req_path):
 
         path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
@@ -514,49 +495,6 @@ def setup_omezarr(app, config):
                 # print(f'DATAPATH MINUS EXT: {datapath}')
                 break
 
-        # Define chunk size if specified in the path otherwise keep None
-        chunk_size = None
-        if re.match(chunks_size_pattern, datapath):
-            # Modified chunk size must be designated as an extension that comes before any other extenstions
-            # designated as .##x##x##. where ## is pixels numbers in axes (Z,Y,X)
-            print('INSIDE THE PATTERN ######################################')
-            print(datapath)
-            reverse_split = datapath.split('.')[::-1]
-            any_matches = tuple(
-                (
-                    x for x in reverse_split if isinstance(
-                    re.match(chunks_size_pattern, x), re.Match
-                )
-                )
-            )
-
-            if len(any_matches) > 0:
-                for ii in any_matches:
-                    chunk = ii.split('x')
-                    print(f'CHUNKS ######## {chunk}')
-                    chunk_size = tuple(
-                        (int(x) for x in chunk)
-                    )
-                    # Force chunk_size to 5-dims
-                    if len(chunk_size) == 3:
-                        chunk_size = (1, 1, *chunk_size)
-                    elif len(chunk_size) == 4:
-                        chunk_size = (1, *chunk_size)
-                    elif len(chunk_size) == 2:
-                        chunk_size = (1, 1, 1, *chunk_size)
-                    print(f'CHUNK SHAPE {chunk_size}')
-
-                    datapath = datapath.replace(f'.{ii}.', '.')
-                    print(f'DATAPATH ###### {datapath}')
-                    print(f'CHUNK SIZE ###### {chunk_size}')
-
-                    ####  SWITCH TO None to negate the chunk setting block and default to default chunks ####
-                    # chunk_Size = None
-                    # Only use the first match
-                    break
-
-            print(path_split)
-
         print(path_split)
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
@@ -571,11 +509,9 @@ def setup_omezarr(app, config):
             datapath = open_omezarr_dataset(config,datapath)
             config.opendata[datapath].metadata
 
-
             if isNeuroGlancer:
                 # print(451)
-                # chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
-                chunk_size = chunks_combine_channels(config.opendata[datapath].metadata, resolution, currentChunks=chunk_size)
+                chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
                 # print(453)
                 # print(chunk_size)
             else:
@@ -628,8 +564,7 @@ def setup_omezarr(app, config):
                 datapath = open_omezarr_dataset(config,datapath)
                 # return Response(response=get_zarray_file(config.opendata[datapath],resolution), status=200,
                 #                 mimetype="application/octet_stream")
-                print(f'Neuroglancer: {isNeuroGlancer}, chunk_size={chunk_size}')
-                return jsonify(get_zarray_file(config.opendata[datapath],resolution,combine_channels=isNeuroGlancer,force8Bit=force8Bit, forceChunks=chunk_size))
+                return jsonify(get_zarray_file(config.opendata[datapath],resolution,combine_channels=isNeuroGlancer,force8Bit=force8Bit))
             except:
                 abort(404)
         elif path_split[-1] == '.zattrs':
