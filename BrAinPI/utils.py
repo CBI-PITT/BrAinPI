@@ -346,6 +346,9 @@ class config:
                 self.opendata[dataPath].open()
         
         
+        elif dataPath.endswith('.ome.zarr'):
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='oz', cache=self.cache)
+
         elif '.omezarr' in os.path.split(dataPath)[-1]:
             self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False,zarr_store_type='hss',cache=self.cache)
         

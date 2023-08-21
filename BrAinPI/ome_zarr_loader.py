@@ -8,40 +8,30 @@ Created on Tue Nov  2 14:12:11 2021
 import zarr, os, glob, itertools
 import numpy as np
 
-from stack_to_multiscale_ngff.h5_shard_store import H5_Shard_Store
-from stack_to_multiscale_ngff.archived_nested_store import Archived_Nested_Store
-from stack_to_multiscale_ngff.h5_nested_store4 import H5_Nested_Store
-from zarr_chunk_cache import disk_cache_store
-
-# location = r'H:\globus\pitt\bil'
-
-# images = glob.glob(os.path.join(location,'t00_*.zarr'))
-# images = [zarr.NestedDirectoryStore(x) for x in images]
-
-
-
-# images = [da.from_zarr(x) for x in images]
-
-# napari.view_image(images,contrast_limits=[0,65534])
-
+# Import zarr stores
+from zarr.storage import NestedDirectoryStore
+from zarr_stores.archived_nested_store import Archived_Nested_Store
+from zarr_stores.h5_nested_store import H5_Nested_Store
 
 
 class ome_zarr_loader:
-    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type=H5_Shard_Store, verbose=None, squeeze=True, cache=None):
+    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type=NestedDirectoryStore, verbose=None, squeeze=True, cache=None):
         
         location = location
         self.location = location
         self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
         
         if isinstance(zarr_store_type,str):
-            if zarr_store_type=='ans':
-                self.zarr_store_type = Archived_Nested_Store
-            elif zarr_store_type=='hss':
-                self.zarr_store_type = H5_Shard_Store
-            elif zarr_store_type=='hns':
+            if zarr_store_type=='hns':
                 self.zarr_store_type = H5_Nested_Store
+            elif zarr_store_type == 'oz':
+                self.zarr_store_type = NestedDirectoryStore
+            elif zarr_store_type=='ans':
+                self.zarr_store_type = Archived_Nested_Store
+
         else:
             self.zarr_store_type = zarr_store_type
+
         self.verbose = verbose
         self.squeeze = squeeze
         self.cache = cache
