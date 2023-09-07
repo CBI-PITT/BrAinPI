@@ -56,6 +56,7 @@ def get_path_data(base, request):
     page_description['title'] = settings['browser']['title']
     page_description['header'] = settings['browser']['header']
     page_description['footer'] = settings['browser']['footer']
+    page_description['logo'] = settings['app']['logo']
     # print(page_description)
     
     # Determine what directories that users are allowed to browse 

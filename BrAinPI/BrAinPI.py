@@ -70,6 +70,7 @@ config.settings = utils.get_config('settings.ini') #<-- need to add this to conf
 
 TEMPLATE_DIR = os.path.abspath(settings.get('app','templates_location'))
 STATIC_DIR = os.path.abspath(settings.get('app','static_location'))
+LOGO = os.path.abspath(settings.get('app','logo'))
 
 app = flask.Flask(__name__,template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config["DEBUG"] = settings.getboolean('app','debug')
