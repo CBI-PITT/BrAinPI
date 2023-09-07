@@ -20,8 +20,9 @@
     <script src="{{ url_for('static', filename='styles/simple-datatablesv5.1.3.js') }}" type="text/javascript"></script>   <title>{{ current_path['title'] }}</title>
   </head>
   <body>
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #343;">
+    <nav class="navbar navbar-expand-lg header">
       <div class="container-fluid">
+        <img src="{{ url_for('static', filename=current_path['logo'])}}" class="logo" />
         <a class="navbar-brand" href="{{ url_for('browse_fs') }}"> {{ current_path['header'] }} </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarText" aria-controls="navbarText" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
@@ -62,11 +63,12 @@
       </div>
     </nav>
 
-    <div style="margin-bottom: 5em">
-		{% block content %}
-        {% endblock %}
-	</div>
-    <div class="footer">
+    <section class="file_explorer">
+      {% block content %}
+      {% endblock %}
+    </section>
+
+    <footer>
       {{ current_path['footer'] }}
       <div class="cb-breadcrumb" style="text-align: left">
         {{ current_path['current_path'] }}
@@ -74,8 +76,6 @@
       <div class="cb-logout" style="text-align: right">
         <a href="#top">Top</a>
       </div>
-    </div>
-
-    
+    </footer>
   </body>
 </html>
