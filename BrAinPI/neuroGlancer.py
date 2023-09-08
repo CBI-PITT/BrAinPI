@@ -456,9 +456,15 @@ def setup_neuroglancer(app, config):
 
     # Establish file_pattern once so it isn't created on each request.
     file_pattern = '[0-9]+-[0-9]+_[0-9]+-[0-9]+_[0-9]+-[0-9]+'
+
+    # Establish highly used functions as objects to improve speed
+    get_html_split_and_associated_file_path = utils.get_html_split_and_associated_file_path
+    match = re.match
+    Match_class = re.Match
+
     def neuro_glancer_entry(req_path):
         
-        path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
+        path_split, datapath = get_html_split_and_associated_file_path(config,request)
         
         # Test for different patterns
         # file_name_template = '{}-{}_{}-{}_{}-{}'
@@ -470,7 +476,7 @@ def setup_neuroglancer(app, config):
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
         # If only the file name is requested this will redirect to a 
-        if isinstance(re.match(file_pattern,path_split[-1]),re.Match):
+        if isinstance(match(file_pattern,path_split[-1]),Match_class):
             datapath = '/' + os.path.join(*datapath.split('/')[:-2])
         elif path_split[-1] == 'info':
             datapath = '/' + os.path.join(*datapath.split('/')[:-1])
@@ -512,7 +518,7 @@ def setup_neuroglancer(app, config):
             # )
         
         ## Serve neuroglancer raw-format files
-        elif isinstance(re.match(file_pattern,path_split[-1]),re.Match):
+        elif isinstance(match(file_pattern,path_split[-1]),Match_class):
             
             print(request.path + '\n')
             
@@ -577,7 +583,7 @@ def setup_neuroglancer(app, config):
         
         # # Not necessary with config.opendata[datapath].ng_files not being built
         # # Build html to display all ng_files chunks
-        # if len(url_path_split) == 2 and isinstance(re.match('[0-9]+',url_path_split[-1]),re.Match):
+        # if len(url_path_split) == 2 and isinstance(match('[0-9]+',url_path_split[-1]),Match_class):
         #     res = int(url_path_split[-1])
         #     files = config.opendata[datapath].ng_files[res]
         #     path = [request.script_root]

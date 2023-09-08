@@ -476,9 +476,14 @@ def setup_omezarr(app, config):
     chunks_size_pattern = '^.*[0-9]+x[0-9]+x[0-9]+.*$'  # desired chunk size designated as .##x##x##. where ## are int
     # designated as axes (z,y,x)
 
+    # Establish highly used functions as objects to improve speed
+    get_html_split_and_associated_file_path = utils.get_html_split_and_associated_file_path
+    match = re.match
+    Match_class = re.Match
+
     def omezarr_entry(req_path):
 
-        path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
+        path_split, datapath = get_html_split_and_associated_file_path(config,request)
 
         # print(path_split)
         # print(datapath)
@@ -492,7 +497,7 @@ def setup_omezarr(app, config):
                 # print(new_path)
                 request.path = '/' + os.path.join(*path_split[:-5],new_path)
                 # print(request.path)
-                path_split, datapath = utils.get_html_split_and_associated_file_path(config,request)
+                path_split, datapath = get_html_split_and_associated_file_path(config,request)
             else:
                 pass
         except Exception:
@@ -516,7 +521,7 @@ def setup_omezarr(app, config):
 
         # Define chunk size if specified in the path otherwise keep None
         chunk_size = None
-        if re.match(chunks_size_pattern, datapath):
+        if match(chunks_size_pattern, datapath):
             # Modified chunk size must be designated as an extension that comes before any other extenstions
             # designated as .##x##x##. where ## is pixels numbers in axes (Z,Y,X)
             print('INSIDE THE PATTERN ######################################')
@@ -525,7 +530,7 @@ def setup_omezarr(app, config):
             any_matches = tuple(
                 (
                     x for x in reverse_split if isinstance(
-                    re.match(chunks_size_pattern, x), re.Match
+                    match(chunks_size_pattern, x), Match_class
                 )
                 )
             )
@@ -561,7 +566,7 @@ def setup_omezarr(app, config):
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
         # If only the file name is requested this will redirect to a
-        if isinstance(re.match(file_pattern,path_split[-1]),re.Match):
+        if isinstance(match(file_pattern,path_split[-1]),Match_class):
             # Find requested chunk name
             chunk_name = path_split[-1]
             resolution = int(datapath.split('/')[-2])
