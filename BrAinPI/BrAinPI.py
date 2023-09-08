@@ -70,7 +70,7 @@ config.settings = utils.get_config('settings.ini') #<-- need to add this to conf
 
 TEMPLATE_DIR = os.path.abspath(settings.get('app','templates_location'))
 STATIC_DIR = os.path.abspath(settings.get('app','static_location'))
-LOGO = os.path.abspath(settings.get('app','logo'))
+# LOGO = os.path.abspath(settings.get('app','logo'))
 
 app = flask.Flask(__name__,template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config["DEBUG"] = settings.getboolean('app','debug')
@@ -101,6 +101,9 @@ def home():
     return render_template('home.html',
                            user=auth.user_info(),
                            app_name=settings.get('app','name'),
+                           app_description=settings.get('app','description'),
+                           app_motto=settings.get('app','motto'),
+                           app_logo=settings.get('app','logo'),
                            page_name='Home',
                            gtag=settings.get('GA4','gtag'))
 #     return '''<h1>Brain Image Library Archive API</h1>

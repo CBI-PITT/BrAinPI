@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1 style="font-size: 30px">Center for Biologic Imaging API</h1>
-<p style="font-size: 20px">An interface for data access and visualization over the web</p>
+<h1 style="font-size: 30px">{{app_name}}</h1>
+{% if app_description %}
+<p style="font-size: 20px">{{app_description}}</p>
+{% endif %}
 <div class="img-with-text">
-    <img src="{{ url_for('static', filename='images/cbi_logo.png') }}" alt="cbi_logo" />
-    <p style="font-size: 30px">Science you can see!</p>
+    {% if app_logo %}
+    <img src="{{ url_for('static', filename=app_logo) }}" alt="logo" />
+    {% endif %}
+    {% if app_motto %}
+    <p style="font-size: 30px">{{app_motto}}</p>
+    {% endif %}
 </div>
 
 {% endblock %}
