@@ -6,7 +6,7 @@ Created on Wed Nov  3 11:06:07 2021
 """
 
 import flask, json, os, ast, re, io, sys
-from flask import request, Response, send_file, render_template, jsonify
+from flask import request, Response, send_file, render_template, jsonify,url_for, redirect
 from flask_cors import cross_origin, CORS
 import numpy as np
 from datetime import datetime, timedelta, timezone
@@ -368,8 +368,6 @@ print('Importing Neuroglancer endpoints')
 import neuroGlancer
 app = neuroGlancer.setup_neuroglancer(app, config)
 
-
-
 print(config.cache)
 if config.cache is not None:
     @config.cache.memoize()
@@ -391,10 +389,29 @@ def add_header(response):
     Add cache-control headers to all responses to reduce burden on server
     Changing seconds object will determine how long the response is valid
     '''
-    seconds = 3000
+    seconds = 864000 # 10 days
     # then = datetime.now(timezone.utc) + timedelta(seconds=seconds)
     # response.headers.add('Expires', then.strftime("%a, %d %b %Y %H:%M:%S GMT"))
-    response.headers.add('Cache-Control', f'public,max-age={seconds}')
+    # print(response.headers)
+    added_headers = False
+    content_type = response.headers.get('Content-Type')
+    if 'application/json' in content_type or 'html' in content_type:
+        '''
+        ################################################
+        ## ADD HEADERS TO DISABLE CACHE ON JSON/HTML  ##
+        ## In general these docs may update often, so ##
+        ## caching may break the program              ##
+        ################################################
+        Cache-Control: no-cache, no-store, must-revalidate
+        Pragma: no-cache
+        Expires: 0
+        '''
+        response.headers.add('Cache-Control', 'no-cache,no-store,must-revalidate,max-age=0')
+        response.headers.add('Pragma', 'no-cache')
+        response.headers.add('Expires', '0')
+    else:
+        # Everything else is cached
+        response.headers.add('Cache-Control', f'public,max-age={seconds}')
     # response.headers.add('Access-Control-Max-Age', str(seconds))
     # response.headers.add('Last-Modified', datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
     return response
