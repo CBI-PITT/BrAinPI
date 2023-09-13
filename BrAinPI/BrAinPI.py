@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 ## Project imports
 import auth
 import utils
+import coordination_endpoints
 
 
 ## File-type handler imports (some are project specific)
@@ -111,48 +112,14 @@ def home():
 
 ##############################################################################
 
-@app.route('/api/available-datasets', methods=['GET'])
+@app.route('/curated-datasets', methods=['GET'])
 def datasets():
     return json.dumps(dataset_info())
 
 ##############################################################################
-
-# Return descriptive information about a given dataset
-@app.route('/api/metadata', methods=['GET'])
-def api_meta():
-    print(request.args)
-    if 'id' in request.args:
-        # dsetNum = int(request.args['id'])
-        # dsetPath = dataset_info()[dsetNum][1]
-        dsetPath = request.args['id']
-        print(dsetPath)
-        print(os.path.split(dsetPath)[1])
-        
-        if os.path.splitext(dsetPath)[1] == '.ims':
-            z = ims.ims(dsetPath)
-        elif os.path.splitext(dsetPath)[1] == '.zarr':
-            z = zarrLoader.zarrSeries(dsetPath)
-        elif '.omezarr' in os.path.split(dsetPath)[-1]:
-            z = ome_zarr_loader(dsetPath)
-        elif os.path.splitext(dsetPath)[1] == '.z_sharded':
-            z = zarr_zip_sharded_loader.zarr_zip_sharded(dsetPath)
-        elif os.path.exists(os.path.join(dsetPath,'weave.json')):
-            z = weave_read(dsetPath)
-            z.metaData = z.meta
-        else:
-            print('API can currently only load Zarr, IMS and z_sharded datasets')
-            return
-            
-        metadata = utils.metaDataExtraction(z,strKey=True)
-        
-        return json.dumps(metadata)
-    else:
-        return "No dataset id was provided"
-    
-
 ###############################################################################
 
-# Return descriptive information about a given dataset
+# Return descriptive information about arrays within a given dataset
 meta_base = '/metadata/'
 @app.route(meta_base + '<path:req_path>')
 @app.route(meta_base, defaults={'req_path': ''})
@@ -161,227 +128,42 @@ def meta(req_path):
     try:
         # dsetNum = int(request.args['id'])
         # dsetPath = dataset_info()[dsetNum][1]
-        _, datapath = utils.get_html_split_and_associated_file_path(config,request)
+        _, datapath = utils.get_html_split_and_associated_file_path(config, request)
         dsetPath = config.loadDataset(datapath)
         # dsetPath = request.args['id']
         print(dsetPath)
         print(os.path.split(dsetPath)[1])
-        
-        if os.path.splitext(dsetPath)[1] == '.ims':
-            z = ims.ims(dsetPath)
-        elif '.omezarr' in os.path.split(dsetPath)[-1]:
-            z = ome_zarr_loader(dsetPath)
-        elif os.path.splitext(dsetPath)[1] == '.zarr':
-            z = zarrLoader.zarrSeries(dsetPath)
-        elif os.path.splitext(dsetPath)[1] == '.z_sharded':
-            z = zarr_zip_sharded_loader.zarr_zip_sharded(dsetPath)
-        elif os.path.exists(os.path.join(dsetPath,'weave.json')):
-            z = weave_read(dsetPath)
-            z.metaData = z.meta
-        else:
-            print('API can currently only load Zarr, IMS and z_sharded datasets')
+
+        try:
+            print('Trying metadata extraction')
+            metadata = config.opendata[dsetPath].metadata
+            print('Successful metadata extraction')
+            print(metadata)
+            print(isinstance(metadata,dict))
+        except:
+            print('An error occurred while trying to get metadata')
             return
-            
-        metadata = utils.metaDataExtraction(z,strKey=True)
-        
-        return json.dumps(metadata)
-    except Exception:
+
+        # Remove any tuples or lists as keys to enable jsonify
+        new_meta = {}
+        for key, value in metadata.items():
+            if isinstance(key,(tuple,list)):
+                new_meta[str(key)] = value
+            else:
+                new_meta[key] = value
+
+        return jsonify(new_meta)
+
+    except Exception as e:
+        print(e)
         return "Dataset was not found"
-    
-
-# A route to return specific dataset chunks.
-@app.route('/api/arrayCompress', methods=['GET'])
-def fmostCompress():
-    '''
-    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
-
-    tstart,tstop,tstep
-    cstart,cstop,cstep
-    zstart,zstop,zstep
-    ystart,ystop,ystep
-    xstart,xstop,xstep
-
-    Returns
-    -------
-    Bytestring of compresed numpy array
-
-    '''
-
-    requiredParam = (
-        'dset',
-        'res',
-        'tstart','tstop','tstep',
-        'cstart','cstop','cstep',
-        'zstart','zstop','zstep',
-        'ystart','ystop','ystep',
-        'xstart','xstop','xstep'
-        )
-
-    print(request.args)
-    if all((x in request.args for x in requiredParam)):
-        pass
-    else:
-        return 'A required data set, resolution level or (t,c,z,y,x) start/stop/step parameter is missing'
-
-    # for x in request.args:
-    #     print(x)
-    # print(jsonify(request.args))
-    intArgs = {}
-    for x in request.args:
-        # print(x)
-        if x == 'dset':
-            # print(x + ' in dset')
-            intArgs[x] = request.args[x]
-        else:
-            intArgs[x] = ast.literal_eval(request.args[x])
-    # print(intArgs)
-
-
-
-    # dataPath = dataset_info()[intArgs['dset']][1]
-    datapath = config.loadDataset(intArgs['dset'])
-
-    # if os.path.splitext(dataPath)[1] == '.ims':
-    #     z = ims.ims(dataPath)
-
-    out = grabArray(datapath,intArgs)
-
-
-    # out = z[intArgs['res'],tslice,cslice,zslice,yslice,xslice]
-    # print(out.max())
-    # out = np.zeros((5,5,5))
-    if config.cache is not None:
-        out,_,_ = compress_np(out)
-    else:
-        out,_,_ = utils.compress_np(out)
-        
-    return Response(response=out, status=200,
-                    mimetype="application/octet_stream")
-
-
 
 ##############################################################################
-
-requiredParam = (
-    'res',
-    'tstart','tstop','tstep',
-    'cstart','cstop','cstep',
-    'zstart','zstop','zstep',
-    'ystart','ystop','ystep',
-    'xstart','xstop','xstep'
-    )
-
-# A route to return specific dataset chunks.
-# array_base = '/array/'
-# @app.route(array_base + '<path:req_path>')
-# @app.route(array_base, defaults={'req_path': ''})
-def get_compressed_array(req_path):
-    '''
-    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
-    
-    tstart,tstop,tstep
-    cstart,cstop,cstep
-    zstart,zstop,zstep
-    ystart,ystop,ystep
-    xstart,xstop,xstep
-    
-    The datasets to be retrieved is specified by the path passed after 'array_base'
-    This will be equivilant to url_for('fs_browse') but replaced with 'array_bas')
-    Returns
-    -------
-    Bytestring of compresed numpy array
-
-    '''
-    
-    print(request.path)
-    print(request.args)
-    if all((x in request.args for x in requiredParam)):
-        pass
-    else:
-        return 'A required data set, resolution level or (t,c,z,y,x) start/stop/step parameter is missing'
-    
-    intArgs = {}
-    for x in request.args:
-        intArgs[x] = ast.literal_eval(request.args[x])
-    # print(intArgs)
-    
-    
-    
-    # dataPath = dataset_info()[intArgs['dset']][1]
-    # datapath = config.loadDataset(intArgs['dset'])
-    _, datapath = utils.get_html_split_and_associated_file_path(config,request)
-    datapath = config.loadDataset(datapath)
-    # print(datapath)
-    
-    # if os.path.splitext(dataPath)[1] == '.ims':
-    #     z = ims.ims(dataPath)
-    
-    out = grabArray(datapath,intArgs)
-    
-    # out = z[intArgs['res'],tslice,cslice,zslice,yslice,xslice]
-    # print(out.max())
-    # out = np.zeros((5,5,5))
-    if config.cache is not None:
-        out,_,_ = compress_np(out)
-    else:
-        out,_,_ = utils.compress_np(out)
-        
-    return Response(response=out, status=200,
-                    mimetype="application/octet_stream")
-
-
-
 ##############################################################################
-
-
-
-
-##############################################################################
-
-def makesSlices(intArgs):
-    tslice = slice(intArgs['tstart'],intArgs['tstop'],intArgs['tstep'])
-    cslice = slice(intArgs['cstart'],intArgs['cstop'],intArgs['cstep'])
-    zslice = slice(intArgs['zstart'],intArgs['zstop'],intArgs['zstep'])
-    yslice = slice(intArgs['ystart'],intArgs['ystop'],intArgs['ystep'])
-    xslice = slice(intArgs['xstart'],intArgs['xstop'],intArgs['xstep'])
-    
-    return tslice, cslice, zslice, yslice, xslice
-
-##############################################################################
-
-def grabArray(datapath,intArgs):
-    '''
-    intArgs = eval(intArgs) was used to deal with lru_cache which did not 
-    like tuples as arguments.  However, diskcache.memorize() works fine.
-    '''
-    t,c,z,y,x = makesSlices(intArgs)
-    out = config.opendata[datapath][intArgs['res'],t,c,z,y,x]
-    return out
-
-###############################################################################
-# ## INIT FlaskCache
-# from flask_caching import Cache
-# fcache = Cache(config={'CACHE_TYPE': 'SimpleCache','CACHE_THRESHOLD': 1000000})
-# config.fcache.init_app(app)
 
 print('Importing Neuroglancer endpoints')
 import neuroGlancer
 app = neuroGlancer.setup_neuroglancer(app, config)
-
-print(config.cache)
-if config.cache is not None:
-    @config.cache.memoize()
-    def compress_np(np_array):
-        print('Reading from disk')
-        return utils.compress_np(np_array)
-    # utils.compress_np = config.cache.memoize()(utils.compress_np)
-    # get_compressed_array = config.cache.memoize()(get_compressed_array)
-    # fmostCompress = config.cache.memoize()(fmostCompress)
-    print(config.cache)
-
-array_base = '/array/'
-get_compressed_array = app.route(array_base + '<path:req_path>')(get_compressed_array)
-get_compressed_array = app.route(array_base, defaults={'req_path': ''})(get_compressed_array)
 
 @app.after_request
 def add_header(response):

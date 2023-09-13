@@ -14,9 +14,11 @@ from flask import (
     url_for
     )
 
+# from urllib.parse import quote
+
 from file_type_support import ng_links
 from neuroGlancer import neuroglancer_dtypes
-from utils import from_path_to_html, get_path_map, dict_key_value_match, from_path_to_browser_html, strip_leading_training_slash
+from utils import from_path_to_html, get_path_map, dict_key_value_match, from_path_to_browser_html, strip_leading_trailing_slash
 
 def inititate(app,config):
     settings = config.settings
@@ -29,8 +31,12 @@ def inititate(app,config):
         print(request.remote_addr)
         assert(isinstance(request.args, dict)), 'Expects a dictionary'
         assert 'path' in request.args, 'Expects a path key'
-        return path_to_html_options(request.args['path'])
+        return jsonify(path_to_html_options(request.args['path']))
+
     def path_to_html_options(path):
+        '''
+        Takes the path (on disk) to a potential BrAinPI compatible dataset and return all possible links in a dictionary
+        '''
         path_map = get_path_map(settings,
                                 user_authenticated=True)  # <-- Force user_auth=True to get all possible paths, in this way all ng links will be shareable to anyone
         key = path
@@ -58,10 +64,10 @@ def inititate(app,config):
         paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
 
         if not os.path.exists(paths['path']):
-            return jsonify(paths)
+            return paths
 
         html_base = settings.get('app','url')
-        html_base = strip_leading_training_slash(html_base)
+        html_base = strip_leading_trailing_slash(html_base)
         print('html_base',html_base)
         html_path = from_path_to_browser_html(paths['path'],path_map, html_base)
 
@@ -74,7 +80,7 @@ def inititate(app,config):
                 validator_url = 'https://ome.github.io/ome-ngff-validator'
                 validator_url = validator_url + '/?source='
 
-                ng_link = html_base + strip_leading_training_slash(ng_link)
+                ng_link = html_base + strip_leading_trailing_slash(ng_link)
 
                 paths['neuroglancer'] = ng_link
                 paths['neuroglancer_metadata'] = paths['neuroglancer'] + '/info'
@@ -92,7 +98,46 @@ def inititate(app,config):
                 paths['omezarr_neuroglancer_optimized_validator'] = validator_url + omezarr_entry + '.ng.ome.zarr'
                 paths['omezarr_8bit_neuroglancer_optimized_validator'] = validator_url + omezarr_entry + '.ng.8bit.ome.zarr'
 
-        return jsonify(paths)
+                # Replace values that don't translate directly to url
+                # Probably others that are missing
+                for key,value in paths.items():
+                    # Replace space with %20 (' ')
+                    if value.startswith('http'):
+                        paths[key] = value.replace(' ','%20')
+
+        return paths
+
+    @app.route('/curated_datasets/', methods=['GET'])
+    def curated_datasets():
+        locations = settings['curated_datasets']
+        locations = dict(locations)
+
+        if not hasattr(config,'curated_datasets'):
+            datasets = {}
+            for set_name, file in locations.items():
+                datasets[set_name] = {}
+                with open(file, 'r') as f:
+                    for line in f.readlines():
+                        if line[-1] == '\n':
+                            l = line[:-1]
+                        else:
+                            l = line
+                        options = path_to_html_options(l)
+                        name = os.path.split(line)[-1]
+                        datasets[set_name][name] = options
+
+            # from pprint import pprint as print
+            print(datasets)
+
+            # Cache curated_datasets in the config object (doesn't allow for dynamic updates) but is better performance
+            # Commenting below turns off caching in the config object so each time the files are reloaded
+            # (allows for dynamic updates to curated datasets)
+            # config.curated_datasets = datasets
+        else:
+            datasets = config.curated_datasets
+
+        return jsonify(datasets)
+
 
     return app
 

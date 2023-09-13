@@ -193,7 +193,7 @@ def dict_key_value_match(a_dict,key_or_value,specific=True):
                 return value
 
 
-def strip_leading_training_slash(string):
+def strip_leading_trailing_slash(string):
     assert isinstance(string,str), 'Must pass a string'
     if string[-1] == '/':
         string = string[:-1]
@@ -220,21 +220,17 @@ def from_path_to_browser_html(path, path_map, html_base):
     print(best_match)
     end = path.replace(best_match,matches[best_match])
     print(end)
-    end = strip_leading_training_slash(end)
+    end = strip_leading_trailing_slash(end)
 
     main = f'{url_for("browse_fs")}/{end}'.replace('//','/')
-    main = strip_leading_training_slash(main)
+    main = strip_leading_trailing_slash(main)
 
-    html_base = strip_leading_training_slash(html_base)
+    html_base = strip_leading_trailing_slash(html_base)
 
 
     html_path = f'{html_base}/{main}'
     print(html_path)
     return html_path
-    # if len(html_path) == 1:
-    #     return path.replace(path_map[html_path[0]],entry_point)
-    # else:
-    #     return path.replace(path_map[html_path[1]],entry_point + html_path[1])
 
 def get_base_paths(settings_config_parser_object,user_authenticated=False):
     '''
