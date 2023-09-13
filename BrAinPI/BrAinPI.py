@@ -166,7 +166,7 @@ print('Importing Neuroglancer endpoints')
 import neuroGlancer
 app = neuroGlancer.setup_neuroglancer(app, config)
 
-import gzip
+app_name = settings.get('app','name')
 @app.after_request
 def add_header(response):
     '''
@@ -208,6 +208,9 @@ def add_header(response):
         # Everything else is cached
         response.headers.add('Cache-Control', f'public,max-age={seconds}')
         response = compress_flask_response(response, request, 9)
+
+    if app_name:
+        response.headers.add('X-Service', app_name)
 
     return response
 
