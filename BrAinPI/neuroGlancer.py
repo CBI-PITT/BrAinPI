@@ -21,6 +21,7 @@ from functools import lru_cache
 ## Project imports
 # from dataset_info import dataset_info
 import utils
+from utils import compress_flask_response
 
 from flask import (
     render_template,
