@@ -165,6 +165,7 @@ print('Importing Neuroglancer endpoints')
 import neuroGlancer
 app = neuroGlancer.setup_neuroglancer(app, config)
 
+import gzip
 @app.after_request
 def add_header(response):
     '''
@@ -191,6 +192,13 @@ def add_header(response):
         response.headers.add('Cache-Control', 'no-cache,no-store,must-revalidate,max-age=0')
         response.headers.add('Pragma', 'no-cache')
         response.headers.add('Expires', '0')
+
+        # Compress json
+        out = gzip.compress(response.data, 9)
+        response.data = out
+        response.headers.add('Content-Encoding','gzip')
+        response.headers.add('Content-length', len(out))
+        
     else:
         # Everything else is cached
         response.headers.add('Cache-Control', f'public,max-age={seconds}')
