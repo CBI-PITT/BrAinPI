@@ -454,8 +454,11 @@ def profile(func):
         return retval
 
     return wrapper
-    
 
+def fix_special_characters_in_html(html_string):
+    # Replace space with %20 (' ')
+    tmp_string = html_string.replace(' ', '%20')
+    return tmp_string
 
 # class dataset_projection:
 #     '''
