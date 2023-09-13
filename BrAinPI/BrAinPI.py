@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 ## Project imports
 import auth
 import utils
+from utils import compress_flask_response
 import coordination_endpoints
 
 
@@ -172,13 +173,21 @@ def add_header(response):
     Add cache-control headers to all responses to reduce burden on server
     Changing seconds object will determine how long the response is valid
     '''
+    # print(request.headers)
     seconds = 864000 # 10 days
     # then = datetime.now(timezone.utc) + timedelta(seconds=seconds)
     # response.headers.add('Expires', then.strftime("%a, %d %b %Y %H:%M:%S GMT"))
     # print(response.headers)
     added_headers = False
     content_type = response.headers.get('Content-Type')
-    if 'application/json' in content_type or 'html' in content_type:
+    if 'octet_stream' in content_type:
+        # Cache but don't gzip
+        # Gzip can be handled by the specific process sending these data
+        # Neuroglancer data is not compressed natively so it is enabled
+        # However, ome-zarr is compressed, so gzip would not be helpful
+        response.headers.add('Cache-Control', f'public,max-age={seconds}')
+
+    elif 'application/json' in content_type or 'html' in content_type:
         '''
         ################################################
         ## ADD HEADERS TO DISABLE CACHE ON JSON/HTML  ##
@@ -193,17 +202,13 @@ def add_header(response):
         response.headers.add('Pragma', 'no-cache')
         response.headers.add('Expires', '0')
 
-        # Compress json
-        out = gzip.compress(response.data, 9)
-        response.data = out
-        response.headers.add('Content-Encoding','gzip')
-        response.headers.add('Content-length', len(out))
-        
+        response = compress_flask_response(response,request,9)
+
     else:
         # Everything else is cached
         response.headers.add('Cache-Control', f'public,max-age={seconds}')
-    # response.headers.add('Access-Control-Max-Age', str(seconds))
-    # response.headers.add('Last-Modified', datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
+        response = compress_flask_response(response, request, 9)
+
     return response
 
 # @app.route('/test/route/**/', methods=['GET'])

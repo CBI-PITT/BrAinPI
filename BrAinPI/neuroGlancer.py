@@ -559,8 +559,16 @@ def setup_neuroglancer(app, config):
                     config.cache.set(key, img, expire=None, tag=datapath, retry=True)
 
             #Flask return of bytesIO as file
-            return Response(response=img, status=200,
+            # return Response(response=img, status=200,
+            #                 mimetype="application/octet_stream")
+            response = Response(response=img, status=200,
                             mimetype="application/octet_stream")
+
+
+            response = compress_flask_response(response,request,9)
+
+            return response
+
             # res = make_response(
             #     send_file(
             #     img,
