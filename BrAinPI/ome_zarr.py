@@ -138,43 +138,27 @@ def compress_zarr_chunk(np_array,compressor=get_compressor()):
 
     return img_ram
 
-def chunks_combine_channels(metadata,resolution_level, currentChunks=None):
+def chunks_combine_channels(metadata,resolution_level):
     '''
     Assumes 5 dimensions and replaces channel dim (t,c,z,y,x) with the number of channels.
     This is good for neuroglancer compatibility because it enables all channels to be delivered with each chunk
     enabling a shader to mix all channels into RGB representation
 
     return new chunk_size tuple
-
-    currentChunks must be 5-dim (t,c,z,y,x)
     '''
-    if currentChunks:
-        chunks = currentChunks
-    else:
-        chunks = list(metadata[(resolution_level, 0, 0, 'chunks')])
-    chunks = list(chunks)
-    print(metadata['Channels'])
+    chunks = list(metadata[(resolution_level, 0, 0, 'chunks')])
     chunks[1] = metadata['Channels']
-    print(chunks)
-
     return tuple(chunks)
 
-def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False,force8Bit=False, forceChunks=None):
-    # forchChunks must be a tuple of len 5 (dims)
+def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False,force8Bit=False):
 
     metadata = utils.metaDataExtraction(numpy_like_dataset,strKey=False)
-    chunks = list(metadata[(resolution_level, 0, 0, 'chunks')])
-
-    if isinstance(forceChunks,tuple):
-        chunks = forceChunks
 
     zarray = {}
     if combine_channels:
-        print('IN COMBINE CHANNELS')
-        zarray['chunks'] = chunks_combine_channels(metadata,resolution_level,currentChunks=chunks)
-        print(zarray['chunks'])
+        zarray['chunks'] = chunks_combine_channels(metadata,resolution_level)
     else:
-        zarray['chunks'] = chunks
+        zarray['chunks'] = metadata[(resolution_level,0,0,'chunks')]
 
     compressor = get_compressor()
     zarray['compressor'] = {}
@@ -473,6 +457,7 @@ exts = ['.ng.ome.zarr','.ome.zarr','.omezarr','.ome.ngff','.ngff']
 
 def setup_omezarr(app, config):
 
+<<<<<<< HEAD
     chunks_size_pattern = '^.*[0-9]+x[0-9]+x[0-9]+.*$'  # desired chunk size designated as .##x##x##. where ## are int
     # designated as axes (z,y,x)
 
@@ -481,6 +466,8 @@ def setup_omezarr(app, config):
     match = re.match
     Match_class = re.Match
 
+=======
+>>>>>>> main
     def omezarr_entry(req_path):
 
         path_split, datapath = get_html_split_and_associated_file_path(config,request)
@@ -519,6 +506,7 @@ def setup_omezarr(app, config):
                 # print(f'DATAPATH MINUS EXT: {datapath}')
                 break
 
+<<<<<<< HEAD
         # Define chunk size if specified in the path otherwise keep None
         chunk_size = None
         if match(chunks_size_pattern, datapath):
@@ -562,6 +550,8 @@ def setup_omezarr(app, config):
 
             print(path_split)
 
+=======
+>>>>>>> main
         print(path_split)
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
@@ -576,11 +566,9 @@ def setup_omezarr(app, config):
             datapath = open_omezarr_dataset(config,datapath)
             config.opendata[datapath].metadata
 
-
             if isNeuroGlancer:
                 # print(451)
-                # chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
-                chunk_size = chunks_combine_channels(config.opendata[datapath].metadata, resolution, currentChunks=chunk_size)
+                chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
                 # print(453)
                 # print(chunk_size)
             else:
@@ -633,8 +621,7 @@ def setup_omezarr(app, config):
                 datapath = open_omezarr_dataset(config,datapath)
                 # return Response(response=get_zarray_file(config.opendata[datapath],resolution), status=200,
                 #                 mimetype="application/octet_stream")
-                print(f'Neuroglancer: {isNeuroGlancer}, chunk_size={chunk_size}')
-                return jsonify(get_zarray_file(config.opendata[datapath],resolution,combine_channels=isNeuroGlancer,force8Bit=force8Bit, forceChunks=chunk_size))
+                return jsonify(get_zarray_file(config.opendata[datapath],resolution,combine_channels=isNeuroGlancer,force8Bit=force8Bit))
             except:
                 abort(404)
         elif path_split[-1] == '.zattrs':
