@@ -503,7 +503,6 @@ def setup_omezarr(app, config):
                 # print(f'DATAPATH MINUS EXT: {datapath}')
                 break
 
-<<<<<<< HEAD
         # Define chunk size if specified in the path otherwise keep None
         chunk_size = None
         if match(chunks_size_pattern, datapath):
@@ -547,8 +546,6 @@ def setup_omezarr(app, config):
 
             print(path_split)
 
-=======
->>>>>>> main
         print(path_split)
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
