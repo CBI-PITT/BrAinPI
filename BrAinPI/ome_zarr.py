@@ -457,7 +457,6 @@ exts = ['.ng.ome.zarr','.ome.zarr','.omezarr','.ome.ngff','.ngff']
 
 def setup_omezarr(app, config):
 
-<<<<<<< HEAD
     chunks_size_pattern = '^.*[0-9]+x[0-9]+x[0-9]+.*$'  # desired chunk size designated as .##x##x##. where ## are int
     # designated as axes (z,y,x)
 
@@ -466,8 +465,6 @@ def setup_omezarr(app, config):
     match = re.match
     Match_class = re.Match
 
-=======
->>>>>>> main
     def omezarr_entry(req_path):
 
         path_split, datapath = get_html_split_and_associated_file_path(config,request)
