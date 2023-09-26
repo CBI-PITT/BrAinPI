@@ -415,6 +415,29 @@ def metaDataExtraction(numpy_like_object,strKey=False):
     
     return metadata
 
+def fix_special_characters_in_html(html_string):
+    # Replace space with %20 (' ')
+    tmp_string = html_string.replace(' ', '%20')
+    return tmp_string
+
+def strip_trailing_new_line(string):
+    while string[-1] == '\n':
+        string = string[:-1]
+    return string
+
+def compress_flask_response(response, request, compression_level=6):
+
+    if response.direct_passthrough:
+        return response
+
+    request_headers = request.headers
+    if 'Accept-Encoding' in request_headers and 'gzip' in request_headers['Accept-Encoding']:
+        # Compress json
+        out = gzip.compress(response.data, compression_level)
+        response.data = out
+        response.headers.add('Content-Encoding', 'gzip')
+        response.headers.add('Content-length', len(out))
+    return response
 
     
 #################################
@@ -456,24 +479,6 @@ def profile(func):
 
     return wrapper
 
-def fix_special_characters_in_html(html_string):
-    # Replace space with %20 (' ')
-    tmp_string = html_string.replace(' ', '%20')
-    return tmp_string
-
-def compress_flask_response(response, request, compression_level=6):
-
-    if response.direct_passthrough:
-        return response
-
-    request_headers = request.headers
-    if 'Accept-Encoding' in request_headers and 'gzip' in request_headers['Accept-Encoding']:
-        # Compress json
-        out = gzip.compress(response.data, compression_level)
-        response.data = out
-        response.headers.add('Content-Encoding', 'gzip')
-        response.headers.add('Content-length', len(out))
-    return response
 
 # class dataset_projection:
 #     '''
