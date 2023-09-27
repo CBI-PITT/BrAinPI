@@ -136,8 +136,7 @@ def is_file_type(file_type, path):
     #orig_path = path
     if isinstance(file_type,str):
         file_type = [file_type]
-    if path[-1] == '/':
-        path = path[:-1]
+    path = strip_trailing_slashs(path)
     terminal_path_ext = os.path.splitext('a'+ path)[-1]
     
     return any( [ x.lower() == terminal_path_ext.lower() for x in file_type ] ) #+ \
@@ -194,13 +193,41 @@ def dict_key_value_match(a_dict,key_or_value,specific=True):
                 return value
 
 
-def strip_leading_trailing_slash(string):
+def strip_leading_slashs(string):
     assert isinstance(string,str), 'Must pass a string'
-    if string[-1] == '/':
-        string = string[:-1]
-    if string[0] == '/':
+    while string[0] == '/' or string[0] == '\\':
         string = string[1:]
     return string
+
+def strip_trailing_slashs(string):
+    assert isinstance(string,str), 'Must pass a string'
+    while string[-1] == '/' or string[0] == '\\':
+        string = string[:-1]
+    return string
+
+def strip_leading_trailing_slash(string):
+    string = strip_leading_slashs(string)
+    string = strip_trailing_slashs(string)
+    return string
+
+def clean_double_slash_in_html(string):
+    start = ''
+    if string[0:6] == 'https:':
+        start = 'https://'
+        string = string[6:]
+    elif string[0:5] == 'http:':
+        start = 'http://'
+        string = string[5:]
+    string = strip_leading_trailing_slash(string)
+
+    while '\\' in string:
+        string = string.replace('\\','/')
+    while '//' in string:
+        string = string.replace('//','/')
+    return f'{start}{string}'
+
+
+
 
 
 import difflib
@@ -417,12 +444,23 @@ def metaDataExtraction(numpy_like_object,strKey=False):
 
 def fix_special_characters_in_html(html_string):
     # Replace space with %20 (' ')
-    tmp_string = html_string.replace(' ', '%20')
-    return tmp_string
+    #tmp_string = html_string.replace(' ', '%20')
+    for key,item in url_special_char_dict.items():
+        html_string = html_string.replace(key,f'%{item}')
+    return html_string
 
 def strip_trailing_new_line(string):
     while string[-1] == '\n':
         string = string[:-1]
+    return string
+
+def clean_html(string):
+    '''
+    Removes double slashes and fills special characters in html to return a string that can be used by a browser
+    '''
+    string = strip_trailing_new_line(string)
+    string = clean_double_slash_in_html(string)
+    string = fix_special_characters_in_html(string)
     return string
 
 def compress_flask_response(response, request, compression_level=6):
@@ -478,6 +516,34 @@ def profile(func):
         return retval
 
     return wrapper
+
+
+
+url_special_char_dict = {
+#https://documentation.n-able.com/N-central/userguide/Content/Further_Reading/API_Level_Integration/API_Integration_URLEncoding.html
+    '%':'25', #Must be first
+    ' ':'20',
+    '"':'22',
+    '<':'3C',
+    '>':'3E',
+    '#':'23',
+    '{':'7B',
+    '}':'7D',
+    '|':'7C',
+    '\\':'5C',
+    '^':'5E',
+    '~':'7E',
+    '[':'5B',
+    ']':'5D',
+    '`':'60',
+}
+
+
+
+
+
+
+
 
 
 # class dataset_projection:
