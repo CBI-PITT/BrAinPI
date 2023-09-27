@@ -621,7 +621,7 @@ def setup_neuroglancer(app, config):
     
     
    
-    neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
+    #neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
     neuro_glancer_entry = app.route(ngPath + '<path:req_path>')(neuro_glancer_entry)
     neuro_glancer_entry = app.route(ngPath, defaults={'req_path': ''})(neuro_glancer_entry)
