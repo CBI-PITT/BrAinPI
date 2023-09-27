@@ -3,6 +3,13 @@
 Created on Wed Mar  22 11:12:07 2023
 
 @author: alpha
+
+Endpoints/functions placed here are to help coordinate applications both internally/externally to interacting
+with the BrAinPI interface.
+
+For example, the path_to_html_options function allows a dictionary of links to be returned for any file on disk.
+This function may be used internally to generate links for other services; however,
+the /path_to_html_options/ endpoint allows user to query a 'path' and return a json of the output from path_to_html_options
 """
 import os, glob
 from flask import (
@@ -13,6 +20,7 @@ from flask import (
     jsonify,
     url_for
     )
+from flask_cors import cross_origin
 
 # from urllib.parse import quote
 
@@ -34,6 +42,7 @@ def inititate(app,config):
         return jsonify(neuroglancer_dtypes())
 
     @app.route('/path_to_html_options/', methods=['GET'])
+    @cross_origin(allow_headers=['Content-Type'])
     def html_options():
         print(request.remote_addr)
         assert(isinstance(request.args, dict)), 'Expects a dictionary'
@@ -114,6 +123,45 @@ def inititate(app,config):
 
         return paths
 
+    @app.route('/curated_datasets/', methods=['GET'])
+    @cross_origin(allow_headers=['Content-Type'])
+    def curated_datasets_3():
+
+        html_base = settings.get('app', 'url')
+        html_base = strip_leading_trailing_slash(html_base)
+
+        html_options_url = url_for("html_options")
+
+        # Locations are directories which contain files or files which have each line pointing to a dataset on disk
+        locations = settings['curated_datasets']
+        locations = dict(locations)
+
+        datasets = {'collections': {}}
+        for set_name, file in locations.items():
+            datasets['collections'][set_name] = []
+            with open(file, 'r') as f:
+                for line in f.readlines():
+                    l = strip_trailing_new_line(line)
+                    query_to_path_to_html_options = f'{html_base}{html_options_url}?path={l}'
+                    name = os.path.split(line)[-1]
+                    dataset = {
+                        'name':strip_trailing_new_line(name),
+                        'links':fix_special_characters_in_html(query_to_path_to_html_options)
+                    }
+                    datasets['collections'][set_name].append(dataset)
+
+            # from pprint import pprint as print
+            print(datasets)
+
+            # Cache curated_datasets in the config object (doesn't allow for dynamic updates) but is better performance
+            # Commenting below turns off caching in the config object so each time the files are reloaded
+            # (allows for dynamic updates to curated datasets)
+            # config.curated_datasets = datasets
+
+        return jsonify(datasets)
+
+    return app
+
     # @app.route('/curated_datasets/', methods=['GET'])
     # def curated_datasets():
     #     locations = settings['curated_datasets']
@@ -180,42 +228,6 @@ def inititate(app,config):
     #
     #     return jsonify(datasets)
 
-    @app.route('/curated_datasets/', methods=['GET'])
-    def curated_datasets_3():
 
-        html_base = settings.get('app', 'url')
-        html_base = strip_leading_trailing_slash(html_base)
-
-        html_options_url = url_for("html_options")
-
-        # Locations are directories which contain files or files which have each line pointing to a dataset on disk
-        locations = settings['curated_datasets']
-        locations = dict(locations)
-
-        datasets = {'collections': {}}
-        for set_name, file in locations.items():
-            datasets['collections'][set_name] = []
-            with open(file, 'r') as f:
-                for line in f.readlines():
-                    l = strip_trailing_new_line(line)
-                    query_to_path_to_html_options = f'{html_base}{html_options_url}?path={l}'
-                    name = os.path.split(line)[-1]
-                    dataset = {
-                        'name':strip_trailing_new_line(name),
-                        'links':fix_special_characters_in_html(query_to_path_to_html_options)
-                    }
-                    datasets['collections'][set_name].append(dataset)
-
-            # from pprint import pprint as print
-            print(datasets)
-
-            # Cache curated_datasets in the config object (doesn't allow for dynamic updates) but is better performance
-            # Commenting below turns off caching in the config object so each time the files are reloaded
-            # (allows for dynamic updates to curated datasets)
-            # config.curated_datasets = datasets
-
-        return jsonify(datasets)
-
-    return app
 
 # path, path_map, req_path, entry_point
