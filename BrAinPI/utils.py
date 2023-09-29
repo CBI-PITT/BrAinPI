@@ -19,7 +19,12 @@ import difflib
 
 import zarr
 import imaris_ims_file_reader as ims
+
 from ome_zarr_loader import ome_zarr_loader
+# Import zarr stores
+from zarr.storage import NestedDirectoryStore
+from zarr_stores.archived_nested_store import Archived_Nested_Store
+from zarr_stores.h5_nested_store import H5_Nested_Store
 
 from flask import (
     render_template,
@@ -100,14 +105,14 @@ class config:
 
 
         elif dataPath.endswith('.ome.zarr'):
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='oz', cache=self.cache)
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=NestedDirectoryStore, cache=self.cache)
             # self.opendata[dataPath].isomezarr = True
 
         elif '.omezans' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='ans', cache=self.cache)
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=Archived_Nested_Store, cache=self.cache)
 
         elif '.omehans' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='hns', cache=self.cache)
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=H5_Nested_Store, cache=self.cache)
 
         ## Append extracted metadata as attribute to open dataset
         try:

@@ -7,12 +7,11 @@ Created on Tue Jul 19 10:29:42 2022
 
 from collections.abc import MutableMapping
 from threading import Lock
-from typing import  Union
 
 from zarr._storage.absstore import ABSStore  # noqa: F401
 
 from zarr._storage.store import Store, BaseStore
-
+from typing import Union
 Path = Union[str, bytes, None]
 StoreLike = Union[BaseStore, MutableMapping]
 

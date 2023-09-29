@@ -5,38 +5,35 @@ Created on Tue Nov  2 14:12:11 2021
 @author: alpha
 """
 
-import zarr, os, glob, itertools
+import zarr, os, itertools
 import numpy as np
 
-# Import zarr stores
+# # Import zarr stores
 from zarr.storage import NestedDirectoryStore
-from zarr_stores.archived_nested_store import Archived_Nested_Store
-from zarr_stores.h5_nested_store import H5_Nested_Store
+# from zarr_stores.archived_nested_store import Archived_Nested_Store
+# from zarr_stores.h5_nested_store import H5_Nested_Store
 
+from collections.abc import MutableMapping
+from zarr._storage.store import Store, BaseStore
+from typing import Union
+Path = Union[str, bytes, None]
+StoreLike = Union[BaseStore, Store, MutableMapping]
 
 class ome_zarr_loader:
-    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type=NestedDirectoryStore, verbose=None, squeeze=True, cache=None):
-        
-        location = location
+    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type: StoreLike=NestedDirectoryStore, verbose=None, squeeze=True, cache=None):
+
+        assert any([issubclass(zarr_store_type,x) for x in StoreLike.__args__]), 'zarr_store_type is not a zarr storage class'
+
         self.location = location
         self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
-        
-        if isinstance(zarr_store_type,str):
-            if zarr_store_type=='hns':
-                self.zarr_store_type = H5_Nested_Store
-            elif zarr_store_type == 'oz':
-                self.zarr_store_type = NestedDirectoryStore
-            elif zarr_store_type=='ans':
-                self.zarr_store_type = Archived_Nested_Store
-
-        else:
-            self.zarr_store_type = zarr_store_type
 
         self.verbose = verbose
         self.squeeze = squeeze
         self.cache = cache
         self.metaData = {}
-        
+
+        # Open zarr store
+        self.zarr_store_type = zarr_store_type
         store = self.zarr_store_type(self.location)
         zgroup = zarr.open(store)
         self.zattrs = zgroup.attrs
