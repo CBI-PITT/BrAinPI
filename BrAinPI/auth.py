@@ -109,7 +109,7 @@ def setup_auth(app):
         
         ## Check user against domain server
         user = False # Default to False for security
-        if 'auth' in settings and settings.getboolean('auth','bypass_auth') == False:
+        if 'auth' in settings and not settings.getboolean('auth','bypass_auth'):
             user = domain_auth(username,
                                password,
                                domain_server=r"ldap://{}:{}".format(
@@ -170,7 +170,7 @@ def setup_auth(app):
 
 
 
-def domain_auth(user_name,password,domain_server=r"ldap://cbilab.pitt.edu:389",domain="cbilab"):
+def domain_auth(user_name,password,domain_server=r"ldap://localhost:389",domain="mydomain"):
     '''
     Attempts a simple verification of user account on windows domain server
     Return True if auth succeeded

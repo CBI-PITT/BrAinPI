@@ -13,13 +13,8 @@ from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
 import numpy as np
 import os
 
-import neuroglancer
-
-from functools import lru_cache
-
 
 ## Project imports
-# from dataset_info import dataset_info
 import utils
 from utils import compress_flask_response
 
@@ -33,7 +28,6 @@ from flask import (
     Response
     )
 
-from flask_login import login_required
 from flask_cors import cross_origin
 
 
@@ -45,11 +39,11 @@ def encode_ng_file(numpy_array,channels):
     return img_ram
 
 def ng_shader(numpy_like_object):
-    
-    # metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
+
     # metadata should have been appended to object during opening utils.config.loadDataset
     metadata = numpy_like_object.metadata
     try:
+        # Determine if the object has omero metadata (ome.zarr .zattrs)
         omero = numpy_like_object.omero
     except Exception:
         omero = None

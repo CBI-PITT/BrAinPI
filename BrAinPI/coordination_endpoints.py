@@ -38,6 +38,7 @@ from utils import (from_path_to_html,
 def inititate(app,config):
     settings = config.settings
     @app.route('/ng_supported_filetypes/', methods=['GET'])
+    @cross_origin(allow_headers=['Content-Type'])
     def neuroglancer_support():
         return jsonify(neuroglancer_dtypes())
 
@@ -96,7 +97,7 @@ def inititate(app,config):
                 validator_url = 'https://ome.github.io/ome-ngff-validator'
                 validator_url = validator_url + '/?source='
 
-                ng_link = html_base + strip_leading_trailing_slash(ng_link)
+                ng_link = html_base + '/' + strip_leading_trailing_slash(ng_link)
 
                 paths['neuroglancer'] = ng_link
                 paths['neuroglancer_metadata'] = paths['neuroglancer'] + '/info'
@@ -161,73 +162,3 @@ def inititate(app,config):
         return jsonify(datasets)
 
     return app
-
-    # @app.route('/curated_datasets/', methods=['GET'])
-    # def curated_datasets():
-    #     locations = settings['curated_datasets']
-    #     locations = dict(locations)
-    #
-    #     if not hasattr(config,'curated_datasets'):
-    #         datasets = {}
-    #         for set_name, file in locations.items():
-    #             datasets[set_name] = {}
-    #             with open(file, 'r') as f:
-    #                 for line in f.readlines():
-    #                     if line[-1] == '\n':
-    #                         l = line[:-1]
-    #                     else:
-    #                         l = line
-    #                     options = path_to_html_options(l)
-    #                     name = os.path.split(line)[-1]
-    #                     datasets[set_name][name] = options
-    #
-    #         # from pprint import pprint as print
-    #         print(datasets)
-    #
-    #         # Cache curated_datasets in the config object (doesn't allow for dynamic updates) but is better performance
-    #         # Commenting below turns off caching in the config object so each time the files are reloaded
-    #         # (allows for dynamic updates to curated datasets)
-    #         # config.curated_datasets = datasets
-    #     else:
-    #         datasets = config.curated_datasets
-    #
-    #     return jsonify(datasets)
-
-    # @app.route('/curated_datasets_2/', methods=['GET'])
-    # def curated_datasets_2():
-    #
-    #     html_base = settings.get('app', 'url')
-    #     html_base = strip_leading_trailing_slash(html_base)
-    #
-    #     html_options_url = url_for("html_options")
-    #
-    #     # Locations are directories which contain files or files which have each line pointing to a dataset on disk
-    #     locations = settings['curated_datasets']
-    #     locations = dict(locations)
-    #
-    #     datasets = {}
-    #     for set_name, file in locations.items():
-    #         datasets[set_name] = {}
-    #         with open(file, 'r') as f:
-    #             for line in f.readlines():
-    #                 l = line
-    #                 while l[-1] == '\n':
-    #                     l = l[:-1]
-    #                 # options = path_to_html_options(l)
-    #                 query_to_path_to_html_options = f'{html_base}{html_options_url}?path={l}'
-    #                 name = os.path.split(line)[-1]
-    #                 datasets[set_name][name] = fix_special_characters_in_html(query_to_path_to_html_options)
-    #
-    #         # from pprint import pprint as print
-    #         print(datasets)
-    #
-    #         # Cache curated_datasets in the config object (doesn't allow for dynamic updates) but is better performance
-    #         # Commenting below turns off caching in the config object so each time the files are reloaded
-    #         # (allows for dynamic updates to curated datasets)
-    #         # config.curated_datasets = datasets
-    #
-    #     return jsonify(datasets)
-
-
-
-# path, path_map, req_path, entry_point

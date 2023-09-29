@@ -8,20 +8,17 @@ Created on Thu Nov  4 10:05:34 2021
 
 import numpy as np
 import io
-import ast
 import os
 import urllib
 import json
 import sys
-import math
 import gzip
+import requests
 from skimage import img_as_float32, img_as_float64, img_as_uint, img_as_ubyte
+import difflib
 
-import imaris_ims_file_reader as ims
 import zarr
-# from bil_api.dataset_info import dataset_info
-import zarrLoader
-import zarr_zip_sharded_loader4 as zarr_zip_sharded_loader
+import imaris_ims_file_reader as ims
 from ome_zarr_loader import ome_zarr_loader
 
 from flask import (
@@ -33,12 +30,91 @@ from flask import (
     url_for
     )
 
-
-# from BrAinPI import config
-# from numcodecs import Blosc
 import blosc
-
 from diskcache import FanoutCache
+
+
+class config:
+    '''
+    This class will be used to manage open datasets and persistant cache
+    '''
+
+    def __init__(self,
+                 cacheLocation=None,
+                 cacheSizeGB=100,
+                 evictionPolicy='least-recently-used',
+                 timeout=0.100,
+                 shards=16
+                 ):
+        '''
+        evictionPolicy Options:
+            "least-recently-stored" #R only
+            "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
+        '''
+        self.opendata = {}
+        self.cacheLocation = cacheLocation
+        self.cacheSizeGB = cacheSizeGB
+        self.evictionPolicy = evictionPolicy
+        self.shards = shards
+        self.timeout = timeout
+
+        self.cacheSizeBytes = self.cacheSizeGB * (1024 ** 3)
+
+        if self.cacheLocation is not None:
+            # Init cache
+            self.cache = FanoutCache(self.cacheLocation, shards=self.shards, timeout=self.timeout,
+                                     size_limit=self.cacheSizeBytes)
+            ## Consider removing this and always leaving open to improve performance
+            # self.cache.close()
+        else:
+            self.cache = None
+
+        def __del__(self):
+            if self.cache is not None:
+                self.cache.close()
+
+    def loadDataset(self, dataPath: str):
+
+        '''
+        Given the filesystem path to a file, open that file with the appropriate
+        reader and store it in the opendata attribute with the dataPath as
+        the key
+
+        If the key exists return
+        Always return the name of the dataPath
+        '''
+
+        print(dataPath)
+
+        if dataPath in self.opendata:
+            return dataPath
+
+        elif os.path.splitext(dataPath)[-1] == '.ims':
+
+            print('Creating ims object')
+            self.opendata[dataPath] = ims.ims(dataPath, squeeze_output=False)
+
+            if self.opendata[dataPath].hf is None or self.opendata[dataPath].dataset is None:
+                print('opening ims object')
+                self.opendata[dataPath].open()
+
+
+        elif dataPath.endswith('.ome.zarr'):
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='oz', cache=self.cache)
+            # self.opendata[dataPath].isomezarr = True
+
+        elif '.omezans' in os.path.split(dataPath)[-1]:
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='ans', cache=self.cache)
+
+        elif '.omehans' in os.path.split(dataPath)[-1]:
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='hns', cache=self.cache)
+
+        ## Append extracted metadata as attribute to open dataset
+        try:
+            self.opendata[dataPath].metadata = metaDataExtraction(self.opendata[dataPath])
+        except Exception:
+            pass
+        return dataPath
 
 
 def get_file_size(in_bytes):
@@ -89,12 +165,10 @@ def compress_np(nparr):
     Receives a numpy array,
     Returns a compressed bytestring, uncompressed and the compressed byte size.
     """
-    
-    # comp = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE,typesize=8)
+
     bytestream = io.BytesIO()
     np.save(bytestream, nparr)
     uncompressed = bytestream.getvalue()
-    # compressed = comp.encode(uncompressed)
     compressed = blosc.compress(uncompressed, typesize=6, clevel=1,cname='zstd', shuffle=blosc.BITSHUFFLE)
     return compressed, len(uncompressed), len(compressed)
 
@@ -104,18 +178,10 @@ def uncompress_np(bytestring):
     Receives a compressed bytestring,
     Returns a numpy array.
     """
-    
-    # comp = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE,typesize=8)
-    # array = comp.decode(bytestring)
+
     array = blosc.decompress(bytestring)
     array = io.BytesIO(array)
-    
-    # sequeeze = False
-    # if "NAPARI_ASYNC" in os.environ or "NAPARI_OCTREE" in os.environ:
-    #     sequeeze = False
-    # if sequeeze == True and (os.environ["NAPARI_ASYNC"] == '1' or os.environ["NAPARI_OCTREE"] == "1"):
-    #     return np.squeeze(np.load(array))
-    # else:
+
     return np.load(array)
 
 def split_html(req_path):
@@ -139,28 +205,13 @@ def is_file_type(file_type, path):
     path = strip_trailing_slashs(path)
     terminal_path_ext = os.path.splitext('a'+ path)[-1]
     
-    return any( [ x.lower() == terminal_path_ext.lower() for x in file_type ] ) #+ \
-        #[os.path.exists(os.path.join(orig_path,x)) for x in file_type] )
-    # return file_type.lower() == os.path.splitext('a'+ path)[-1].lower()
+    return any( ( x.lower() == terminal_path_ext.lower() for x in file_type ) )
 
 def from_html_to_path(req_path, path_map):
-    # print('UTIL line 101: {}'.format(req_path))
     html_path = split_html(req_path)
-    # print('UTIL line 103: {}'.format(html_path))
     return os.path.join(
         path_map[html_path[1]], # returns the true FS path
         *html_path[2:]) # returns a unpacked list of all subpaths from html_path[1]
-
-# def from_html_to_path(req_path, path_map):
-#     for key in path_map:
-#         if key in req_path:
-#             request = [x for x in req_path[1:].split(key) if x != '' ]
-#             request = [x for x in request if x != '/' ]
-#             print(request)
-#             break
-#     return os.path.join(
-#         path_map[key], # returns the true FS path
-#         *request) # returns a unpacked list of all subpaths from html_path[1]
 
 def from_path_to_html(path, path_map, req_path, entry_point):
     html_path = split_html(req_path)
@@ -171,7 +222,7 @@ def from_path_to_html(path, path_map, req_path, entry_point):
 
 def dict_key_value_match(a_dict,key_or_value,specific=True):
     '''
-    Searches both key and values in dict and return the cooresponding value
+    Searches both key and values in dict and return the corresponding value
     Key --> value
     value --> key
     '''
@@ -229,8 +280,6 @@ def clean_double_slash_in_html(string):
 
 
 
-
-import difflib
 def from_path_to_browser_html(path, path_map, html_base):
     '''
     Take a file system path and return a html browser location
@@ -302,101 +351,6 @@ def get_html_split_and_associated_file_path(config,request):
     path_split = split_html(request.path)
     return path_split, datapath
 
-
-class config:
-    '''
-    This class will be used to manage open datasets and persistant cache
-    '''
-    def __init__(self, 
-                 cacheLocation=None, 
-                 cacheSizeGB=100, 
-                 evictionPolicy='least-recently-used',
-                 timeout=0.100, 
-                 shards=16
-                 ):
-        '''
-        evictionPolicy Options:
-            "least-recently-stored" #R only
-            "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
-        '''
-        self.opendata = {}
-        self.cacheLocation = cacheLocation
-        self.cacheSizeGB = cacheSizeGB
-        self.evictionPolicy = evictionPolicy
-        self.shards = shards
-        self.timeout = timeout
-        
-        self.cacheSizeBytes = self.cacheSizeGB * (1024**3)
-        
-        if self.cacheLocation is not None:
-            # Init cache
-            # self.cache = FanoutCache(self.cacheLocation,shards=16)
-            self.cache = FanoutCache(self.cacheLocation, shards=self.shards, timeout=self.timeout, size_limit=self.cacheSizeBytes)
-            ## Consider removing this and always leaving open to improve performance
-            # self.cache.close()
-        else:
-            self.cache = None
-
-        def __del__(self):
-            if self.cache is not None:
-                self.cache.close()
-
-
-    
-    def loadDataset(self, dataPath:str):
-        
-        '''
-        Given the filesystem path to a file, open that file with the appropriate
-        reader and store it in the opendata attribute with the dataPath as 
-        the key
-        
-        If the key exists return
-        Always return the name of the dataPath
-        '''
-        
-        print(dataPath)
-        
-        if dataPath in self.opendata:
-            return dataPath
-        
-        elif os.path.splitext(dataPath)[-1] == '.ims':
-            print('Is IMS')
-            
-            print('Creating ims object')
-            self.opendata[dataPath] = ims.ims(dataPath,squeeze_output=False)
-            
-            if self.opendata[dataPath].hf is None or self.opendata[dataPath].dataset is None:
-                print('opening ims object')
-                self.opendata[dataPath].open()
-        
-        
-        elif dataPath.endswith('.ome.zarr'):
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type='oz', cache=self.cache)
-
-        elif '.omezarr' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False,zarr_store_type='hss',cache=self.cache)
-        
-        elif '.omezans' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False,zarr_store_type='ans',cache=self.cache)
-
-        elif '.omehans' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath,squeeze=False,zarr_store_type='hns',cache=self.cache)
-            
-        elif os.path.splitext(dataPath)[-1] == '.zarr':
-            print('Is Zarr')
-            print('Creating zarrSeries object')
-            self.opendata[dataPath] = zarrLoader.zarrSeries(dataPath)
-        
-        elif os.path.splitext(dataPath)[1] == '.z_sharded':
-            self.opendata[dataPath] = zarr_zip_sharded_loader.zarr_zip_sharded(dataPath,squeeze=False)
-            
-        ## Append extracted metadata as attribute to open dataset
-        try:
-            self.opendata[dataPath].metadata = metaDataExtraction(self.opendata[dataPath])
-        except Exception:
-            pass
-        return dataPath
-        
     
     
 def prettyPrintDict(aDict):
@@ -456,11 +410,11 @@ def strip_trailing_new_line(string):
 
 def clean_html(string):
     '''
-    Removes double slashes and fills special characters in html to return a string that can be used by a browser
+    Removes double slashes and encodes html to return a string that can be used by a browser
     '''
     string = strip_trailing_new_line(string)
     string = clean_double_slash_in_html(string)
-    string = fix_special_characters_in_html(string)
+    string = url_encode(string)
     return string
 
 def compress_flask_response(response, request, compression_level=6):
@@ -516,6 +470,13 @@ def profile(func):
         return retval
 
     return wrapper
+
+
+def url_encode(url_string):
+    return requests.utils.quote(url_string)
+
+def url_decode(url_string):
+    return requests.utils.unquote(url_string)
 
 
 
