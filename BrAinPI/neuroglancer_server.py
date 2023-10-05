@@ -3,8 +3,9 @@ import urllib.request
 
 # Project specific imports
 import utils
+import config_tools
 def get_server():
-    settings = utils.get_config('settings.ini')
+    settings = config_tools.get_config('settings.ini')
     ip = settings.get('neuroglancer','local_ip')
     port = settings.getint('neuroglancer','local_port')
     token = 'base'

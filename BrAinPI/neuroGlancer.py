@@ -17,6 +17,7 @@ import os
 ## Project imports
 import utils
 from utils import compress_flask_response
+import config_tools
 
 from flask import (
     render_template,
@@ -406,33 +407,36 @@ def neuroglancer_dtypes():
 def open_ng_dataset(config,datapath):
     
     datapath = config.loadDataset(datapath)
+
+    print('IN OPEN NG DATASET 411')
     
     if not hasattr(config.opendata[datapath],'ng_json'):
+        print('IN NO ATTR DATASET 414')
         # or not hasattr(config.opendata[datapath],'ng_files'):
             
-            ## Forms a comrehensive file list for all chunks
-            ## Not necessary for neuroglancer to function and take a long time
-            # config.opendata[datapath].ng_files = \
-            #     neuroGlancer.ng_files(config.opendata[datapath])
-            
-            ## Temp ignoring of ng_files
-            ## Add attribute so this constantly repeated
-            # config.opendata[datapath].ng_files = True
+        ## Forms a comrehensive file list for all chunks
+        ## Not necessary for neuroglancer to function and take a long time
+        # config.opendata[datapath].ng_files = \
+        #     neuroGlancer.ng_files(config.opendata[datapath])
 
-            settings = utils.get_config('settings.ini')
-            chunk_type = settings.get('neuroglancer', 'chunk_type')
+        ## Temp ignoring of ng_files
+        ## Add attribute so this constantly repeated
+        # config.opendata[datapath].ng_files = True
 
-            if chunk_type.lower() == 'isotropic':
-                chunk_depth = settings.getint('neuroglancer', 'chunk_depth')
-                config.opendata[datapath].ng_json = \
-                    ng_json(config.opendata[datapath], file='dict',different_chunks=(chunk_depth,chunk_depth,chunk_depth))
-            elif chunk_type.lower() == 'anisotropic':
-                chunk_depth = settings.getint('neuroglancer', 'chunk_depth')
-                config.opendata[datapath].ng_json = \
-                    ng_json(config.opendata[datapath], file='dict',different_chunks=chunk_depth)
-            else:
-                config.opendata[datapath].ng_json = \
-                    ng_json(config.opendata[datapath],file='dict')
+        settings = config_tools.get_config('settings.ini')
+        chunk_type = settings.get('neuroglancer', 'chunk_type')
+
+        if chunk_type.lower() == 'isotropic':
+            chunk_depth = settings.getint('neuroglancer', 'chunk_depth')
+            config.opendata[datapath].ng_json = \
+                ng_json(config.opendata[datapath], file='dict',different_chunks=(chunk_depth,chunk_depth,chunk_depth))
+        elif chunk_type.lower() == 'anisotropic':
+            chunk_depth = settings.getint('neuroglancer', 'chunk_depth')
+            config.opendata[datapath].ng_json = \
+                ng_json(config.opendata[datapath], file='dict',different_chunks=chunk_depth)
+        else:
+            config.opendata[datapath].ng_json = \
+                ng_json(config.opendata[datapath],file='dict')
     
     return datapath
 

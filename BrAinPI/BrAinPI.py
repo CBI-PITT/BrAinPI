@@ -18,34 +18,35 @@ cwd = pathlib.Path(__file__).parent
 os.chdir(cwd)
 
 ## Project imports
+import config_tools
 import auth
-import utils
 from utils import compress_flask_response
 
 
+
 ## Grab settings information from config.ini file
-settings = utils.get_config('settings.ini')
+settings = config_tools.get_config('settings.ini')
 
-## Setup cache location based on OS type
-## Optional situations like machine name can be used to customize
-if os.name == 'nt':
-    cacheLocation = settings.get('disk_cache','location_win')
-else:
-    cacheLocation = settings.get('disk_cache','location_unix')
-    #cacheLocation = None
-
-# Instantiate class that will manage all open datasets
-# This will remain in the global env and be accessed by multiple route methods
-config = utils.config(
-    cacheLocation=cacheLocation,
-    cacheSizeGB=settings.getint('disk_cache','cacheSizeGB'),
-    evictionPolicy=settings.get('disk_cache','evictionPolicy'),
-    shards=settings.getint('disk_cache','shards'),
-    timeout=settings.getfloat('disk_cache','timeout')
-    )
-
+# ## Setup cache location based on OS type
+# ## Optional situations like machine name can be used to customize
+# if os.name == 'nt':
+#     cacheLocation = settings.get('disk_cache','location_win')
+# else:
+#     cacheLocation = settings.get('disk_cache','location_unix')
+#     #cacheLocation = None
+#
+# # Instantiate class that will manage all open datasets
+# # This will remain in the global env and be accessed by multiple route methods
+# config = config_tools.config(
+#     cacheLocation=cacheLocation,
+#     cacheSizeGB=settings.getint('disk_cache','cacheSizeGB'),
+#     evictionPolicy=settings.get('disk_cache','evictionPolicy'),
+#     shards=settings.getint('disk_cache','shards'),
+#     timeout=settings.getfloat('disk_cache','timeout')
+#     )
+config = config_tools.config()
 # Read settings.ini file and append to the config class
-config.settings = utils.get_config('settings.ini') #<-- need to add this to config class so each chunk access doesn't require a read of settings file
+config.settings = config_tools.get_config('settings.ini') #<-- need to add this to config class so each chunk access doesn't require a read of settings file
 
 # Establish constants based on settings.ini
 TEMPLATE_DIR = os.path.abspath(settings.get('app','templates_location'))
@@ -57,9 +58,6 @@ APP_NAME = settings.get('app','name')
 # Establish FLASK app
 app = flask.Flask(__name__,template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config["DEBUG"] = settings.getboolean('app','debug')
-
-import s3fs
-app.s3 = s3fs.S3FileSystem(anon=True)
 
 ## Initiate endpoints in other modules and attach them to app
 ## New endpoints can be added here

@@ -626,7 +626,8 @@ def get_path_data(base, request):
     # Doing this here allows changes to paths to be dynamic (ie changes can be made while server is live)
     # May want to change this so that each browser access does not require access to settings file on disk.
     ## DEFAULT ## utils.get_config(file='settings.ini',allow_no_value=True)
-    settings =  utils.get_config()
+    from config_tools import get_config
+    settings = get_config()
 
     page_description = {}
     page_description['title'] = settings['browser']['title']
@@ -644,7 +645,7 @@ def get_path_data(base, request):
     if current_user.is_authenticated:
 
         # Read in group information
-        groups = utils.get_config('groups.ini',allow_no_value=True)
+        groups = get_config('groups.ini',allow_no_value=True)
 
         # Build a list of allowed folders
         allowed_list = [current_user.id.lower()]

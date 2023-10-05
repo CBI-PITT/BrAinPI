@@ -16,18 +16,11 @@ import gzip
 import requests
 from skimage import img_as_float32, img_as_float64, img_as_uint, img_as_ubyte
 import difflib
-import s3fs
 import datetime
-import glob
 
-import zarr
-import imaris_ims_file_reader as ims
 
-from ome_zarr_loader import ome_zarr_loader
-# Import zarr stores
-from zarr.storage import NestedDirectoryStore
-from zarr_stores.archived_nested_store import Archived_Nested_Store
-from zarr_stores.h5_nested_store import H5_Nested_Store
+import s3_utils
+
 
 import flask
 from flask import (
@@ -40,96 +33,6 @@ from flask import (
     )
 
 import blosc
-from diskcache import FanoutCache
-
-
-class config:
-    '''
-    This class will be used to manage open datasets and persistant cache
-    '''
-
-    def __init__(self,
-                 cacheLocation=None,
-                 cacheSizeGB=100,
-                 evictionPolicy='least-recently-used',
-                 timeout=0.100,
-                 shards=16
-                 ):
-        '''
-        evictionPolicy Options:
-            "least-recently-stored" #R only
-            "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
-        '''
-        self.opendata = {}
-        self.cacheLocation = cacheLocation
-        self.cacheSizeGB = cacheSizeGB
-        self.evictionPolicy = evictionPolicy
-        self.shards = shards
-        self.timeout = timeout
-
-        self.cacheSizeBytes = self.cacheSizeGB * (1024 ** 3)
-
-        if self.cacheLocation is not None:
-            # Init cache
-            self.cache = FanoutCache(self.cacheLocation, shards=self.shards, timeout=self.timeout,
-                                     size_limit=self.cacheSizeBytes)
-            ## Consider removing this and always leaving open to improve performance
-            # self.cache.close()
-        else:
-            self.cache = None
-
-        def __del__(self):
-            if self.cache is not None:
-                self.cache.close()
-
-    def loadDataset(self, dataPath: str):
-
-        '''
-        Given the filesystem path to a file, open that file with the appropriate
-        reader and store it in the opendata attribute with the dataPath as
-        the key
-
-        If the key exists return
-        Always return the name of the dataPath
-        '''
-
-        print(dataPath)
-
-        if dataPath in self.opendata:
-            return dataPath
-
-        elif os.path.splitext(dataPath)[-1] == '.ims':
-
-            print('Creating ims object')
-            self.opendata[dataPath] = ims.ims(dataPath, squeeze_output=False)
-
-            if self.opendata[dataPath].hf is None or self.opendata[dataPath].dataset is None:
-                print('opening ims object')
-                self.opendata[dataPath].open()
-
-
-        elif dataPath.endswith('.ome.zarr'):
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=NestedDirectoryStore, cache=self.cache)
-            # self.opendata[dataPath].isomezarr = True
-
-        elif '.omezans' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=Archived_Nested_Store, cache=self.cache)
-
-        elif '.omehans' in os.path.split(dataPath)[-1]:
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=H5_Nested_Store, cache=self.cache)
-
-        elif 's3://' in dataPath and dataPath.endswith('.zarr'):
-            import s3fs
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3fs.S3Map,
-                                                      cache=self.cache)
-
-        ## Append extracted metadata as attribute to open dataset
-        try:
-            self.opendata[dataPath].metadata = metaDataExtraction(self.opendata[dataPath])
-        except Exception:
-            pass
-
-        return dataPath
 
 
 def format_file_size(in_bytes):
@@ -172,104 +75,11 @@ import gevent
 # s3 = s3fs.S3FileSystem(anon=True, loop=loop)
 
 
-## BOTO3 Way to do dir and files from s3
-import boto3
-from botocore import UNSIGNED
-from botocore.client import Config
-import functools
-import time
-
-def get_ttl_hash(hours=24):
-    """Return the same value withing `hours` time period"""
-    seconds = hours*60*60
-    return round(time.time() / seconds)
-
-client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-paginator = client.get_paginator('list_objects_v2')
-@functools.lru_cache(maxsize=10000)
-def s3_get_dir_contents(path, ttl_hash=get_ttl_hash(hours=24)):
-    bucket, path_split = s3_get_bucket_and_path_parts(path)
-    # print(bucket)
-    if len(path_split) > 1:
-        prefix = '/'.join(path_split[1:]) + '/' # Make sure you provide / in the end
-        root = f'{bucket}/{prefix}'
-    else:
-        prefix = ''  # Root prefix
-        root = f'{bucket}'
-    # client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-    # paginator = client.get_paginator('list_objects_v2')
-    pages = paginator.paginate(Bucket=bucket, MaxKeys=100000, Prefix=prefix, Delimiter='/')
-    dirs = []
-    files = []
-    files_sizes = []
-    files_modified = []
-    for page in pages:
-        if 'CommonPrefixes' in page:
-            dirs += [x.get('Prefix')[:-1] for x in page.get('CommonPrefixes')]
-        if 'Contents' in page:
-            files += [x.get('Key') for x in page.get('Contents')]
-            files_sizes = [x.get('Size') for x in page.get('Contents')]
-            files_modified = [x.get('LastModified') for x in page.get('Contents')] #datetime objects
-    r = root.replace(bucket + '/','')
-    dirs = [x.replace(r,'') for x in dirs]
-    files = [x.replace(r, '') for x in files]
-    return root, dirs, files, files_sizes, files_modified
-
-def s3_get_bucket_and_path_parts(path):
-    path = s3_clean_path(path)
-    path_split = path.split('/')
-    # print(path_split)
-    if isinstance(path_split, str):
-        path_split = [path_split]
-    bucket = path_split[0]
-    return bucket, path_split
-def s3_clean_path(path):
-    if 's3://' in path.lower():
-        path = path[5:]
-    elif path.startswith('/'):
-        path = path[1:]
-    if path.endswith('/'):
-        path = path[:-1]
-    return path
-
-def s3_path_split(path):
-    path = s3_clean_path(path)
-    p, f = os.path.split(path)
-    if p == '':
-        return f,p
-    else:
-        return p,f
-def s3_isfile(path):
-    # print(path)
-    p,f = s3_path_split(path)
-    _, _, files, _, _ = s3_get_dir_contents(p)
-    # print(f in files)
-    # print(f'''
-    # ##########################################
-    # ISFILE {f in files}
-    # #########################################
-    # ''')
-    return f in files
-
-def s3_isdir(path):
-    # print(path)
-    p,f = s3_path_split(path)
-    if f == '':
-        return True
-    _, dirs, _, _, _ = s3_get_dir_contents(p)
-    # print(f in dirs)
-    # print(f'''
-    # ##########################################
-    # ISDIR {f in dirs}
-    # #########################################
-    # ''')
-    return f in dirs
-
 def get_file_size(path, parent=None):
     if 's3://' in path:
-        if s3_isfile(path):
-            p, f = s3_path_split(path)
-            parent, _, files, files_sizes, _ = s3_get_dir_contents(p)
+        if s3_utils.s3_isfile(path):
+            p, f = s3_utils.s3_path_split(path)
+            parent, _, files, files_sizes, _ = s3_utils.s3_get_dir_contents(p)
             idx = files.index(f)
             return files_sizes[idx]
         else:
@@ -287,9 +97,9 @@ def num_dirs_files(path,skip_s3=True):
 
 def get_mod_time(path):
     if 's3://' in path:
-        if s3_isfile(path):
-            p, f = s3_path_split(path)
-            parent, _, files, _, files_modified = s3_get_dir_contents(p)
+        if s3_utils.s3_isfile(path):
+            p, f = s3_utils.s3_path_split(path)
+            parent, _, files, _, files_modified = s3_utils.s3_get_dir_contents(p)
             idx = files.index(f)
             return files_modified[idx]
         else:
@@ -312,13 +122,13 @@ def isdir(path):
     # if 's3://' in path:
     #     return s3.isdir(path)
     if 's3://' in path:
-        return s3_isdir(path)
+        return s3_utils.s3_isdir(path)
     else:
         return os.path.isdir(path)
 
 def isfile(path):
     if 's3://' in path:
-        return s3_isfile(path)
+        return s3_utils.s3_isfile(path)
     else:
         return os.path.isfile(path)
 
@@ -326,7 +136,7 @@ def get_dir_contents(path,skip_s3=False):
     if 's3://' in path:
         if skip_s3:
             return path, [], []
-        parent, dirs, files, _, _ = s3_get_dir_contents(path)
+        parent, dirs, files, _, _ = s3_utils.s3_get_dir_contents(path)
         return f's3://{parent}', dirs, files
     else:
         for parent, dirs, files in os.walk(path):
@@ -335,21 +145,13 @@ def get_dir_contents(path,skip_s3=False):
 url_template = 'https://{}.s3.amazonaws.com/{}'
 def send_file(path):
     if 's3://' in path:
-        bucket, path_split = s3_get_bucket_and_path_parts(path)
+        bucket, path_split = s3_utils.s3_get_bucket_and_path_parts(path)
         return redirect(
             url_template.format(bucket,'/'.join(path_split[1:]))
         )
     else:
         return flask.send_file(path, download_name=os.path.split(path)[1], as_attachment=True)
 
-
-def get_config(file='settings.ini',allow_no_value=True):
-    import configparser
-    # file = os.path.join(os.path.split(os.path.abspath(__file__))[0],file)
-    file = os.path.join(sys.path[0], file)
-    config = configparser.ConfigParser(allow_no_value=allow_no_value)
-    config.read(file)
-    return config
 
 def get(location,baseURL):
     with urllib.request.urlopen(baseURL + location, timeout=5) as url:
