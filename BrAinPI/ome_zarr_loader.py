@@ -29,8 +29,8 @@ class ome_zarr_loader:
 
         self.location = location
         self.s3 = False
-        if 's3://' in location:
-            self.s3 = s3fs.S3FileSystem(anon=True)
+        # if 's3://' in location:
+        #     self.s3 = s3fs.S3FileSystem(anon=True)
         self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
 
         self.verbose = verbose
@@ -376,458 +376,509 @@ class ome_zarr_loader:
 # @author: awatson
 # """
 #
-# '''
-# A Zarr store that uses boto3 (and not s3fs) to access zarr stores in s3://
-# '''
-#
-# import os
-# import errno
-# import shutil
-# import time
-# import numpy as np
-# import uuid
-# import glob
-# import re
-#
-# from zarr.errors import (
-#     MetadataError,
-#     BadCompressorError,
-#     ContainsArrayError,
-#     ContainsGroupError,
-#     FSPathExistNotDir,
-#     ReadOnlyError,
-# )
-#
-# from numcodecs.abc import Codec
-# from numcodecs.compat import (
-#     ensure_bytes,
-#     ensure_text,
-#     ensure_contiguous_ndarray,
-#     ensure_contiguous_ndarray_like
-# )
-#
-# # from numcodecs.registry import codec_registry
-#
-# # from threading import Lock, RLock
-# # from filelock import Timeout, FileLock, SoftFileLock
-#
-# from zarr.util import (buffer_size, json_loads, nolock, normalize_chunks,
-#                        normalize_dimension_separator,
-#                        normalize_dtype, normalize_fill_value, normalize_order,
-#                        normalize_shape, normalize_storage_path, retry_call)
-#
-# from zarr._storage.absstore import ABSStore  # noqa: F401
-#
-# from zarr._storage.store import Store, array_meta_key
-#
-# _prog_number = re.compile(r'^\d+$')
-#
-# ## BOTO3 Way to do dir and files from s3
-# import boto3
-# from botocore import UNSIGNED, exceptions
-# from botocore.client import Config
-# import functools
-#
-# ####################################
-# # HELPER FUNCTIONS
-# # Duplicated from utils
-# # may integrate into store class
-# ####################################
-#
-#
-# def s3_get_bucket_and_path_parts(path):
-#     path = s3_clean_path(path)
-#     path_split = path.split('/')
-#     # print(path_split)
-#     if isinstance(path_split, str):
-#         path_split = [path_split]
-#     bucket = path_split[0]
-#     return bucket, path_split
-# def s3_clean_path(path):
-#     if 's3://' in path.lower():
-#         path = path[5:]
-#     elif path.startswith('/'):
-#         path = path[1:]
-#     if path.endswith('/'):
-#         path = path[:-1]
-#     return path
-#
-#
-# def list_all_contents(path):
-#     parent, dirs, files = get_dir_contents(path)
-#     dirs = [os.path.join(parent,x) for x in dirs]
-#     files = [os.path.join(parent, x) for x in files]
-#     return dirs + files
-#
-#     # if 's3://' in path:
-#     #     return s3.glob(os.path.join(path,'*'))
-#     # else:
-#     #     return glob.glob(os.path.join(path,'*'))
-#
-# def isdir(path):
-#     # if 's3://' in path:
-#     #     return s3.isdir(path)
-#     if 's3://' in path:
-#         return s3_isdir(path)
-#     else:
-#         return os.path.isdir(path)
-#
-# def isfile(path):
-#     if 's3://' in path:
-#         return s3_isfile(path)
-#     else:
-#         return os.path.isfile(path)
-#
-# def get_dir_contents(path,skip_s3=False):
-#     if 's3://' in path:
-#         if skip_s3:
-#             return path, [], []
-#         parent, dirs, files, _, _ = s3_get_dir_contents(path)
-#         return f's3://{parent}', dirs, files
-#     else:
-#         for parent, dirs, files in os.walk(path):
-#             return parent, dirs, files
-#
-# def get_ttl_hash(self,hours=24):
-#     """Return the same value withing `hours` time period"""
-#     seconds = hours * 60 * 60
-#     return round(time.time() / seconds)
-#
-# class s3_boto_store(Store):
-#     '''
-#     READ ONLY
-#     '''
-#
-#     def __init__(self, path, normalize_keys=False, dimension_separator='/', s3_cred='anon', mode='r'
-#                  ):
-#
-#         # guard conditions
-#         self.raw_path = path
-#         self.bucket, path_split = self.s3_get_bucket_and_path_parts(self.raw_path)
-#         if len(path_split) > 1:
-#             self.zarr_dir = '/'.join(path_split[1:])
-#         else:
-#             self.zarr_dir = ''
-#
-#         # if os.path.exists(path) and not os.path.isdir(path):
-#         #     raise FSPathExistNotDir(path)
-#
-#         self.normalize_keys = normalize_keys
-#         if dimension_separator is None:
-#             dimension_separator = "/"
-#         elif dimension_separator != "/":
-#             raise ValueError(
-#                 "s3_boto_store only supports '/' as dimension_separator")
-#         self._dimension_separator = dimension_separator
-#         self.mode = mode
-#         assert self.mode == 'r', "s3_boto_store only supports read_only mode (mode='r')"
-#
-#         # Form client
-#         assert s3_cred.lower() == 'anon', 'Currently only anonymous connections to s3 are supported'
-#         self.client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-#         self.paginator = self.client.get_paginator('list_objects_v2')
-#
-#     @functools.lru_cache(maxsize=10000)
-#     def s3_get_dir_contents(self, path, recursive=False, ttl_hash=get_ttl_hash(hours=24)):
-#         bucket, path_split = self.s3_get_bucket_and_path_parts(path)
-#         # print(bucket)
-#         if len(path_split) > 1:
-#             prefix = '/'.join(path_split[1:]) + '/'  # Make sure you provide / in the end
-#             root = f'{bucket}/{prefix}'
-#         else:
-#             prefix = ''  # Root prefix
-#             root = f'{bucket}'
-#         # client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-#         # paginator = client.get_paginator('list_objects_v2')
-#         if recursive:
-#             pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000)
-#         else:
-#             pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000, Prefix=prefix, Delimiter='/')
-#
-#         dirs = ()
-#         files = ()
-#         files_sizes = ()
-#         files_modified = ()
-#         for page in pages:
-#             if 'CommonPrefixes' in page:
-#                 dirs += tuple([x.get('Prefix')[:-1] for x in page.get('CommonPrefixes')])
-#             if 'Contents' in page:
-#                 files += tuple((x.get('Key') for x in page.get('Contents')))
-#                 files_sizes += tuple((x.get('Size') for x in page.get('Contents')))
-#                 files_modified += tuple((x.get('LastModified') for x in page.get('Contents')))  # datetime objects
-#         r = root.replace(bucket + '/', '')
-#         dirs = (x.replace(r,'') for x in dirs)
-#         files = (x.replace(r,'') for x in files)
-#         return root, tuple(dirs), tuple(files), tuple(files_sizes), tuple(files_modified)
-#
-#     def s3_get_bucket_and_path_parts(self, path):
-#         path = self.s3_clean_path(path)
-#         path_split = path.split('/')
-#         # print(path_split)
-#         if isinstance(path_split, str):
-#             path_split = [path_split]
-#         bucket = path_split[0]
-#         return bucket, path_split
-#
-#     def s3_clean_path(self, path):
-#         if 's3://' in path.lower():
-#             path = path[5:]
-#         elif path.startswith('/'):
-#             path = path[1:]
-#         if path.endswith('/'):
-#             path = path[:-1]
-#         return path
-#
-#     def s3_path_split(self, path):
-#         path = self.s3_clean_path(path)
-#         p, f = os.path.split(path)
-#         if p == '':
-#             return f, p
-#         else:
-#             return p, f
-#
-#     def s3_isfile(self, path):
-#         # print(path)
-#         p, f = self.s3_path_split(path)
-#         _, _, files, _, _ = self.s3_get_dir_contents(p)
-#         # print(f in files)
-#         # print(f'''
-#         # ##########################################
-#         # ISFILE {f in files}
-#         # #########################################
-#         # ''')
-#         return f in files
-#
-#     def s3_isdir(self, path):
-#         # print(path)
-#         p, f = self.s3_path_split(path)
-#         if f == '':
-#             return True
-#         _, dirs, _, _, _ = self.s3_get_dir_contents(p)
-#         # print(f in dirs)
-#         # print(f'''
-#         # ##########################################
-#         # ISDIR {f in dirs}
-#         # #########################################
-#         # ''')
-#         return f in dirs
-#
-#     def get_file_size(self, path):
-#         if self.s3_isfile(path):
-#             p, f = self.s3_path_split(path)
-#             parent, _, files, files_sizes, _ = self.s3_get_dir_contents(p)
-#             idx = files.index(f)
-#             return files_sizes[idx]
-#         else:
-#             return 0
-#
-#     def num_dirs_files(self, path, skip_s3=True):
-#         # skip_s3 if passed to get_dir_contents will ignore contents
-#         # Getting this information from large remote s3 stores can be very slow on the first try
-#         # however after caching, it is much faster.
-#         _, dirs, files = self.get_dir_contents(path, skip_s3=skip_s3)
-#         return len(dirs), len(files)
-#
-#     def get_mod_time(self, path):
-#         if self.s3_isfile(path):
-#             p, f = self.s3_path_split(path)
-#             parent, _, files, _, files_modified = self.s3_get_dir_contents(p)
-#             idx = files.index(f)
-#             return files_modified[idx]
-#         else:
-#             return datetime.datetime.now()
-#
-#     def __del__(self):
-#         pass
-#
-#     def __getstate__(self):
-#         pass
-#         # return (self.path, self.normalize_keys, self._dimension_separator, self.swmr, self.container_ext,
-#         #         self._write_direct, self.distribuited, self.distribuited_lock, self._consolidate_depth,
-#         #         self.auto_verify_write)
-#
-#     def __setstate__(self, state):
-#         pass
-#         # (self.path, self.normalize_keys, self._dimension_separator, self.swmr, self.container_ext,
-#         #  self._write_direct, self.distribuited, self.distribuited_lock, self._consolidate_depth,
-#         #  self.auto_verify_write) = state
-#         #
-#         # self.uuid = uuid.uuid1()
-#         # self._setup_dist_lock()
-#
-#     def _normalize_key(self, key):
-#         return key.lower() if self.normalize_keys else key
-#
-#
-#     def get_full_path_from_key(self, key):
-#         if key[0] == '/':
-#             return f'{self.bucket}/{self.zarr_dir}{key}'
-#         return f'{self.bucket}/{self.zarr_dir}/{key}'
-#
-#     def __getitem__(self, key):
-#         # print('In Get Item')
-#         # key = self._normalize_key(key)
-#         filepath = self.get_full_path_from_key(key)
-#
-#         if self.s3_isfile(filepath):
-#             try:
-#                 return self._fromfile(filepath)
-#             except:
-#                 raise KeyError(key)
-#
-#     def _fromfile(self, filepath):
-#         filepath = self.s3_clean_path(filepath)
-#         object_name = filepath.replace(self.bucket + '/','')
-#         with io.BytesIO() as f:
-#             s3.download_fileobj(self.bucket, object_name, f)
-#             return f
-#
-#     def __setitem__(self, key, value):
-#         pass
-#
-#     def __delitem__(self, key):
-#         pass
-#
-#     def __contains__(self, key):
-#         filepath = self.get_full_path_from_key(key)
-#         if self.s3_isfile(filepath):
-#             return True
-#         return False
-#
-#     def __eq__(self, other):
-#         return isinstance(other, s3_boto_store) and \
-#                 self.bucket == other.bucket and \
-#                 self.zarr_dir == other.zarr_dir
-#
-#     def keys(self):
-#         if os.path.exists(self.path):
-#             yield from self._keys_fast()
-#
-#     def _keys_fast(self, walker=os.walk):
-#         for dirpath, _, filenames in walker(self.path):
-#             dirpath = os.path.relpath(dirpath, self.path)
-#             if dirpath == os.curdir:
-#                 for f in filenames:
-#                     yield f
-#             else:
-#                 # dirpath = dirpath.replace("\\", "/")
-#                 for f in filenames:
-#                     basefile, ext = os.path.splitext(f)
-#                     if ext == self.container_ext:
-#                         names = self._get_zip_keys(os.path.join(self.path, dirpath, f))
-#                         # Keys are stored in h5 with '.' separator, replace with appropriate separator
-#                         names = (x.replace('.', os.path.sep) for x in tuple(names)[0])
-#                         names = (os.path.sep.join((dirpath, basefile, x)) for x in names)
-#                         yield from names
-#                     # elif ext == '.tmp' and os.path.splitext(basefile)[-1] == self.container_ext:
-#                     #     basefile, ext = os.path.splitext(basefile)
-#                     #     names = self._get_zip_keys(f)
-#                     #     names = ("/".join((dirpath, basefile,x)) for x in names)
-#                     #     yield from names
-#                     else:
-#                         yield os.path.sep.join((dirpath, f))
-#
-#     def __iter__(self):
-#         return self.keys()
-#
-#     def __len__(self):
-#         return sum(1 for _ in self.keys())
-#
-#     def dir_path(self, path=None):
-#         store_path = normalize_storage_path(path)
-#         dir_path = self.path
-#         if store_path:
-#             dir_path = os.path.join(dir_path, store_path)
-#         return dir_path
-#
-#     def listdir(self, path=None):
-#         return self._nested_listdir(path) if self._dimension_separator == "/" else \
-#             self._flat_listdir(path)
-#
-#     def _flat_listdir(self, path=None):
-#         dir_path = self.dir_path(path)
-#         if os.path.isdir(dir_path):
-#             return sorted(os.listdir(dir_path))
-#         else:
-#             return []
-#
-#     def _nested_listdir(self, path=None):
-#         children = self._flat_listdir(path=path)
-#         if array_meta_key in children:
-#             # special handling of directories containing an array to map nested chunk
-#             # keys back to standard chunk keys
-#             new_children = []
-#             root_path = self.dir_path(path)
-#             for entry in children:
-#                 entry_path = os.path.join(root_path, entry)
-#                 if _prog_number.match(entry) and os.path.isdir(entry_path):
-#                     for dir_path, _, file_names in os.walk(entry_path):
-#                         for file_name in file_names:
-#                             file_path = os.path.join(dir_path, file_name)
-#                             rel_path = file_path.split(root_path + os.path.sep)[1]
-#                             new_children.append(rel_path.replace(os.path.sep, '.'))
-#                 else:
-#                     new_children.append(entry)
-#             return sorted(new_children)
-#         else:
-#             return children
-#
-#     def rename(self, src_path, dst_path):
-#         store_src_path = normalize_storage_path(src_path)
-#         store_dst_path = normalize_storage_path(dst_path)
-#
-#         dir_path = self.path
-#
-#         src_path = os.path.join(dir_path, store_src_path)
-#         dst_path = os.path.join(dir_path, store_dst_path)
-#
-#         os.renames(src_path, dst_path)
-#
-#     def rmdir(self, path=None):
-#         store_path = normalize_storage_path(path)
-#         dir_path = self.path
-#         if store_path:
-#             dir_path = os.path.join(dir_path, store_path)
-#         if os.path.isdir(dir_path):
-#             shutil.rmtree(dir_path)
-#
-#     def getsize(self, path=None):
-#         store_path = normalize_storage_path(path)
-#         fs_path = self.path
-#         if store_path:
-#             fs_path = os.path.join(fs_path, store_path)
-#         if os.path.isfile(fs_path):
-#             return os.path.getsize(fs_path)
-#         elif os.path.isdir(fs_path):
-#             size = 0
-#             for child in scandir(fs_path):
-#                 if child.is_file():
-#                     size += child.stat().st_size
-#             return size
-#         else:
-#             return 0
-#
-#     def clear(self):
-#         shutil.rmtree(self.path)
-#
-#     def atexit_rmtree(path,
-#                       isdir=os.path.isdir,
-#                       rmtree=shutil.rmtree):  # pragma: no cover
-#         """Ensure directory removal at interpreter exit."""
-#         if isdir(path):
-#             rmtree(path)
-#
-#     # noinspection PyShadowingNames
-#     def atexit_rmglob(path,
-#                       glob=glob.glob,
-#                       isdir=os.path.isdir,
-#                       isfile=os.path.isfile,
-#                       remove=os.remove,
-#                       rmtree=shutil.rmtree):  # pragma: no cover
-#         """Ensure removal of multiple files at interpreter exit."""
-#         for p in glob(path):
-#             if isfile(p):
-#                 remove(p)
-#             elif isdir(p):
-#                 rmtree(p)
-#
+'''
+A Zarr store that uses boto3 (and not s3fs) to access zarr stores in s3://
+'''
+
+import os
+import errno
+import shutil
+import time
+import numpy as np
+import uuid
+import glob
+import re
+
+from zarr.errors import (
+    MetadataError,
+    BadCompressorError,
+    ContainsArrayError,
+    ContainsGroupError,
+    FSPathExistNotDir,
+    ReadOnlyError,
+)
+
+from numcodecs.abc import Codec
+from numcodecs.compat import (
+    ensure_bytes,
+    ensure_text,
+    ensure_contiguous_ndarray,
+    ensure_contiguous_ndarray_like
+)
+
+# from numcodecs.registry import codec_registry
+
+# from threading import Lock, RLock
+# from filelock import Timeout, FileLock, SoftFileLock
+
+from zarr.util import (buffer_size, json_loads, nolock, normalize_chunks,
+                       normalize_dimension_separator,
+                       normalize_dtype, normalize_fill_value, normalize_order,
+                       normalize_shape, normalize_storage_path, retry_call)
+
+from zarr._storage.absstore import ABSStore  # noqa: F401
+
+from zarr._storage.store import Store, array_meta_key
+
+_prog_number = re.compile(r'^\d+$')
+
+## BOTO3 Way to do dir and files from s3
+import boto3
+from botocore import UNSIGNED, exceptions
+from botocore.client import Config
+import functools
+
+####################################
+# HELPER FUNCTIONS
+# Duplicated from utils
+# may integrate into store class
+####################################
+
+
+def s3_get_bucket_and_path_parts(path):
+    path = s3_clean_path(path)
+    path_split = path.split('/')
+    # print(path_split)
+    if isinstance(path_split, str):
+        path_split = [path_split]
+    bucket = path_split[0]
+    return bucket, path_split
+def s3_clean_path(path):
+    if 's3://' in path.lower():
+        path = path[5:]
+    elif path.startswith('/'):
+        path = path[1:]
+    if path.endswith('/'):
+        path = path[:-1]
+    return path
+
+
+def list_all_contents(path):
+    parent, dirs, files = get_dir_contents(path)
+    dirs = [os.path.join(parent,x) for x in dirs]
+    files = [os.path.join(parent, x) for x in files]
+    return dirs + files
+
+    # if 's3://' in path:
+    #     return s3.glob(os.path.join(path,'*'))
+    # else:
+    #     return glob.glob(os.path.join(path,'*'))
+
+def isdir(path):
+    # if 's3://' in path:
+    #     return s3.isdir(path)
+    if 's3://' in path:
+        return s3_isdir(path)
+    else:
+        return os.path.isdir(path)
+
+def isfile(path):
+    if 's3://' in path:
+        return s3_isfile(path)
+    else:
+        return os.path.isfile(path)
+
+def get_dir_contents(path,skip_s3=False):
+    if 's3://' in path:
+        if skip_s3:
+            return path, [], []
+        parent, dirs, files, _, _ = s3_get_dir_contents(path)
+        return f's3://{parent}', dirs, files
+    else:
+        for parent, dirs, files in os.walk(path):
+            return parent, dirs, files
+
+def get_ttl_hash(self,hours=24):
+    """Return the same value withing `hours` time period"""
+    seconds = hours * 60 * 60
+    return round(time.time() / seconds)
+
+
+class s3_boto_store(Store):
+    '''
+    READ ONLY
+    '''
+
+    def __init__(self, path, normalize_keys=False, dimension_separator='/', s3_cred='anon', mode='r'
+                 ):
+
+        # guard conditions
+        self.raw_path = path
+        self.bucket, path_split = self.s3_get_bucket_and_path_parts(self.raw_path)
+        if len(path_split) > 1:
+            self.zarr_dir = '/'.join(path_split[1:])
+        else:
+            self.zarr_dir = ''
+
+        # if os.path.exists(path) and not os.path.isdir(path):
+        #     raise FSPathExistNotDir(path)
+
+        self.normalize_keys = normalize_keys
+        if dimension_separator is None:
+            dimension_separator = "/"
+        elif dimension_separator != "/":
+            raise ValueError(
+                "s3_boto_store only supports '/' as dimension_separator")
+        self._dimension_separator = dimension_separator
+        self.mode = mode
+        assert self.mode == 'r', "s3_boto_store only supports read_only mode (mode='r')"
+
+        # Form client
+        assert s3_cred.lower() == 'anon', 'Currently only anonymous connections to s3 are supported'
+        self.client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+        self.paginator = self.client.get_paginator('list_objects_v2')
+
+        from cache_tools import get_cache
+        self.cache = get_cache()
+
+    def __hash__(self):
+        return hash(
+            f'{self.raw_path}{self.bucket}{self.zarr_dir}'
+        )
+
+    def __getstate__(self):
+        return (self.raw_path, self.bucket, self.zarr_dir, self.normalize_keys, self._dimension_separator,
+                self.mode)
+
+    def __setstate__(self, state):
+        (self.raw_path, self.bucket, self.zarr_dir, self.normalize_keys, self._dimension_separator,
+                self.mode) = state
+
+        self.client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+        self.paginator = self.client.get_paginator('list_objects_v2')
+
+    @classmethod
+    def get_ttl_hash(hours=24):
+        """Return the same value withing `hours` time period"""
+        seconds = hours * 60 * 60
+        return round(time.time() / seconds)
+
+    @property
+    def ttl(self):
+        self.get_ttl_hash(hours=24)
+
+    # def __hash__(self):
+    #     return hash(tuple(self))
+
+    @functools.lru_cache(maxsize=10000)
+    def s3_get_dir_contents(self, path, recursive=False):
+        # Get from diskcache if exists
+        if self.cache is not None:
+            key = f's3_get_dir_contents_{path}{str(recursive)}'
+            out = self.cache.get(key)
+            if out is not None:
+                print('GOT FROM CACHE')
+                return out
+
+        print('INSIDE S#_GET_DIR_COTENTS')
+        bucket, path_split = self.s3_get_bucket_and_path_parts(path)
+        # print(bucket)
+        if len(path_split) > 1:
+            prefix = '/'.join(path_split[1:]) + '/'  # Make sure you provide / in the end
+            root = f'{bucket}/{prefix}'
+        else:
+            prefix = ''  # Root prefix
+            root = f'{bucket}'
+        # client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+        # paginator = client.get_paginator('list_objects_v2')
+        if recursive:
+            pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000)
+        else:
+            pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000, Prefix=prefix, Delimiter='/')
+
+        dirs = ()
+        files = ()
+        files_sizes = ()
+        files_modified = ()
+        for page in pages:
+            if 'CommonPrefixes' in page:
+                dirs += tuple([x.get('Prefix')[:-1] for x in page.get('CommonPrefixes')])
+            if 'Contents' in page:
+                files += tuple((x.get('Key') for x in page.get('Contents')))
+                files_sizes += tuple((x.get('Size') for x in page.get('Contents')))
+                files_modified += tuple((x.get('LastModified') for x in page.get('Contents')))  # datetime objects
+        r = root.replace(bucket + '/', '')
+        dirs = tuple((x.replace(r,'') for x in dirs))
+        files = tuple((x.replace(r,'') for x in files))
+        out = root, dirs, files, files_sizes, files_modified
+        if self.cache is not None:
+            print('SENT TO CACHE')
+            self.cache.set(key, out, expire=3600, tag='S3')  # Expire after day 86400
+        return out
+        # return root, tuple(dirs), tuple(files), tuple(files_sizes), tuple(files_modified)
+
+    def s3_get_bucket_and_path_parts(self, path):
+        path = self.s3_clean_path(path)
+        path_split = path.split('/')
+        # print(path_split)
+        if isinstance(path_split, str):
+            path_split = [path_split]
+        bucket = path_split[0]
+        return bucket, path_split
+
+    def s3_clean_path(self, path):
+        if 's3://' in path.lower():
+            path = path[5:]
+        elif path.startswith('/'):
+            path = path[1:]
+        if path.endswith('/'):
+            path = path[:-1]
+        return path
+
+    def s3_path_split(self, path):
+        path = self.s3_clean_path(path)
+        p, f = os.path.split(path)
+        if p == '':
+            return f, p
+        else:
+            return p, f
+
+    def s3_isfile(self, path):
+        # print(path)
+        p, f = self.s3_path_split(path)
+        # print(f's3_isfile {p} and {f}')
+        print(f's3_isfile {path}')
+        # print(f's3_isfile TYPE {type(path)}')
+        _, _, files, _, _ = self.s3_get_dir_contents(p)
+        # print(f in files)
+        # print(f'''
+        # ##########################################
+        # ISFILE {f in files}
+        # #########################################
+        # ''')
+        return f in files
+
+    def s3_isdir(self, path):
+        # print(path)
+        p, f = self.s3_path_split(path)
+        if f == '':
+            return True
+        _, dirs, _, _, _ = self.s3_get_dir_contents(p)
+        # print(f in dirs)
+        # print(f'''
+        # ##########################################
+        # ISDIR {f in dirs}
+        # #########################################
+        # ''')
+        return f in dirs
+
+    def get_file_size(self, path):
+        if self.s3_isfile(path):
+            p, f = self.s3_path_split(path)
+            parent, _, files, files_sizes, _ = self.s3_get_dir_contents(p)
+            idx = files.index(f)
+            return files_sizes[idx]
+        else:
+            return 0
+
+    def num_dirs_files(self, path, skip_s3=True):
+        # skip_s3 if passed to get_dir_contents will ignore contents
+        # Getting this information from large remote s3 stores can be very slow on the first try
+        # however after caching, it is much faster.
+        _, dirs, files = self.get_dir_contents(path, skip_s3=skip_s3)
+        return len(dirs), len(files)
+
+    def get_mod_time(self, path):
+        if self.s3_isfile(path):
+            p, f = self.s3_path_split(path)
+            parent, _, files, _, files_modified = self.s3_get_dir_contents(p)
+            idx = files.index(f)
+            return files_modified[idx]
+        else:
+            return datetime.datetime.now()
+
+    def __del__(self):
+        pass
+
+    def _normalize_key(self, key):
+        return key.lower() if self.normalize_keys else key
+
+
+    def get_full_path_from_key(self, key):
+        if key[0] == '/':
+            return f'{self.bucket}/{self.zarr_dir}{key}'
+        return f'{self.bucket}/{self.zarr_dir}/{key}'
+
+    def __getitem__(self, key):
+        # print(f'GETTING {key}')
+        # print('In Get Item')
+        # key = self._normalize_key(key)
+        filepath = self.get_full_path_from_key(key)
+
+        if self.s3_isfile(filepath):
+            # print(f's3_isfile {filepath}')
+            try:
+                return self._fromfile(filepath)
+                # print(f's3_isfile RETURNED {a}')
+                # return a
+            except:
+                raise KeyError(key)
+        else:
+            raise KeyError(key)
+
+    def _fromfile(self, filepath):
+        filepath = self.s3_clean_path(filepath)
+        object_name = filepath.replace(self.bucket + '/','')
+        # print(f'__fromFILE {object_name}')
+        # file = io.BytesIO()
+        from io import BytesIO
+        with BytesIO() as f:
+            print(f'LEN {f}')
+            self.client.download_fileobj(self.bucket, object_name, f)
+            return f.getvalue()
+            # print(f'{f.getvalue()}')
+
+        # print(f)
+        # return f.seek(0).read()
+
+    def __setitem__(self, key, value):
+        pass
+
+    def __delitem__(self, key):
+        pass
+
+    def __contains__(self, key):
+        filepath = self.get_full_path_from_key(key)
+        print(f'__CONTAINS__ {filepath}')
+        # print(f'__CONTAINS__ TYPE {type(filepath)}')
+        if self.s3_isfile(filepath):
+            return True
+        return False
+
+    def __eq__(self, other):
+        return isinstance(other, s3_boto_store) and \
+                self.bucket == other.bucket and \
+                self.zarr_dir == other.zarr_dir
+
+    def keys(self):
+        if os.path.exists(self.path):
+            yield from self._keys_fast()
+
+    def _keys_fast(self, walker=os.walk):
+        for dirpath, _, filenames in walker(self.path):
+            dirpath = os.path.relpath(dirpath, self.path)
+            if dirpath == os.curdir:
+                for f in filenames:
+                    yield f
+            else:
+                # dirpath = dirpath.replace("\\", "/")
+                for f in filenames:
+                    basefile, ext = os.path.splitext(f)
+                    if ext == self.container_ext:
+                        names = self._get_zip_keys(os.path.join(self.path, dirpath, f))
+                        # Keys are stored in h5 with '.' separator, replace with appropriate separator
+                        names = (x.replace('.', os.path.sep) for x in tuple(names)[0])
+                        names = (os.path.sep.join((dirpath, basefile, x)) for x in names)
+                        yield from names
+                    # elif ext == '.tmp' and os.path.splitext(basefile)[-1] == self.container_ext:
+                    #     basefile, ext = os.path.splitext(basefile)
+                    #     names = self._get_zip_keys(f)
+                    #     names = ("/".join((dirpath, basefile,x)) for x in names)
+                    #     yield from names
+                    else:
+                        yield os.path.sep.join((dirpath, f))
+
+    def __iter__(self):
+        return self.keys()
+
+    def __len__(self):
+        return sum(1 for _ in self.keys())
+
+    def dir_path(self, path=None):
+        store_path = normalize_storage_path(path)
+        dir_path = self.path
+        if store_path:
+            dir_path = os.path.join(dir_path, store_path)
+        return dir_path
+
+    def listdir(self, path=None):
+        return self._nested_listdir(path) if self._dimension_separator == "/" else \
+            self._flat_listdir(path)
+
+    def _flat_listdir(self, path=None):
+        dir_path = self.dir_path(path)
+        if os.path.isdir(dir_path):
+            return sorted(os.listdir(dir_path))
+        else:
+            return []
+
+    def _nested_listdir(self, path=None):
+        children = self._flat_listdir(path=path)
+        if array_meta_key in children:
+            # special handling of directories containing an array to map nested chunk
+            # keys back to standard chunk keys
+            new_children = []
+            root_path = self.dir_path(path)
+            for entry in children:
+                entry_path = os.path.join(root_path, entry)
+                if _prog_number.match(entry) and os.path.isdir(entry_path):
+                    for dir_path, _, file_names in os.walk(entry_path):
+                        for file_name in file_names:
+                            file_path = os.path.join(dir_path, file_name)
+                            rel_path = file_path.split(root_path + os.path.sep)[1]
+                            new_children.append(rel_path.replace(os.path.sep, '.'))
+                else:
+                    new_children.append(entry)
+            return sorted(new_children)
+        else:
+            return children
+
+    def rename(self, src_path, dst_path):
+        store_src_path = normalize_storage_path(src_path)
+        store_dst_path = normalize_storage_path(dst_path)
+
+        dir_path = self.path
+
+        src_path = os.path.join(dir_path, store_src_path)
+        dst_path = os.path.join(dir_path, store_dst_path)
+
+        os.renames(src_path, dst_path)
+
+    def rmdir(self, path=None):
+        store_path = normalize_storage_path(path)
+        dir_path = self.path
+        if store_path:
+            dir_path = os.path.join(dir_path, store_path)
+        if os.path.isdir(dir_path):
+            shutil.rmtree(dir_path)
+
+    def getsize(self, path=None):
+        store_path = normalize_storage_path(path)
+        fs_path = self.path
+        if store_path:
+            fs_path = os.path.join(fs_path, store_path)
+        if os.path.isfile(fs_path):
+            return os.path.getsize(fs_path)
+        elif os.path.isdir(fs_path):
+            size = 0
+            for child in scandir(fs_path):
+                if child.is_file():
+                    size += child.stat().st_size
+            return size
+        else:
+            return 0
+
+    def clear(self):
+        shutil.rmtree(self.path)
+
+    def atexit_rmtree(path,
+                      isdir=os.path.isdir,
+                      rmtree=shutil.rmtree):  # pragma: no cover
+        """Ensure directory removal at interpreter exit."""
+        if isdir(path):
+            rmtree(path)
+
+    # noinspection PyShadowingNames
+    def atexit_rmglob(path,
+                      glob=glob.glob,
+                      isdir=os.path.isdir,
+                      isfile=os.path.isfile,
+                      remove=os.remove,
+                      rmtree=shutil.rmtree):  # pragma: no cover
+        """Ensure removal of multiple files at interpreter exit."""
+        for p in glob(path):
+            if isfile(p):
+                remove(p)
+            elif isdir(p):
+                rmtree(p)
+

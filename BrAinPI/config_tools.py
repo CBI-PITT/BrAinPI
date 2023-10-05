@@ -76,8 +76,11 @@ class config:
             self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=H5_Nested_Store, cache=self.cache)
 
         elif 's3://' in dataPath and dataPath.endswith('.zarr'):
-            import s3fs
-            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3fs.S3Map,
+            # import s3fs
+            # self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3fs.S3Map,
+            #                                           cache=self.cache)
+            from ome_zarr_loader import s3_boto_store
+            self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3_boto_store,
                                                       cache=self.cache)
 
         ## Append extracted metadata as attribute to open dataset
