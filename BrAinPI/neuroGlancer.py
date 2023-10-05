@@ -395,12 +395,12 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
 def neuroglancer_dtypes():
     return [
         '.ims', #imaris
-        '.omezarr', #ome.zarr
+        # '.omezarr', #ome.zarr
         '.omezans', #Archived_Nested_Store
         '.omehans', #H5_Nested_Store
         '.zarr', #Custom multiscale zarr implementation
-        '.weave',
-        '.z_sharded'
+        # '.weave',
+        # '.z_sharded'
         ]
 
 def open_ng_dataset(config,datapath):
@@ -472,9 +472,13 @@ def setup_neuroglancer(app, config):
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
         # If only the file name is requested this will redirect to a 
         if isinstance(match(file_pattern,path_split[-1]),Match_class):
-            datapath = '/' + os.path.join(*datapath.split('/')[:-2])
+            datapath = os.path.split(datapath)[0]
+            datapath = os.path.split(datapath)[0]
+            # datapath = '/' + os.path.join(*datapath.split('/')[:-2])
         elif path_split[-1] == 'info':
-            datapath = '/' + os.path.join(*datapath.split('/')[:-1])
+            datapath = os.path.split(datapath)[0]
+            # datapath = '/' + os.path.join(*datapath.split('/')[:-1])
+            # datapath = os.path.join(*datapath.split('/')[:-1])
         elif utils.is_file_type(neuroglancer_dtypes(), datapath):
             datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
             link_to_ng = make_ng_link(config.opendata[datapath], request.path, config=config)

@@ -556,7 +556,9 @@ def setup_omezarr(app, config):
             resolution = int(datapath.split('/')[-2])
 
             # Open dataset
-            datapath = '/' + os.path.join(*datapath.split('/')[:-2])
+            datapath = os.path.split(datapath)[0]
+            datapath = os.path.split(datapath)[0]
+            # datapath = '/' + os.path.join(*datapath.split('/')[:-2])
             datapath = open_omezarr_dataset(config,datapath)
             config.opendata[datapath].metadata
 
@@ -611,7 +613,9 @@ def setup_omezarr(app, config):
                 abort(404)
             try:
                 resolution = int(datapath.split('/')[-2])
-                datapath = '/' + os.path.join(*datapath.split('/')[:-2])
+                datapath = os.path.split(datapath)[0]
+                datapath = os.path.split(datapath)[0]
+                # datapath = '/' + os.path.join(*datapath.split('/')[:-2])
                 datapath = open_omezarr_dataset(config,datapath)
                 # return Response(response=get_zarray_file(config.opendata[datapath],resolution), status=200,
                 #                 mimetype="application/octet_stream")
@@ -621,7 +625,7 @@ def setup_omezarr(app, config):
         elif path_split[-1] == '.zattrs':
             if path_split[-2] == 'labels':
                 abort(404)
-            datapath = '/' + os.path.join(*datapath.split('/')[:-1])
+            datapath = os.path.split(datapath)[0]
             datapath = open_omezarr_dataset(config,datapath)
             # return Response(response=get_zattr_file(config.opendata[datapath]), status=200,
             #                 mimetype="application/octet_stream")

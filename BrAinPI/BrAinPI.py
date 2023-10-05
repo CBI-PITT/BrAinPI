@@ -58,6 +58,9 @@ APP_NAME = settings.get('app','name')
 app = flask.Flask(__name__,template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config["DEBUG"] = settings.getboolean('app','debug')
 
+import s3fs
+app.s3 = s3fs.S3FileSystem(anon=True)
+
 ## Initiate endpoints in other modules and attach them to app
 ## New endpoints can be added here
 

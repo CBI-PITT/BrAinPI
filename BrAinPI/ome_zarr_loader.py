@@ -19,12 +19,17 @@ from typing import Union
 Path = Union[str, bytes, None]
 StoreLike = Union[BaseStore, Store, MutableMapping]
 
+import s3fs
+
 class ome_zarr_loader:
     def __init__(self, location, ResolutionLevelLock=None, zarr_store_type: StoreLike=NestedDirectoryStore, verbose=None, squeeze=True, cache=None):
 
-        assert any([issubclass(zarr_store_type,x) for x in StoreLike.__args__]), 'zarr_store_type is not a zarr storage class'
+        # assert StoreLike is s3fs.S3Map or any([issubclass(zarr_store_type,x) for x in StoreLike.__args__]), 'zarr_store_type is not a zarr storage class'
 
         self.location = location
+        self.s3 = False
+        if 's3://' in location:
+            self.s3 = s3fs.S3FileSystem(anon=True)
         self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
 
         self.verbose = verbose
@@ -33,8 +38,8 @@ class ome_zarr_loader:
         self.metaData = {}
 
         # Open zarr store
-        self.zarr_store_type = zarr_store_type
-        store = self.zarr_store_type(self.location)
+        self.zarr_store = zarr_store_type # Only relevant for non-s3 datasets
+        store = self.zarr_store_type(self.location) # opens the store based on whether data are on s3 or local
         zgroup = zarr.open(store)
         self.zattrs = zgroup.attrs
         
@@ -90,7 +95,13 @@ class ome_zarr_loader:
         self.arrays = {}
         for res in range(self.ResolutionLevels):
             self.arrays[res] = self.open_array(res)
-    
+
+    def zarr_store_type(self, path):
+        if self.s3:
+            return s3fs.S3Map(path, s3=self.s3)
+        else:
+            return self.zarr_store(path)
+
 
     def change_resolution_lock(self,ResolutionLevelLock):
         self.ResolutionLevelLock = ResolutionLevelLock
