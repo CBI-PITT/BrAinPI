@@ -51,6 +51,7 @@ class cache_head_space:
         result = self.cache.get(key)
         if result is not None:
             self.cache.move_to_end(key)
+            print('Got from RAM CACHE')
         return result
 
     def __setitem__(self, key, value):
@@ -69,6 +70,7 @@ class cache_head_space:
             space = self.trim_cache(extra_space=new_obj_size)
             if space:
                 self.cache[key] = value
+                print('SET TO RAM CACHE')
         finally:
             if self.cache.get('lock') == self.uuid:
                 self.cache.pop('lock')

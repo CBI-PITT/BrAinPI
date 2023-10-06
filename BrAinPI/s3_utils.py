@@ -1,6 +1,5 @@
-
-
-
+from io import BytesIO
+import os
 ## BOTO3 Way to do dir and files from s3
 import boto3
 from botocore import UNSIGNED
@@ -9,31 +8,37 @@ from functools import lru_cache
 import time
 import os
 
-from cache_tools import get_cache
-# get cache one time to be reused for performance
+from cache_tools import get_cache, cache_head_space
 cache = get_cache()
+cache_ram = cache_head_space(10)
+
 
 def get_ttl_hash(hours=24):
     """Return the same value withing `hours` time period"""
-    seconds = hours*60*60
+    seconds = hours * 60 * 60
     return round(time.time() / seconds)
+
 
 client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
 paginator = client.get_paginator('list_objects_v2')
-@lru_cache(maxsize=10000)
+
+
 def s3_get_dir_contents(path, recursive=False, ttl_hash=get_ttl_hash(hours=24)):
     # Get from diskcache if exists
-    if cache is not None:
+    if cache is not None or cache_ram is not None:
         key = f's3_get_dir_contents_{path}{str(recursive)}'
-        out = cache.get(key)
+        out = cache_ram[key]
+        if out is None:
+            out = cache.get(key)
         if out is not None:
             print('GOT FROM CACHE')
+            cache_ram[key] = out
             return out
 
     bucket, path_split = s3_get_bucket_and_path_parts(path)
     # print(bucket)
     if len(path_split) > 1:
-        prefix = '/'.join(path_split[1:]) + '/' # Make sure you provide / in the end
+        prefix = '/'.join(path_split[1:]) + '/'  # Make sure you provide / in the end
         root = f'{bucket}/{prefix}'
     else:
         prefix = ''  # Root prefix
@@ -57,16 +62,17 @@ def s3_get_dir_contents(path, recursive=False, ttl_hash=get_ttl_hash(hours=24)):
         if 'Contents' in page:
             files += tuple((x.get('Key') for x in page.get('Contents')))
             files_sizes += tuple((x.get('Size') for x in page.get('Contents')))
-            files_modified += tuple((x.get('LastModified') for x in page.get('Contents'))) #datetime objects
-    r = root.replace(bucket + '/','')
-    dirs = tuple((x.replace(r,'') for x in dirs))
-    files = tuple((x.replace(r,'') for x in files))
-    print(len(dirs) + len(files))
+            files_modified += tuple((x.get('LastModified') for x in page.get('Contents')))  # datetime objects
+    r = root.replace(bucket + '/', '')
+    dirs = tuple((x.replace(r, '') for x in dirs))
+    files = tuple((x.replace(r, '') for x in files))
     out = root, dirs, files, files_sizes, files_modified
     if cache is not None:
         print('SENT TO CACHE')
+        cache_ram[key] = out
         cache.set(key, out, expire=3600, tag='S3')  # Expire after day 86400
     return out
+
 
 def s3_get_bucket_and_path_parts(path):
     path = s3_clean_path(path)
@@ -76,6 +82,8 @@ def s3_get_bucket_and_path_parts(path):
         path_split = [path_split]
     bucket = path_split[0]
     return bucket, path_split
+
+
 def s3_clean_path(path):
     if 's3://' in path.lower():
         path = path[5:]
@@ -85,16 +93,19 @@ def s3_clean_path(path):
         path = path[:-1]
     return path
 
+
 def s3_path_split(path):
     path = s3_clean_path(path)
     p, f = os.path.split(path)
     if p == '':
-        return f,p
+        return f, p
     else:
-        return p,f
+        return p, f
+
+
 def s3_isfile(path):
     # print(path)
-    p,f = s3_path_split(path)
+    p, f = s3_path_split(path)
     _, _, files, _, _ = s3_get_dir_contents(p)
     # print(f in files)
     # print(f'''
@@ -104,9 +115,10 @@ def s3_isfile(path):
     # ''')
     return f in files
 
+
 def s3_isdir(path):
     # print(path)
-    p,f = s3_path_split(path)
+    p, f = s3_path_split(path)
     if f == '':
         return True
     _, dirs, _, _, _ = s3_get_dir_contents(p)
@@ -119,6 +131,40 @@ def s3_isdir(path):
     return f in dirs
 
 
+def get_file_size(path):
+    if s3_isfile(path):
+        p, f = s3_path_split(path)
+        parent, _, files, files_sizes, _ = s3_get_dir_contents(p)
+        idx = files.index(f)
+        return files_sizes[idx]
+    else:
+        return 0
+
+
+def get_mod_time(path):
+    if self.s3_isfile(path):
+        p, f = s3_path_split(path)
+        parent, _, files, _, files_modified = s3_get_dir_contents(p)
+        idx = files.index(f)
+        return files_modified[idx]
+    else:
+        # Default to returning the current date and time if it is a directory since s3 attaches these
+        # parameters to a key and a 'directory' is simply a part of potentially many keys
+        return datetime.datetime.now()
+
+
+def num_dirs_files(path):
+    _, dirs, files = get_dir_contents(path)
+    return len(dirs), len(files)
+
+
+def s3_download_file_to_object(filepath, boto3_client):
+    bucket, _ = s3_get_bucket_and_path_parts(filepath)
+    object_name = filepath.replace(bucket + '/', '')
+    with BytesIO() as f:
+        boto3_client.download_fileobj(bucket, object_name, f)
+        return f.getvalue()
+
 
 def s3_catch_exceptions_retry(func):
     def wrapper(*args, **kwargs):
@@ -127,9 +173,10 @@ def s3_catch_exceptions_retry(func):
             return func(*args, **kwargs)
         except botocore.exceptions.SSLError as e:
             print(e)
-            tries+=1
+            tries += 1
             if tries == 2:
-                raise(e)
+                raise (e)
+
     return wrapper
 
 
@@ -156,7 +203,7 @@ class s3_boto_store(Store):
     def __init__(self, path, normalize_keys=False, dimension_separator='/', s3_cred='anon', mode='r'):
 
         self.raw_path = path
-        self.bucket, path_split = self.s3_get_bucket_and_path_parts(self.raw_path)
+        self.bucket, path_split = s3_get_bucket_and_path_parts(self.raw_path)
         if len(path_split) > 1:
             self.zarr_dir = '/'.join(path_split[1:])
         else:
@@ -181,7 +228,9 @@ class s3_boto_store(Store):
         self.paginator = self.client.get_paginator('list_objects_v2')
 
         from cache_tools import get_cache
-        self.cache = get_cache()
+        # Received from outside class to reduce errors on opening too many instances
+        # Need a way to handle this better
+        self.cache = cache
 
     def __hash__(self):
         return hash(
@@ -194,8 +243,7 @@ class s3_boto_store(Store):
 
     def __setstate__(self, state):
         (self.raw_path, self.bucket, self.zarr_dir, self.normalize_keys, self._dimension_separator,
-                self.mode) = state
-
+         self.mode) = state
 
     @s3_catch_exceptions_retry
     @functools.lru_cache(maxsize=10000)
@@ -203,13 +251,16 @@ class s3_boto_store(Store):
         # Get from diskcache if exists
         if self.cache is not None:
             key = f's3_get_dir_contents_{path}{str(recursive)}'
-            out = self.cache.get(key)
+            out = cache_head_space.get(key)
+            if out is None:
+                out = self.cache.get(key)
             if out is not None:
                 print('GOT FROM CACHE')
+                cache_head_space[key] = out
                 return out
 
         print('INSIDE S#_GET_DIR_COTENTS')
-        bucket, path_split = self.s3_get_bucket_and_path_parts(path)
+        bucket, path_split = s3_get_bucket_and_path_parts(path)
         # print(bucket)
         if len(path_split) > 1:
             prefix = '/'.join(path_split[1:]) + '/'  # Make sure you provide / in the end
@@ -236,101 +287,27 @@ class s3_boto_store(Store):
                 files_sizes += tuple((x.get('Size') for x in page.get('Contents')))
                 files_modified += tuple((x.get('LastModified') for x in page.get('Contents')))  # datetime objects
         r = root.replace(bucket + '/', '')
-        dirs = tuple((x.replace(r,'') for x in dirs))
-        files = tuple((x.replace(r,'') for x in files))
+        to_chop = len(r)
+        dirs = tuple((x[to_chop:] for x in dirs))
+        files = tuple((x[to_chop:] for x in files))
+        # dirs = tuple((x.replace(r, '') for x in dirs))
+        # files = tuple((x.replace(r, '') for x in files))
         out = root, dirs, files, files_sizes, files_modified
         if self.cache is not None:
+            try:
+                cache_head_space[key] = out
+            except:
+                pass
             print('SENT TO CACHE')
             self.cache.set(key, out, expire=3600, tag='S3')  # Expire after day 86400
         return out
         # return root, tuple(dirs), tuple(files), tuple(files_sizes), tuple(files_modified)
-
-    def s3_get_bucket_and_path_parts(self, path):
-        path = self.s3_clean_path(path)
-        path_split = path.split('/')
-        # print(path_split)
-        if isinstance(path_split, str):
-            path_split = [path_split]
-        bucket = path_split[0]
-        return bucket, path_split
-
-    def s3_clean_path(self, path):
-        if 's3://' in path.lower():
-            path = path[5:]
-        elif path.startswith('/'):
-            path = path[1:]
-        if path.endswith('/'):
-            path = path[:-1]
-        return path
-
-    def s3_path_split(self, path):
-        path = self.s3_clean_path(path)
-        p, f = os.path.split(path)
-        if p == '':
-            return f, p
-        else:
-            return p, f
-
-    def s3_isfile(self, path):
-        # print(path)
-        p, f = self.s3_path_split(path)
-        # print(f's3_isfile {p} and {f}')
-        print(f's3_isfile {path}')
-        # print(f's3_isfile TYPE {type(path)}')
-        _, _, files, _, _ = self.s3_get_dir_contents(p)
-        # print(f in files)
-        # print(f'''
-        # ##########################################
-        # ISFILE {f in files}
-        # #########################################
-        # ''')
-        return f in files
-
-    def s3_isdir(self, path):
-        # print(path)
-        p, f = self.s3_path_split(path)
-        if f == '':
-            return True
-        _, dirs, _, _, _ = self.s3_get_dir_contents(p)
-        # print(f in dirs)
-        # print(f'''
-        # ##########################################
-        # ISDIR {f in dirs}
-        # #########################################
-        # ''')
-        return f in dirs
-
-    def get_file_size(self, path):
-        if self.s3_isfile(path):
-            p, f = self.s3_path_split(path)
-            parent, _, files, files_sizes, _ = self.s3_get_dir_contents(p)
-            idx = files.index(f)
-            return files_sizes[idx]
-        else:
-            return 0
-
-    def num_dirs_files(self, path, skip_s3=True):
-        # skip_s3 if passed to get_dir_contents will ignore contents
-        # Getting this information from large remote s3 stores can be very slow on the first try
-        # however after caching, it is much faster.
-        _, dirs, files = self.get_dir_contents(path, skip_s3=skip_s3)
-        return len(dirs), len(files)
-
-    def get_mod_time(self, path):
-        if self.s3_isfile(path):
-            p, f = self.s3_path_split(path)
-            parent, _, files, _, files_modified = self.s3_get_dir_contents(p)
-            idx = files.index(f)
-            return files_modified[idx]
-        else:
-            return datetime.datetime.now()
 
     def __del__(self):
         pass
 
     def _normalize_key(self, key):
         return key.lower() if self.normalize_keys else key
-
 
     def get_full_path_from_key(self, key):
         if key[0] == '/':
@@ -341,12 +318,20 @@ class s3_boto_store(Store):
         # print(f'GETTING {key}')
         # print('In Get Item')
         # key = self._normalize_key(key)
+        if cache_ram is not None:
+            out = cache_ram[key]
+            if out is not None:
+                return out
+
         filepath = self.get_full_path_from_key(key)
 
-        if self.s3_isfile(filepath):
+        if s3_isfile(filepath):
             # print(f's3_isfile {filepath}')
             try:
-                return self._fromfile(filepath)
+                out = self._fromfile(filepath)
+                if cache_ram is not None:
+                    cache_ram[key] = out
+                return out
                 # print(f's3_isfile RETURNED {a}')
                 # return a
             except:
@@ -355,19 +340,7 @@ class s3_boto_store(Store):
             raise KeyError(key)
 
     def _fromfile(self, filepath):
-        filepath = self.s3_clean_path(filepath)
-        object_name = filepath.replace(self.bucket + '/','')
-        # print(f'__fromFILE {object_name}')
-        # file = io.BytesIO()
-        from io import BytesIO
-        with BytesIO() as f:
-            print(f'LEN {f}')
-            self.client.download_fileobj(self.bucket, object_name, f)
-            return f.getvalue()
-            # print(f'{f.getvalue()}')
-
-        # print(f)
-        # return f.seek(0).read()
+        return s3_download_file_to_object(filepath, self.client)
 
     def __setitem__(self, key, value):
         pass
@@ -375,18 +348,18 @@ class s3_boto_store(Store):
     def __delitem__(self, key):
         pass
 
+    @functools.lru_cache(maxsize=10000)
     def __contains__(self, key):
         filepath = self.get_full_path_from_key(key)
         print(f'__CONTAINS__ {filepath}')
-        # print(f'__CONTAINS__ TYPE {type(filepath)}')
-        if self.s3_isfile(filepath):
+        if s3_isfile(filepath):
             return True
         return False
 
     def __eq__(self, other):
         return isinstance(other, s3_boto_store) and \
-                self.bucket == other.bucket and \
-                self.zarr_dir == other.zarr_dir
+            self.bucket == other.bucket and \
+            self.zarr_dir == other.zarr_dir
 
     def keys(self):
         if os.path.exists(self.path):
