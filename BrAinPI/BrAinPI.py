@@ -9,6 +9,11 @@ To run w/ gunicorn:  gunicorn --worker-class gevent -b 0.0.0.0:5001 --chdir /CBI
 To run development (1 worker, 1 thread):  python -i /CBI_FastStore/cbiPythonTools/BrAinPI/BrAinPI/BrAinPI.py
 """
 
+# Place some critical caching tool into the builtins space to enable access across modules
+import builtins
+from cache_tools import cache_head_space
+builtins.brainpi_cache_ram = cache_head_space(20) #Make available accross all modules as simply calling 'cache_ram'
+
 import flask, json, os
 from flask import request, Response, send_file, render_template, jsonify,url_for, redirect
 import pathlib

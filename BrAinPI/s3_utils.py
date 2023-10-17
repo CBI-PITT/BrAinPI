@@ -1,16 +1,18 @@
-from io import BytesIO
 import os
-## BOTO3 Way to do dir and files from s3
-import boto3
-from botocore import UNSIGNED
-from botocore.client import Config
-from functools import lru_cache
 import time
-import os
+import functools
 
-from cache_tools import get_cache, cache_head_space
-cache = get_cache()
-cache_ram = cache_head_space(10)
+import boto3
+from botocore import UNSIGNED, exceptions
+from botocore.client import Config
+from io import BytesIO
+
+from zarr._storage.store import Store
+
+from cache_tools import get_cache
+cache_disk = get_cache()
+# # cache_ram = cache_head_space(10)
+# # cache_ram = None
 
 
 def get_ttl_hash(hours=24):
@@ -23,17 +25,54 @@ client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
 paginator = client.get_paginator('list_objects_v2')
 
 
-def s3_get_dir_contents(path, recursive=False, ttl_hash=get_ttl_hash(hours=24)):
-    # Get from diskcache if exists
-    if cache is not None or cache_ram is not None:
-        key = f's3_get_dir_contents_{path}{str(recursive)}'
-        out = cache_ram[key]
-        if out is None:
-            out = cache.get(key)
-        if out is not None:
-            print('GOT FROM CACHE')
-            cache_ram[key] = out
-            return out
+def s3_catch_exceptions_retry(func):
+    '''
+    Will retry a call to s3 storage up to 4 times
+    if the error return is SSLError
+    '''
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        tries = 0
+        try:
+            return func(*args, **kwargs)
+        except botocore.exceptions.SSLError as e:
+            print(e)
+            tries += 1
+            if tries == 4:
+                raise(e)
+
+    return wrapper
+
+
+@brainpi_cache_ram.memoize
+@cache_disk.memoize()
+@s3_catch_exceptions_retry
+def s3_get_dir_contents(path, recursive=False):
+
+    # if not ( 'cache_disk' in locals() or 'cache_disk' in globals() ):
+    #     cache_disk = False
+    # if not ( 'cache_ram' in locals() or 'cache_ram' in globals() ):
+    #     cache_ram = False
+
+    # print(f'CACHE STATUS = {cache_disk} {cache_ram}')
+    #Get from diskcache if exists
+    # if cache_disk is not None or cache_ram is not None:
+    #     key = f's3_get_dir_contents_{path}{str(recursive)}'
+    #
+    #     if cache_ram is not None:
+    #         # Try RAM Cache
+    #         out = cache_ram[key]
+    #         if out is not None:
+    #             return out
+    #
+    #     if cache_disk is not None:
+    #         # Try diskcache
+    #         out = cache_disk.get(key)
+    #         if out is not None:
+    #             if cache_ram is not None:
+    #                 cache_ram[key] = out
+    #             print('GOT FROM CACHE')
+    #             return out
 
     bucket, path_split = s3_get_bucket_and_path_parts(path)
     # print(bucket)
@@ -56,7 +95,7 @@ def s3_get_dir_contents(path, recursive=False, ttl_hash=get_ttl_hash(hours=24)):
     current_page = 0
     for page in pages:
         current_page += 1
-        print(f'Page {current_page}')
+        print(f'Page {current_page} {path}')
         if 'CommonPrefixes' in page:
             dirs += tuple((x.get('Prefix')[:-1] for x in page.get('CommonPrefixes')))
         if 'Contents' in page:
@@ -67,10 +106,14 @@ def s3_get_dir_contents(path, recursive=False, ttl_hash=get_ttl_hash(hours=24)):
     dirs = tuple((x.replace(r, '') for x in dirs))
     files = tuple((x.replace(r, '') for x in files))
     out = root, dirs, files, files_sizes, files_modified
-    if cache is not None:
-        print('SENT TO CACHE')
-        cache_ram[key] = out
-        cache.set(key, out, expire=3600, tag='S3')  # Expire after day 86400
+
+    # if cache_disk is not None or cache_ram is not None:
+    #     print('SENT TO CACHE')
+    #     if cache_ram is not None:
+    #         cache_ram[key] = out
+    #     if cache_disk is not None:
+    #         cache_disk.set(key, out, expire=3600, tag='S3')  # Expire after day 86400
+
     return out
 
 
@@ -103,6 +146,7 @@ def s3_path_split(path):
         return p, f
 
 
+
 def s3_isfile(path):
     # print(path)
     p, f = s3_path_split(path)
@@ -114,6 +158,7 @@ def s3_isfile(path):
     # #########################################
     # ''')
     return f in files
+
 
 
 def s3_isdir(path):
@@ -153,11 +198,14 @@ def get_mod_time(path):
         return datetime.datetime.now()
 
 
+
 def num_dirs_files(path):
     _, dirs, files = get_dir_contents(path)
     return len(dirs), len(files)
 
 
+
+@s3_catch_exceptions_retry
 def s3_download_file_to_object(filepath, boto3_client):
     bucket, _ = s3_get_bucket_and_path_parts(filepath)
     object_name = filepath.replace(bucket + '/', '')
@@ -166,34 +214,11 @@ def s3_download_file_to_object(filepath, boto3_client):
         return f.getvalue()
 
 
-def s3_catch_exceptions_retry(func):
-    def wrapper(*args, **kwargs):
-        tries = 0
-        try:
-            return func(*args, **kwargs)
-        except botocore.exceptions.SSLError as e:
-            print(e)
-            tries += 1
-            if tries == 2:
-                raise (e)
-
-    return wrapper
-
 
 #############################################################################
 ## ZARR READ ONLY STORE BASED ON BOTO3
 ## NEEDED to get around s3fs async causing issues with gevent workers
 #############################################################################
-
-import os
-import time
-
-from zarr._storage.store import Store
-
-import boto3
-from botocore import UNSIGNED, exceptions
-from botocore.client import Config
-import functools
 
 class s3_boto_store(Store):
     '''
@@ -227,10 +252,10 @@ class s3_boto_store(Store):
         self.client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
         self.paginator = self.client.get_paginator('list_objects_v2')
 
-        from cache_tools import get_cache
+        # from cache_tools import get_cache
         # Received from outside class to reduce errors on opening too many instances
         # Need a way to handle this better
-        self.cache = cache
+        # self.cache = cache
 
     def __hash__(self):
         return hash(
@@ -244,64 +269,6 @@ class s3_boto_store(Store):
     def __setstate__(self, state):
         (self.raw_path, self.bucket, self.zarr_dir, self.normalize_keys, self._dimension_separator,
          self.mode) = state
-
-    @s3_catch_exceptions_retry
-    @functools.lru_cache(maxsize=10000)
-    def s3_get_dir_contents(self, path, recursive=False):
-        # Get from diskcache if exists
-        if self.cache is not None:
-            key = f's3_get_dir_contents_{path}{str(recursive)}'
-            out = cache_head_space.get(key)
-            if out is None:
-                out = self.cache.get(key)
-            if out is not None:
-                print('GOT FROM CACHE')
-                cache_head_space[key] = out
-                return out
-
-        print('INSIDE S#_GET_DIR_COTENTS')
-        bucket, path_split = s3_get_bucket_and_path_parts(path)
-        # print(bucket)
-        if len(path_split) > 1:
-            prefix = '/'.join(path_split[1:]) + '/'  # Make sure you provide / in the end
-            root = f'{bucket}/{prefix}'
-        else:
-            prefix = ''  # Root prefix
-            root = f'{bucket}'
-        # client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-        # paginator = client.get_paginator('list_objects_v2')
-        if recursive:
-            pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000)
-        else:
-            pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000, Prefix=prefix, Delimiter='/')
-
-        dirs = ()
-        files = ()
-        files_sizes = ()
-        files_modified = ()
-        for page in pages:
-            if 'CommonPrefixes' in page:
-                dirs += tuple([x.get('Prefix')[:-1] for x in page.get('CommonPrefixes')])
-            if 'Contents' in page:
-                files += tuple((x.get('Key') for x in page.get('Contents')))
-                files_sizes += tuple((x.get('Size') for x in page.get('Contents')))
-                files_modified += tuple((x.get('LastModified') for x in page.get('Contents')))  # datetime objects
-        r = root.replace(bucket + '/', '')
-        to_chop = len(r)
-        dirs = tuple((x[to_chop:] for x in dirs))
-        files = tuple((x[to_chop:] for x in files))
-        # dirs = tuple((x.replace(r, '') for x in dirs))
-        # files = tuple((x.replace(r, '') for x in files))
-        out = root, dirs, files, files_sizes, files_modified
-        if self.cache is not None:
-            try:
-                cache_head_space[key] = out
-            except:
-                pass
-            print('SENT TO CACHE')
-            self.cache.set(key, out, expire=3600, tag='S3')  # Expire after day 86400
-        return out
-        # return root, tuple(dirs), tuple(files), tuple(files_sizes), tuple(files_modified)
 
     def __del__(self):
         pass
@@ -318,19 +285,21 @@ class s3_boto_store(Store):
         # print(f'GETTING {key}')
         # print('In Get Item')
         # key = self._normalize_key(key)
-        if cache_ram is not None:
-            out = cache_ram[key]
-            if out is not None:
-                return out
 
         filepath = self.get_full_path_from_key(key)
+
+        # if cache_ram is not None:
+        #     cache_key = f's3_get_dir_contents__getitem__{filepath}'
+        #     out = cache_ram[cache_key]
+        #     if out is not None:
+        #         return out
 
         if s3_isfile(filepath):
             # print(f's3_isfile {filepath}')
             try:
                 out = self._fromfile(filepath)
-                if cache_ram is not None:
-                    cache_ram[key] = out
+                # if cache_ram is not None:
+                #     cache_ram[cache_key] = out
                 return out
                 # print(f's3_isfile RETURNED {a}')
                 # return a
@@ -348,7 +317,6 @@ class s3_boto_store(Store):
     def __delitem__(self, key):
         pass
 
-    @functools.lru_cache(maxsize=10000)
     def __contains__(self, key):
         filepath = self.get_full_path_from_key(key)
         print(f'__CONTAINS__ {filepath}')
@@ -394,3 +362,61 @@ class s3_boto_store(Store):
 
     def __len__(self):
         return sum(1 for _ in self.keys())
+
+    # @s3_catch_exceptions_retry
+    # @functools.lru_cache(maxsize=10000)
+    # def s3_get_dir_contents(self, path, recursive=False):
+    #     # Get from diskcache if exists
+    #     if self.cache is not None:
+    #         key = f's3_get_dir_contents_{path}{str(recursive)}'
+    #         out = cache_head_space.get(key)
+    #         if out is None:
+    #             out = self.cache.get(key)
+    #         if out is not None:
+    #             print('GOT FROM CACHE')
+    #             cache_head_space[key] = out
+    #             return out
+    #
+    #     print('INSIDE S#_GET_DIR_COTENTS')
+    #     bucket, path_split = s3_get_bucket_and_path_parts(path)
+    #     # print(bucket)
+    #     if len(path_split) > 1:
+    #         prefix = '/'.join(path_split[1:]) + '/'  # Make sure you provide / in the end
+    #         root = f'{bucket}/{prefix}'
+    #     else:
+    #         prefix = ''  # Root prefix
+    #         root = f'{bucket}'
+    #     # client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+    #     # paginator = client.get_paginator('list_objects_v2')
+    #     if recursive:
+    #         pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000)
+    #     else:
+    #         pages = self.paginator.paginate(Bucket=bucket, MaxKeys=1000, Prefix=prefix, Delimiter='/')
+    #
+    #     dirs = ()
+    #     files = ()
+    #     files_sizes = ()
+    #     files_modified = ()
+    #     for page in pages:
+    #         if 'CommonPrefixes' in page:
+    #             dirs += tuple([x.get('Prefix')[:-1] for x in page.get('CommonPrefixes')])
+    #         if 'Contents' in page:
+    #             files += tuple((x.get('Key') for x in page.get('Contents')))
+    #             files_sizes += tuple((x.get('Size') for x in page.get('Contents')))
+    #             files_modified += tuple((x.get('LastModified') for x in page.get('Contents')))  # datetime objects
+    #     r = root.replace(bucket + '/', '')
+    #     to_chop = len(r)
+    #     dirs = tuple((x[to_chop:] for x in dirs))
+    #     files = tuple((x[to_chop:] for x in files))
+    #     # dirs = tuple((x.replace(r, '') for x in dirs))
+    #     # files = tuple((x.replace(r, '') for x in files))
+    #     out = root, dirs, files, files_sizes, files_modified
+    #     if self.cache is not None:
+    #         try:
+    #             cache_head_space[key] = out
+    #         except:
+    #             pass
+    #         print('SENT TO CACHE')
+    #         self.cache.set(key, out, expire=3600, tag='S3')  # Expire after day 86400
+    #     return out
+    #     # return root, tuple(dirs), tuple(files), tuple(files_sizes), tuple(files_modified)

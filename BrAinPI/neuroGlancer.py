@@ -620,6 +620,7 @@ def setup_neuroglancer(app, config):
         # neuro_glancer_entry = lru_cache(maxsize=5000)(neuro_glancer_entry) #Causing some IO errors not sure why
         print(neuro_glancer_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
+    # neuro_glancer_entry = brainpi_cache_ram.memoize(neuro_glancer_entry)
     
     
    
