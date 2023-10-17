@@ -108,11 +108,11 @@ another_place = /another
 
 ## "path_to_html_options" endpoint:
 
-This endpoint makes it easy to retrieve links to several views of a compatible file type.  For this to work, the settings.ini file must have a path registered that you wish to exponse to BrAinPI in either the [dir_anon] or [dir_auth] fields. The user than passes the full file path to the endpoint to determine of BrAinPI is capable of translating the dataset. A json file is returned with several entries described in the table below. Null values indicate the BrAinPI is not able to generate a link for that dataset - or the path does not exist.
+This endpoint makes it easy to retrieve links to several views of a compatible file type.  For this to work, the settings.ini file must have a path registered that you wish to exponse to BrAinPI in either the [dir_anon] or [dir_auth] fields. The user then passes the full file path to the endpoint to determine if BrAinPI is capable of translating the dataset. A json file is returned with several entries described in the table below. Null values indicate that BrAinPI is not able to generate a link for that dataset - or the path does not exist.
 
 <u>Examples for how to structure a request (see setting.ini above):</u>
 
-http://localhost:5001/path_to_html_options/?path=/path/to/physical/location/on/disk.ims
+http://localhost:5001/path_to_html_options/?path=/path/to/physical/location/on/disk.ims<br/>
 http://localhost:5001/path_to_html_options/?path=/another/path/to/a/different/physical/location/on/disk.ome.zarr
 
 
@@ -121,17 +121,17 @@ http://localhost:5001/path_to_html_options/?path=/another/path/to/a/different/ph
 
 | JSON Key                                      | Link                                                         |
 | --------------------------------------------- | :----------------------------------------------------------- |
-| neuroglancer                                  | Link to open a neuroglancer visualization of the dataset.  This endpoint will also deliver neuroglancer precomputed format. |
-| neuroglancer_metadata                         | 'info' file for neuroglancer precomputed format.             |
-| omezarr                                       | ome-zarr view of the data.                                   |
-| omezarr_metadata                              | .zattrs for the ome-zarr view of the data.                   |
+| neuroglancer                                  | Link to open a neuroglancer visualization of the dataset.  This endpoint will also deliver neuroglancer precomputed format |
+| neuroglancer_metadata                         | 'info' file for neuroglancer precomputed format             |
+| omezarr                                       | ome-zarr view of the data                                   |
+| omezarr_metadata                              | .zattrs for the ome-zarr view of the data                   |
 | omezarr_validator                             | ome-ngff validator link for the omezarr url                  |
-| omezarr_8bit                                  | ome-zarr view of the data returned in a 8bit data type.      |
-| omezarr_8bit_metadata                         | .zattrs for the ome-zarr view of the data returned in a 8bit data type. |
+| omezarr_8bit                                  | ome-zarr view of the data returned in a 8bit data type      |
+| omezarr_8bit_metadata                         | .zattrs for the ome-zarr view of the data returned in a 8bit data type |
 | omezarr_8bit_validator                        | ome-ngff validator link for the omezarr_8bit url             |
-| omezarr_neuroglancer_optimized                | ome-zarr view of the data where data is chunked along the channel dimension to provide enhanced compatibility with neuroglancer.. |
+| omezarr_neuroglancer_optimized                | ome-zarr view of the data where data is chunked along the channel dimension to provide enhanced compatibility with neuroglancer |
 | omezarr_neuroglancer_optimized_validator      | ome-ngff validator link for the omezarr_neuroglancer_optimized url |
-| omezarr_8bit_neuroglancer_optimized           | ome-zarr view of the data where data is chunked along the channel dimension to provide enhanced compatibility with neuroglancer and returned in a 8bit data type. |
+| omezarr_8bit_neuroglancer_optimized           | ome-zarr view of the data where data is chunked along the channel dimension to provide enhanced compatibility with neuroglancer and returned in a 8bit data type |
 | omezarr_8bit_neuroglancer_optimized_validator | ome-ngff validator link for the omezarr_8bit_neuroglancer_optimized url |
 | path                                          | the path passed to the endpoint                              |
 
