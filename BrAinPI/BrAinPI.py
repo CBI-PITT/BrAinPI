@@ -214,37 +214,8 @@ def add_header(response):
 
     return response
 
-# @app.route('/test/route/**/', methods=['GET'])
-# def fmostCompress():
 
 
-# CORS(app)
-
-# if __name__ == '__main__':
-#     app.run(threaded=True,host='0.0.0.0')
-    
 if __name__ == '__main__':
-    if os.name == 'nt':
-        app.run(host='0.0.0.0',port=5000)
-    elif 'c00' in os.uname()[1]:
-        app.run(host='0.0.0.0',port=5001)
-    else:
-        app.run(host='0.0.0.0',port=5000)
+    app.run(host='0.0.0.0',port=5001)
 
-    
-
-
-    
-    
-    
-    # Request parameters
-    # path             /foo/page.html
-    # full_path        /foo/page.html?x=y
-    # script_root      /myapplication
-    # base_url         http://www.example.com/myapplication/foo/page.html
-    # url              http://www.example.com/myapplication/foo/page.html?x=y
-    # url_root         http://www.example.com/myapplication/
-    
-    
-    
-    

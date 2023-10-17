@@ -1,16 +1,16 @@
 # BrAinPI
 
-BrAinPI, pronounced "Brain Pie", is a Flask-based API for serving a variety of multiscale imaging data for access over the web or for visualization.  Originally designed for serving imaging data of whole brains from the Brain Image Library, it can be used for any type of imaging data.
-
-BrAinPI provides a file browser interface that allows one to expose a file system with basic user and group management.  The browser supports basic file download.  When multiscale chunked imaging file types are available (ie. HDF5, Zarr, OME-Tiff), BrAinPI can view the dataset in neuroglancer or provide links where users can request image information from arbitrary regions within a dataset.  
-
-BrAinPI is built as a webservice to enable the integration of large imaging data with application for visualization and processing workflows.
+BrAinPI, pronounced "Brain Pie", is a Flask-based API for serving a variety of multiscale imaging data for access over the web in standard file formats like ome-zarr and neuroglancer precomputed. BrAinPI provides a file browser interface that allows one to expose a file system with basic user and group management. The browser interface can be used for single click access to neuroglancer visualizations.  When multiscale chunked imaging file types are available (see "Compatible file types" below), BrAinPI can open the dataset in neuroglancer or provide links to various 'views' of the data structured as ome-zarr. The ome-zarr links are compatible with any application that support ome-zarr, including neuroglancer and napari.
 
 
 
-```python
-conda create -y -n bil_api python=3.8
-conda activate bil_api
+## Installing BrAinPI
+
+```bash
+# Currently, BrAinPI has only been tested on Ubuntu >=16.04
+
+conda create -y -n brainpi python=3.8
+conda activate brainpi
 
 git clone https://github.com/CBI-PITT/BrAinPI.git
 pip install -e /path/to/cloned/repo/
@@ -18,18 +18,126 @@ pip install -e /path/to/cloned/repo/
 ## Before running BrAinPI
 
 '''
-Note: Before running the API edit the settings_TEMPLATE.ini and groups_TEMPLATE.ini files and rename them to settings.ini and groups.ini.
+Edit the settings_TEMPLATE.ini and groups_TEMPLATE.ini files and rename them to settings.ini and groups.ini.
 '''
-
-For development:
-	python -i /path/to/cloned/repo/bil_api/BrAinPI.py
-
-In production:
-    gunicorn -b 0.0.0.0:5000 --chdir path/to/cloned/repo/BrAinPI wsgi:app -w 4 --threads 6
-    #Adjust these parameters for your specific situation
-    #-w = workers
-    #-threads = threads per worker
 
 ```
 
-Note:   IMS files will work out of the box, zarr is currently likely to fail.
+
+
+## Running BrAinPI:
+
+```bash
+#For development:
+python -i /path/to/cloned/repo/brainapi/BrAinPI.py
+
+#In production:
+gunicorn --worker-class gevent -b 0.0.0.0:5001 --chdir /path/to/cloned/repo/BrAinPI wsgi:app -w 24 --threads=2 --worker-connections=20
+## Adjust these parameters according to your specific needs
+# -w = workers (suggest the number of logical CPUs)
+# -threads = threads per worker (suggest 2)
+# --worker-connections (suggest 5-20)
+
+### We suggest running BrAinPI behind NGINX in a production environment.
+```
+
+
+
+## Access BrAinPI:
+
+```python
+# If running BrAinPI on your local computer
+
+# BrAinPI Browser:
+http://localhost:5001:/browser
+
+# HTML links endpoint:
+# Returns a json with links to several versions of a dataset on disk
+http://localhost:5001:/path_to_html_options/?path=/path/to/physical/location/on/disk.ims
+http://localhost:5001:/path_to_html_options/?path=/path/to/physical/location/on/disk.ome.zarr
+```
+
+
+
+## Compatible file types:
+
+Inputs:
+
+| File Type     | Links                                                        |                            Notes                             |
+| ------------- | :----------------------------------------------------------- | :----------------------------------------------------------: |
+| Imaris        | [Library used to read .ims](https://github.com/CBI-PITT/imaris_ims_file_reader)<br />[IMS file structure](https://imaris.oxinst.com/support/imaris-file-format)<br />[Bitplane Imaris](https://imaris.oxinst.com/) | BrAinPI can read multiscale image data but not annotation information |
+| OME-Zarr      | [OME-NGFF Spec](https://ngff.openmicroscopy.org/latest/)<br />[Histochemistry Paper](https://link.springer.com/article/10.1007/s00418-023-02209-1) | BrAinPI can read data in ome-zarr following zarr v2 specification |
+| OME-Zarr-like | [Alternative Zarr Stores](https://github.com/CBI-PITT/zarr_stores) | BrAinPI can read datasets structured like OME-Zarr but not conforming strictly to the OME-NGFF specification. Currently supported are datasets written in alternative zarr storage classes (supported: H5_Nested_Store) |
+
+
+
+Outputs:
+
+| File Type                | Links                                                        | Notes                                                        |
+| :----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| OME-Zarr                 | [OME-NGFF Spec](https://ngff.openmicroscopy.org/latest/)<br />[Histochemistry Paper](https://link.springer.com/article/10.1007/s00418-023-02209-1) | Output metadata (.zattrs), if absent in the origional dataset may be generated by BrAinPI for compatibility purposes. |
+| neuroglancer precomputed | [Neuroglancer github](https://github.com/google/neuroglancer)<br />[precomputed format README](https://github.com/google/neuroglancer/blob/master/src/neuroglancer/datasource/precomputed/README.md) |                                                              |
+|                          |                                                              |                                                              |
+
+
+
+## "File Browser:
+
+A file browsing interface is availabe in BrAinPI at the "/browser" endpoint. At the root of the file browser, paths registered with BrAinPI appear according to their assigned names.  Paths exposed for anonymous visitors to BrAinPI can be made under [dir_anon].  Paths that should only be seen by authenticated users can be registed via [dir_auth]. 
+
+
+
+NOTE: Although paths are not exposed and browseable when registed with [dir_auth], links generated against files in these paths can be viewed by anyone.
+
+NOTE: Currently LDAP authentication can be configured only for windows active directory.
+
+
+
+In the examples below, the root of the browser path by anonymous browsers would show 'my_fav_location' 
+
+```ini
+# settings.ini
+[dir_anon]
+my_fav_location = /path/to
+
+[dir_auth]
+another_place = /another
+```
+
+
+
+## "path_to_html_options" endpoint:
+
+This endpoint makes it easy to retrieve links to several views of a compatible file type.  For this to work, the settings.ini file must have a path registered that you wish to exponse to BrAinPI in either the [dir_anon] or [dir_auth] fields. The user than passes the full file path to the endpoint to determine of BrAinPI is capable of translating the dataset. A json file is returned with several entries described in the table below. Null values indicate the BrAinPI is not able to generate a link for that dataset - or the path does not exist.
+
+<u>Examples for how to structure a request (see setting.ini above):</u>
+
+http://localhost:5001/path_to_html_options/?path=/path/to/physical/location/on/disk.ims
+http://localhost:5001/path_to_html_options/?path=/another/path/to/a/different/physical/location/on/disk.ome.zarr
+
+
+
+#### Links Returned by the "path_to_html_options"
+
+| JSON Key                                      | Link                                                         |
+| --------------------------------------------- | :----------------------------------------------------------- |
+| neuroglancer                                  | Link to open a neuroglancer visualization of the dataset.  This endpoint will also deliver neuroglancer precomputed format. |
+| neuroglancer_metadata                         | 'info' file for neuroglancer precomputed format.             |
+| omezarr                                       | ome-zarr view of the data.                                   |
+| omezarr_metadata                              | .zattrs for the ome-zarr view of the data.                   |
+| omezarr_validator                             | ome-ngff validator link for the omezarr url                  |
+| omezarr_8bit                                  | ome-zarr view of the data returned in a 8bit data type.      |
+| omezarr_8bit_metadata                         | .zattrs for the ome-zarr view of the data returned in a 8bit data type. |
+| omezarr_8bit_validator                        | ome-ngff validator link for the omezarr_8bit url             |
+| omezarr_neuroglancer_optimized                | ome-zarr view of the data where data is chunked along the channel dimension to provide enhanced compatibility with neuroglancer.. |
+| omezarr_neuroglancer_optimized_validator      | ome-ngff validator link for the omezarr_neuroglancer_optimized url |
+| omezarr_8bit_neuroglancer_optimized           | ome-zarr view of the data where data is chunked along the channel dimension to provide enhanced compatibility with neuroglancer and returned in a 8bit data type. |
+| omezarr_8bit_neuroglancer_optimized_validator | ome-ngff validator link for the omezarr_8bit_neuroglancer_optimized url |
+| path                                          | the path passed to the endpoint                              |
+
+
+
+## License
+
+Distributed under the terms of the [BSD-3] license,
+"BrAinPI" is free and open source software
