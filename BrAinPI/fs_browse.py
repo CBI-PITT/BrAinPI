@@ -783,6 +783,12 @@ def get_path_data(base, request):
             to_browse = utils.from_html_to_path(request.path, path_map)
             print('Live 110')
 
+            if utils.isfile(to_browse):
+                return utils.send_file(to_browse)
+                # current_path['isFile'] = True
+                # # return jsonify(current_path)
+                # return send_file(to_browse, download_name=os.path.split(to_browse)[1], as_attachment=True)
+
             # Get current directory listing by Files, Directories and stats on each
             current_path = {}
             current_path['html_path_split'] = html_path_split
@@ -873,12 +879,6 @@ def get_path_data(base, request):
                 current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
                 current_path['files_dl'] = [fts.downloadable(x, size=utils.get_file_size(current_path['files_real_path'][idx]), max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
 
-            elif utils.isfile(to_browse):
-                return utils.send_file(to_browse)
-                # current_path['isFile'] = True
-                # # return jsonify(current_path)
-                # return send_file(to_browse, download_name=os.path.split(to_browse)[1], as_attachment=True)
-
             else:
                 # If a non-file / dir is passed, move backward to the nearest file/dir
                 return redirect(current_path['parent_path'])
@@ -966,6 +966,20 @@ def initiate_browseable(app,config):
         else:
             return 'This did not return a JSON, maybe you have the wrong path'
     
+    return app
+
+
+def initiate_NOT_browseable(app, config):
+    from flask import abort
+
+    # base entrypoint must always begin and end with '/' --> /my_entry/
+    base = '/browser/'
+
+    @app.route(base + '<path:req_path>')
+    @app.route(base, defaults={'req_path': ''})
+    def browse_fs(req_path):
+        abort(404)
+
     return app
     
     
