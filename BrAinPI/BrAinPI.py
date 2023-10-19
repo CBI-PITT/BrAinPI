@@ -56,7 +56,7 @@ config.settings = config_tools.get_config('settings.ini') #<-- need to add this 
 # Establish constants based on settings.ini
 TEMPLATE_DIR = os.path.abspath(settings.get('app','templates_location'))
 STATIC_DIR = os.path.abspath(settings.get('app','static_location'))
-LOGO = os.path.abspath(settings.get('app','logo'))
+LOGO = settings.get('app','logo') #Relative to STATIC_DIR
 APP_NAME = settings.get('app','name')
 
 
@@ -67,13 +67,24 @@ app.config["DEBUG"] = settings.getboolean('app','debug')
 ## Initiate endpoints in other modules and attach them to app
 ## New endpoints can be added here
 
-print('Initiating auth functionality')
-from auth import setup_auth
-app,login_manager = setup_auth(app)
+browser_active = settings.getboolean('browser','browser_active')
 
-print('Initiating browser functionality')
-from fs_browse import initiate_browseable
-app = initiate_browseable(app,config)
+# Must init auth first to get login_manager
+if browser_active:
+    print('Initiating auth functionality')
+    from auth import setup_auth
+    app,login_manager = setup_auth(app)
+else:
+    from auth import setup_NO_auth
+    app, login_manager = setup_NO_auth(app)
+
+if browser_active:
+    print('Initiating browser functionality')
+    from fs_browse import initiate_browseable
+    app = initiate_browseable(app,config)
+else:
+    from fs_browse import initiate_NOT_browseable
+    app = initiate_NOT_browseable(app, config)
 
 print('Initiating OME Zarr endpoints')
 from ome_zarr import setup_omezarr
@@ -92,6 +103,7 @@ print('Initiating Landing Zone')
 @app.route('/', methods=['GET'])
 def home():
     return render_template('home.html',
+                           browser_active=browser_active,
                            user=auth.user_info(),
                            app_name=settings.get('app','name'),
                            app_description=settings.get('app','description'),

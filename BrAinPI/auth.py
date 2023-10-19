@@ -18,12 +18,12 @@ Flask limiter:
     https://flask-limiter.readthedocs.io/en/latest/
 '''
 
-import time
 from flask import (render_template, 
                    request, 
                    flash, 
                    redirect, 
-                   url_for)
+                   url_for,
+                   abort)
 
 from flask_login import (LoginManager, 
                          login_user, 
@@ -166,8 +166,64 @@ def setup_auth(app):
     return app,login_manager
 
 
+def setup_NO_auth(app):
+    ## This import must remain here else circular import error
+    from BrAinPI import settings
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+
+    app.config['SESSION_COOKIE_SECURE'] = True
+
+    ############################################################
+    # Configure login manager
+    ############################################################
+    login_manager = LoginManager(app)
+    login_manager.login_view = 'login'
+
+    # login_manager.init_app(app)
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        abort(404)
+
+    ##########################################################
+    # Configure login rate limiter
+    ##########################################################
+
+    # limiter = Limiter(app, key_func=get_remote_address)
+    ##TODO Rate limiter needs to be in place where all workers can access
+    # https://flask-limiter.readthedocs.io/en/stable/configuration.html#RATELIMIT_STORAGE_URI
+    limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
+
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        flash("Login ratelimit exceeded %s" % e.description)
+        return abort(404)
+
+    ##########################################################
+    # Abort all login routes
+    ##########################################################
 
 
+    @app.route('/login')
+    def login():
+        abort(404)
+
+    @app.route('/login', methods=['POST'])
+    # @limiter.limit(settings.get('auth', 'login_limit'))
+    def login_post():
+        abort(404)
+
+    @app.route('/profile')
+    # @login_required
+    def profile():
+        abort(404)
+
+    @app.route('/logout')
+    def logout():
+        return abort(404)
+
+    return app, login_manager
 
 
 def domain_auth(user_name,password,domain_server=r"ldap://localhost:389",domain="mydomain"):

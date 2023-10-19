@@ -26,6 +26,7 @@
         <div class="hero-head">
             <nav class="navbar">
                 <div class="container">
+                    {% if browser_active %}
                     <div id="navbarMenuHeroA" class="navbar-menu">
                         <div class="navbar-end">
                             <a href="{{ url_for('home') }}" class="navbar-item">
@@ -46,6 +47,7 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}
                 </div>
             </nav>
         </div>
