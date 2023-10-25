@@ -2,7 +2,6 @@ import neuroglancer
 import urllib.request
 
 # Project specific imports
-import utils
 import config_tools
 def get_server():
     settings = config_tools.get_config('settings.ini')
