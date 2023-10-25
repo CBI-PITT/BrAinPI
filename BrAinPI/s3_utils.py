@@ -175,6 +175,8 @@ def s3_isdir(path):
     # ''')
     return f in dirs
 
+def s3_exists(path):
+    return s3_isfile(path) or s3_isdir(path)
 
 def get_file_size(path):
     if s3_isfile(path):

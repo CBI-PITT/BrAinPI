@@ -83,11 +83,11 @@ Outputs:
 
 ## "File Browser:
 
-A file browsing interface is availabe in BrAinPI at the "/browser" endpoint. At the root of the file browser, paths registered with BrAinPI appear according to their assigned names.  Paths exposed for anonymous visitors to BrAinPI can be made under [dir_anon].  Paths that should only be seen by authenticated users can be registed via [dir_auth]. 
+A file browsing interface is availabe in BrAinPI at the "/browser" endpoint. At the root of the file browser, paths registered with BrAinPI appear according to their assigned names.  Paths exposed for anonymous visitors to BrAinPI can be made under [dir_anon].  Paths that should only be seen by authenticated users can be registered via [dir_auth]. 
 
 
 
-NOTE: Although paths are not exposed and browseable when registed with [dir_auth], links generated against files in these paths can be viewed by anyone.
+NOTE: Although paths are not exposed and browseable when registered with [dir_auth], links generated against files in these paths can be viewed by anyone.
 
 NOTE: Currently LDAP authentication can be configured only for windows active directory.
 
@@ -99,6 +99,7 @@ In the examples below, the root of the browser path by anonymous browsers would 
 # settings.ini
 [dir_anon]
 my_fav_location = /path/to
+open_s3_bucket = s3://bucket_name
 
 [dir_auth]
 another_place = /another
@@ -108,7 +109,7 @@ another_place = /another
 
 ## "path_to_html_options" endpoint:
 
-This endpoint makes it easy to retrieve links to several views of a compatible file type.  For this to work, the settings.ini file must have a path registered that you wish to exponse to BrAinPI in either the [dir_anon] or [dir_auth] fields. The user then passes the full file path to the endpoint to determine if BrAinPI is capable of translating the dataset. A json file is returned with several entries described in the table below. Null values indicate that BrAinPI is not able to generate a link for that dataset - or the path does not exist.
+This endpoint makes it easy to retrieve links to several views of a compatible file type.  For this to work, the settings.ini file must have a path registered that you wish to expose to BrAinPI in either the [dir_anon] or [dir_auth] fields. The user then passes the full file path to the endpoint to determine if BrAinPI is capable of translating the dataset. A json file is returned with several entries described in the table below. Null values indicate that BrAinPI is not able to generate a link for that dataset - or the path does not exist.
 
 <u>Examples for how to structure a request (see setting.ini above):</u>
 

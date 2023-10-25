@@ -132,6 +132,12 @@ def isfile(path):
     else:
         return os.path.isfile(path)
 
+def exists(path):
+    if 's3://' in path:
+        return s3_utils.s3_exists(path)
+    else:
+        return os.path.exists(path)
+
 def get_dir_contents(path,skip_s3=False):
     if 's3://' in path:
         if skip_s3:

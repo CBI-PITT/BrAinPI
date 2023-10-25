@@ -32,7 +32,8 @@ from utils import (from_path_to_html,
                    from_path_to_browser_html,
                    strip_leading_trailing_slash,
                    fix_special_characters_in_html,
-                   strip_trailing_new_line
+                   strip_trailing_new_line,
+                   exists
                    )
 
 def inititate(app,config):
@@ -80,8 +81,12 @@ def inititate(app,config):
         paths['omezarr_neuroglancer_optimized'] = None
         paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
 
-        if not os.path.exists(paths['path']):
+
+        print(f"{paths['path']=}")
+        if not exists(paths['path']):
             return paths
+        # if not os.path.exists(paths['path']):
+        #     return paths
 
         html_base = settings.get('app','url')
         html_base = strip_leading_trailing_slash(html_base)
