@@ -129,9 +129,46 @@ def inititate(app,config):
 
         return paths
 
+    # @app.route('/curated_datasets/', methods=['GET'])
+    # @cross_origin(allow_headers=['Content-Type'])
+    # def curated_datasets_3():
+    #
+    #     html_base = settings.get('app', 'url')
+    #     html_base = strip_leading_trailing_slash(html_base)
+    #
+    #     html_options_url = url_for("html_options")
+    #
+    #     # Locations are directories which contain files or files which have each line pointing to a dataset on disk
+    #     locations = settings['curated_datasets']
+    #     locations = dict(locations)
+    #
+    #     datasets = {'collections': {}}
+    #     for set_name, file in locations.items():
+    #         datasets['collections'][set_name] = []
+    #         with open(file, 'r') as f:
+    #             for line in f.readlines():
+    #                 l = strip_trailing_new_line(line)
+    #                 query_to_path_to_html_options = f'{html_base}{html_options_url}?path={l}'
+    #                 name = os.path.split(line)[-1]
+    #                 dataset = {
+    #                     'name':strip_trailing_new_line(name),
+    #                     'links':fix_special_characters_in_html(query_to_path_to_html_options)
+    #                 }
+    #                 datasets['collections'][set_name].append(dataset)
+    #
+    #         # from pprint import pprint as print
+    #         print(datasets)
+    #
+    #         # Cache curated_datasets in the config object (doesn't allow for dynamic updates) but is better performance
+    #         # Commenting below turns off caching in the config object so each time the files are reloaded
+    #         # (allows for dynamic updates to curated datasets)
+    #         # config.curated_datasets = datasets
+    #
+    #     return jsonify(datasets)
+
     @app.route('/curated_datasets/', methods=['GET'])
     @cross_origin(allow_headers=['Content-Type'])
-    def curated_datasets_3():
+    def curated_datasets_4():
 
         html_base = settings.get('app', 'url')
         html_base = strip_leading_trailing_slash(html_base)
@@ -142,20 +179,23 @@ def inititate(app,config):
         locations = settings['curated_datasets']
         locations = dict(locations)
 
-        datasets = {'collections': {}}
+        datasets = {'collections': []}
         for set_name, file in locations.items():
-            datasets['collections'][set_name] = []
+            current_collection = {'type':set_name}
             with open(file, 'r') as f:
+                details = []
                 for line in f.readlines():
                     l = strip_trailing_new_line(line)
                     query_to_path_to_html_options = f'{html_base}{html_options_url}?path={l}'
                     name = os.path.split(line)[-1]
                     dataset = {
-                        'name':strip_trailing_new_line(name),
-                        'links':fix_special_characters_in_html(query_to_path_to_html_options)
+                        'name': strip_trailing_new_line(name),
+                        'links': fix_special_characters_in_html(query_to_path_to_html_options)
                     }
-                    datasets['collections'][set_name].append(dataset)
-
+                    details.append(dataset)
+                    # datasets['collections'][set_name].append(dataset)
+            current_collection['details'] = details
+            datasets['collections'].append(current_collection)
             # from pprint import pprint as print
             print(datasets)
 
