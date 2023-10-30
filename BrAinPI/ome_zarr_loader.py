@@ -20,7 +20,7 @@ from typing import Union
 Path = Union[str, bytes, None]
 StoreLike = Union[BaseStore, Store, MutableMapping]
 
-import s3fs
+# import s3fs
 
 class ome_zarr_loader:
     def __init__(self, location, ResolutionLevelLock=None, zarr_store_type: StoreLike=NestedDirectoryStore, verbose=None, squeeze=True, cache=None):
@@ -99,7 +99,8 @@ class ome_zarr_loader:
 
     def zarr_store_type(self, path):
         if self.s3:
-            return s3fs.S3Map(path, s3=self.s3)
+            pass
+            # return s3fs.S3Map(path, s3=self.s3)
         else:
             return self.zarr_store(path)
 
