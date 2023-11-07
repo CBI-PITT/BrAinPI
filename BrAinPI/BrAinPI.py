@@ -14,8 +14,8 @@ import builtins
 from cache_tools import cache_head_space
 builtins.brainpi_cache_ram = cache_head_space(20) #Make available accross all modules as simply calling 'cache_ram'
 
-import flask, json, os
-from flask import request, Response, send_file, render_template, jsonify,url_for, redirect
+import flask, os
+from flask import request, render_template
 import pathlib
 
 # Change working directory to parent of this file
@@ -97,6 +97,14 @@ app = neuroGlancer.setup_neuroglancer(app, config)
 print('Initiating Coordination endpoints')
 from coordination_endpoints import inititate
 app = inititate(app, config)
+
+print('Initiating Coordination endpoints')
+from volume_extractor_endpoints import setup_extractor_endpoint
+app = setup_extractor_endpoint(app, config)
+
+print('Initiating Tokenized endpoints')
+from tokenized_urls import setup_tokenized_endpoint
+app = setup_tokenized_endpoint(app, config)
 
 
 print('Initiating Landing Zone')

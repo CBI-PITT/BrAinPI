@@ -461,8 +461,11 @@ def setup_neuroglancer(app, config):
     match = re.match
     Match_class = re.Match
 
-    def neuro_glancer_entry(req_path):
-        
+
+    def neuro_glancer_entry(req_path, request=request):
+        # Request is an option for using this function separate from traditional flask response
+        # See usage in tokenized_urls module
+
         path_split, datapath = get_html_split_and_associated_file_path(config,request)
         
         # Test for different patterns
@@ -621,8 +624,6 @@ def setup_neuroglancer(app, config):
         print(neuro_glancer_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
     # neuro_glancer_entry = brainpi_cache_ram.memoize(neuro_glancer_entry)
-    
-    
    
     neuro_glancer_entry = cross_origin(allow_headers=['Content-Type'])(neuro_glancer_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
