@@ -15,19 +15,24 @@ from flask import (
     jsonify
     )
 
-from rsa import encrypt, decrypt
+import rsa
+from rsa import encrypt, decrypt, newkeys
 from base64 import urlsafe_b64encode, urlsafe_b64decode
-publicKey, privateKey = rsa.newkeys(512)
 import os
 
 def generate_key_pairs_save_to_disk(location: str, bit: int = 512):
 	publicKey, privateKey = rsa.newkeys(bit)
+	print('Generating Public and Private RSA Keys')
 	if not os.path.exists(location):
 		os.makedirs(location)
 	with open(os.path.join(location,'public_key.pem'),'wb') as f:
-		f.write(publicKey.save_pkcs1())
+		tmp = publicKey.save_pkcs1()
+		f.write(tmp)
+		print(tmp)
 	with open(os.path.join(location, 'private_key.key'), 'wb') as f:
-		f.write(privateKey.save_pkcs1())
+		tmp = privateKey.save_pkcs1()
+		f.write(tmp)
+		print(tmp)
 
 def generate_key_pairs_if_not_exist(location: str, bit=512):
 	if not os.path.exists(os.path.join(location,'public_key.pem')) and \
@@ -45,13 +50,36 @@ def get_rsa_key_pairs(location: str, bit: int = 512):
 	return publicKey, privateKey
 
 
+# def rsa_encrypt_string_to_url_friendly(before: str, public_key):
+# 	encMessage = encrypt(before.encode(), public_key)
+# 	return urlsafe_b64encode(encMessage)
+
+
+
 def rsa_encrypt_string_to_url_friendly(before: str, public_key):
-	encMessage = encrypt(before.encode(), publicKey)
+	result = []
+	for n in range(0, len(before), 5):
+		part = before[n:n + 5]
+		result.append(rsa.encrypt(part.encode(), public_key))
+	print(f'{result=}')
+	# print(len(result), len(result[0]))
+	encMessage = b''.join(result)
+	print(f'{encMessage=}')
+	# encMessage = encrypt(before.encode(), public_key)
 	return urlsafe_b64encode(encMessage)
+
+# def rsa_decrypt_from_url_friendly_string(encMessage: str, private_key):
+# 	bstring = urlsafe_b64decode(encMessage)
+# 	return decrypt(bstring, private_key).decode()
 
 def rsa_decrypt_from_url_friendly_string(encMessage: str, private_key):
 	bstring = urlsafe_b64decode(encMessage)
-	return decrypt(bstring, privateKey).decode()
+	result = []
+	for n in range(0, len(bstring), 5):
+		part = bstring[n:n + 5]
+		result.append(rsa.decrypt(part, private_key).decode())
+	result = ''.join(result)
+	return result
 
 
 from flask_cors import cross_origin
@@ -77,8 +105,40 @@ def decode_token(token: str, SECRET_KEY: str = None):
 	return decoded_data
 
 
+
+
+
+
+
+
+
+
+def rsa_encrypt_string(before: str, public_key):
+	result = []
+	for n in range(0, len(before), 5):
+		part = before[n:n + 5]
+		result.append(rsa.encrypt(part.encode(), public_key))
+	# print(len(result), len(result[0]))
+	encMessage = b''.join(result)
+	# encMessage = encrypt(before.encode(), public_key)
+	return base64.b85encode(encMessage).decode()
+
+def rsa_decrypt_string(encMessage: str, private_key):
+	bstring = base64.b85decode(encMessage).decode()
+	result = []
+	for n in range(0, len(bstring), 5):
+		part = bstring[n:n + 5]
+		result.append(rsa.decrypt(part, private_key).decode())
+	result = ''.join(result)
+	return result
+
+
+
+
 def setup_tokenized_endpoint(app, config):
 	from flask import request
+	import rsa
+
 	SECRET_KEY = config.settings.get('auth' ,'secret_key') # Used for token signing
 	APP_URL = config.settings.get('app' ,'url')
 	if APP_URL[-1] is not '/':
@@ -90,6 +150,7 @@ def setup_tokenized_endpoint(app, config):
 	if RSA_KEY_LOCATION is None:
 		RSA_KEY_LOCATION = os.curdir
 
+	print('MAKING KEYS')
 	RSA_PUBLIC, RSA_PRIVATE = get_rsa_key_pairs(RSA_KEY_LOCATION, bit=RSA_KEY_BITS)
 
 	@app.route('/token/<token>/' + '<path:req_path>')
@@ -98,16 +159,19 @@ def setup_tokenized_endpoint(app, config):
 	@cross_origin(allow_headers=['Content-Type'])
 	def use_token(token, req_path, request=request):
 
+		# Encrypt token
+		# token = dict(rsa_decrypt_from_url_friendly_string(token, RSA_PRIVATE))
 		decoded_token = decode_token(token, SECRET_KEY)
+		print(f'{decoded_token=}')
 		if isinstance(decoded_token, dict):
 			new_req_url = f"{decoded_token['url']}/{req_path}"
 			new_req_path = f"/{new_req_url.replace(APP_URL ,'')}"
 			new_req_endpoint = new_req_path.split('/')[1]
 			old_headers = request.headers
 		elif decoded_token == 'expired':
-			retur n('Token Expired')
+			return ('Token Expired')
 		elif decoded_token == 'invalid_signature':
-			retur n('You are being naughty and trying to pass an invalid token')
+			return('You are being naughty and trying to pass an invalid token')
 		else:
 			abort(404)
 
@@ -150,7 +214,12 @@ def setup_tokenized_endpoint(app, config):
 			days = int(request.args['days'])
 		else:
 			days = 30
+
+		url
 		token = get_token(url=url, days=30, SECRET_KEY=SECRET_KEY)
+
+		# Encrypt token
+		# token = rsa_encrypt_string_to_url_friendly(str(token), RSA_PUBLIC)
 
 		print(f'{token=}')
 		print(f'{request=}')

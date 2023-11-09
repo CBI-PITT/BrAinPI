@@ -9,6 +9,8 @@ __pycache__/
 # Project specific
 */settings.ini
 */groups.ini
+*/public_key.pem
+*/private_key.key
 
 # Distribution / packaging
 .Python
