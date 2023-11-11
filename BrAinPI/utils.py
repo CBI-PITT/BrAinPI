@@ -444,7 +444,7 @@ def compress_flask_response(response, request, compression_level=6):
         out = gzip.compress(response.data, compression_level)
         response.data = out
         response.headers.add('Content-Encoding', 'gzip')
-        response.headers.add('Content-length', len(out))
+        # response.headers.add('Content-length', len(out))
     return response
 
     
