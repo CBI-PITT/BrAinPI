@@ -195,9 +195,10 @@ def inititate(app,config):
                     details.append(dataset)
                     # datasets['collections'][set_name].append(dataset)
             current_collection['details'] = details
+            print(f'Sending {len(details)} entries for set {set_name}')
             datasets['collections'].append(current_collection)
             # from pprint import pprint as print
-            print(datasets)
+            # print(datasets)
 
             # Cache curated_datasets in the config object (doesn't allow for dynamic updates) but is better performance
             # Commenting below turns off caching in the config object so each time the files are reloaded
