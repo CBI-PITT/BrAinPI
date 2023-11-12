@@ -106,8 +106,9 @@ def inititate(app,config):
 
         print(f"{paths['path']=}")
         if verify_file_exists:
-            if not exists(paths['path']):
-                return paths
+            pass
+            # if not exists(paths['path']):
+            #     return paths
         # if not os.path.exists(paths['path']):
         #     return paths
 
