@@ -49,9 +49,31 @@ def inititate(app,config):
         print(request.remote_addr)
         assert(isinstance(request.args, dict)), 'Expects a dictionary'
         assert 'path' in request.args, 'Expects a path key'
-        return jsonify(path_to_html_options(request.args['path']))
+        verify_file_exists = request.args.get('verify_file_exists')
+        if verify_file_exists is None or verify_file_exists.lower() == 'true' or verify_file_exists.lower() == 't':
+            verify_file_exists = True
+        else:
+            verify_file_exists = False
+        return jsonify(path_to_html_options(request.args['path'],verify_file_exists=verify_file_exists))
 
-    def path_to_html_options(path):
+    paths = {}
+    paths['path'] = None
+
+    paths['neuroglancer'] = None
+    paths['neuroglancer_metadata'] = None
+
+    paths['omezarr'] = None
+    paths['omezarr_neuroglancer_optimized'] = None
+    paths['omezarr_8bit'] = None
+    paths['omezarr_8bit_neuroglancer_optimized'] = None
+    paths['omezarr_metadata'] = None
+    paths['omezarr_8bit_metadata'] = None
+    paths['omezarr_validator'] = None
+    paths['omezarr_8bit_validator'] = None
+    paths['omezarr_neuroglancer_optimized'] = None
+    paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
+
+    def path_to_html_options(path, verify_file_exists=True):
         '''
         Takes the path (on disk) to a potential BrAinPI compatible dataset and return all possible links in a dictionary
         '''
@@ -64,27 +86,28 @@ def inititate(app,config):
         if len(key.strip()) == 0 or len(key.strip()) == '/':
             key = '/'
 
-        paths = {}
+        # paths = {}
         paths['path'] = key
 
-        paths['neuroglancer'] = None
-        paths['neuroglancer_metadata'] = None
-
-        paths['omezarr'] = None
-        paths['omezarr_neuroglancer_optimized'] = None
-        paths['omezarr_8bit'] = None
-        paths['omezarr_8bit_neuroglancer_optimized'] = None
-        paths['omezarr_metadata'] = None
-        paths['omezarr_8bit_metadata'] = None
-        paths['omezarr_validator'] = None
-        paths['omezarr_8bit_validator'] = None
-        paths['omezarr_neuroglancer_optimized'] = None
-        paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
+        # paths['neuroglancer'] = None
+        # paths['neuroglancer_metadata'] = None
+        #
+        # paths['omezarr'] = None
+        # paths['omezarr_neuroglancer_optimized'] = None
+        # paths['omezarr_8bit'] = None
+        # paths['omezarr_8bit_neuroglancer_optimized'] = None
+        # paths['omezarr_metadata'] = None
+        # paths['omezarr_8bit_metadata'] = None
+        # paths['omezarr_validator'] = None
+        # paths['omezarr_8bit_validator'] = None
+        # paths['omezarr_neuroglancer_optimized'] = None
+        # paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
 
 
         print(f"{paths['path']=}")
-        if not exists(paths['path']):
-            return paths
+        if verify_file_exists:
+            if not exists(paths['path']):
+                return paths
         # if not os.path.exists(paths['path']):
         #     return paths
 
@@ -186,7 +209,7 @@ def inititate(app,config):
                 details = []
                 for line in f.readlines():
                     l = strip_trailing_new_line(line)
-                    query_to_path_to_html_options = f'{html_base}{html_options_url}?path={l}'
+                    query_to_path_to_html_options = f'{html_base}{html_options_url}?path={l}&verify_file_exists=False'
                     name = os.path.split(line)[-1]
                     dataset = {
                         'name': strip_trailing_new_line(name),
