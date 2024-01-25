@@ -262,7 +262,7 @@ class builder:
     def write_resolution_series(self,client):
         '''
         Make downsampled versions of dataset based on pyramidMap
-        Requies that a dask.distribuited client be passed for parallel processing
+        Requires that a dask.distribuited client be passed for parallel processing
         '''
         for res in range(len(self.pyramidMap)):
             self.write_resolution(res,client)
