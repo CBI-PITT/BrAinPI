@@ -308,7 +308,7 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
         else:
             # Proportional difference in spacing between current and previous scale
             translation = [x/y for x,y in zip(metadata[(res, 0, 0, 'resolution')],metadata[(res-1, 0, 0, 'resolution')])]
-            # Determine micron shift in origin by dividing current resoluton by proportional difference
+            # Determine micron shift in origin by dividing current resolution by proportional difference
             translation = [x/y if y!=1 else 0 for x,y in zip(metadata[(res, 0, 0, 'resolution')], translation)]
             # translation = [x if x!=1 else 0 for x in translation]
             translation = (0,0,*translation)
@@ -506,7 +506,7 @@ def setup_omezarr(app, config):
         # Define chunk size if specified in the path otherwise keep None
         chunk_size = None
         if match(chunks_size_pattern, datapath):
-            # Modified chunk size must be designated as an extension that comes before any other extenstions
+            # Modified chunk size must be designated as an extension that comes before any other extensions
             # designated as .##x##x##. where ## is pixels numbers in axes (Z,Y,X)
             print('INSIDE THE PATTERN ######################################')
             print(datapath)

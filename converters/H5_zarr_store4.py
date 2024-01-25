@@ -86,7 +86,7 @@ from zarr._storage.store import Store
 
 class H5Store(Store):
     """
-    Storage class the uses HDF5 files to shard chunks accross axis [-3]
+    Storage class the uses HDF5 files to shard chunks across axis [-3]
     
     Currently, the number of axes in the zarr array must be len(zarr_array) >= 4
     """
@@ -125,7 +125,7 @@ class H5Store(Store):
         file reading logic.
         """
         # Extract Bytes from h5py
-        trys = 0
+        tries = 0
         while True:
             try:
                 with h5py.File(file,'r',libver='latest', swmr=self.swmr) as f:
@@ -137,11 +137,11 @@ class H5Store(Store):
             except KeyError:
                 raise
             except:
-                trys += 1
+                tries += 1
                 if self.verbose:
-                    print('READ Failed for key {}, try #{} : Pausing 0.1 sec'.format(dset, trys))
+                    print('READ Failed for key {}, try #{} : Pausing 0.1 sec'.format(dset, tries))
                 time.sleep(0.1)
-                if trys == 100:
+                if tries == 100:
                     raise
 
     def _tofile(self,key, data, file):
@@ -157,7 +157,7 @@ class H5Store(Store):
         Subclasses should overload this method to specify any custom
         file writing logic.
         """
-        trys = 0
+        tries = 0
         while True:
             try:
                 with h5py.File(file,'a',libver='latest') as f:
@@ -169,11 +169,11 @@ class H5Store(Store):
                     f.create_dataset(key, data=data)
                 break
             except:
-                trys += 1
+                tries += 1
                 if self.verbose:
-                    print('WRITE Failed for key {}, try #{} : Pausing 0.1 sec'.format(key, trys))
+                    print('WRITE Failed for key {}, try #{} : Pausing 0.1 sec'.format(key, tries))
                 time.sleep(0.1)
-                if trys == 100:
+                if tries == 100:
                     raise
                 
     
@@ -219,7 +219,7 @@ class H5Store(Store):
         if os.path.exists(h5_file):
             return self._fromfile(h5_file,dset)
         
-        # Must raise KeyError when key does not exist for zarr to load defult 'fill' values
+        # Must raise KeyError when key does not exist for zarr to load default 'fill' values
         else:
             raise KeyError(key)
         raise KeyError(key)

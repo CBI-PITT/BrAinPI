@@ -30,8 +30,8 @@ class zarrVDS:
         
         assert isinstance(directoryStr,str)
         assert isinstance(shape,tuple)
-        assert len(shape) == 5,"All shapes and chunks must be 5 dimentions TCZYX"
-        assert len(chunks) == 5,"All shapes and chunks must be 5 dimentions TCZYX"
+        assert len(shape) == 5,"All shapes and chunks must be 5 dimensions TCZYX"
+        assert len(chunks) == 5,"All shapes and chunks must be 5 dimensions TCZYX"
         
         self.directoryStr = directoryStr
         self.shape = shape
@@ -203,7 +203,7 @@ def getSlice(imsClass,r,t,c,z,y,x):
     
     '''
     IMS stores 3D datasets ONLY with Resolution, Time, and Color as 'directory'
-    structure witing HDF5.  Thus, data access can only happen accross dims XYZ
+    structure witing HDF5.  Thus, data access can only happen across dims XYZ
     for a specific RTC.  
     '''
     
@@ -228,13 +228,13 @@ def getSlice(imsClass,r,t,c,z,y,x):
     
     ''' Some issues here with the output of these arrays.  Napari sometimes expects
     3-dim arrays and sometimes 5-dim arrays which originates from the dask array input representing
-    tczyx dimentions of the imaris file.  When os.environ["NAPARI_ASYNC"] = "1", squeezing
-    the array to 3 dimentions works.  When ASYNC is off squeese does not work.
+    tczyx dimensions of the imaris file.  When os.environ["NAPARI_ASYNC"] = "1", squeezing
+    the array to 3 dimensions works.  When ASYNC is off squeese does not work.
     Napari throws an error because it did not get a 3-dim array.
     
-    Am I implementing slicing wrong?  or does napari have some inconsistancy with the 
-    dimentions of the arrays that it expects with different loading mechanisms if the 
-    arrays have unused single dimentions.
+    Am I implementing slicing wrong?  or does napari have some inconsistency with the 
+    dimensions of the arrays that it expects with different loading mechanisms if the 
+    arrays have unused single dimensions.
     
     Currently "NAPARI_ASYNC" = '1' is set to one in the image loader
     Currently File/Preferences/Render Images Asynchronously must be turned on for this plugin to work

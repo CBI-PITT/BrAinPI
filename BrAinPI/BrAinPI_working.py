@@ -169,7 +169,7 @@ def meta(req_path):
 @app.route('/api/arrayCompress', methods=['GET'])
 def fmostCompress():
     '''
-    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
+    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with arguments as int or None
 
     tstart,tstop,tstep
     cstart,cstop,cstep
@@ -179,7 +179,7 @@ def fmostCompress():
 
     Returns
     -------
-    Bytestring of compresed numpy array
+    Bytestring of compressed numpy array
 
     '''
 
@@ -256,7 +256,7 @@ array_base = '/array/'
 @app.route(array_base, defaults={'req_path': ''})
 def get_compressed_array(req_path):
     '''
-    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
+    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with arguments as int or None
     
     tstart,tstop,tstep
     cstart,cstop,cstep
@@ -265,10 +265,10 @@ def get_compressed_array(req_path):
     xstart,xstop,xstep
     
     The datasets to be retrieved is specified by the path passed after 'array_base'
-    This will be equivilant to url_for('fs_browse') but replaced with 'array_bas')
+    This will be equivalent to url_for('fs_browse') but replaced with 'array_bas')
     Returns
     -------
-    Bytestring of compresed numpy array
+    Bytestring of compressed numpy array
 
     '''
     
@@ -397,7 +397,7 @@ def tiff():
     return send_file(
         img_ram,
         as_attachment=True,
-        ## TODO: dynamic naming of file (specifc request or based on region of request)
+        ## TODO: dynamic naming of file (specific request or based on region of request)
         download_name='out.tiff',
         mimetype='image/tiff'
     )

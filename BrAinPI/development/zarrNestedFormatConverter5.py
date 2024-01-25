@@ -42,7 +42,7 @@ def convert():
     
     downSampleBy2Only = True
     processingChunks = (5,1024,1024)
-    scale = (1.0, 0.35, 0.35)  ## (z,y,x) arbitraty units but is probably microns
+    scale = (1.0, 0.35, 0.35)  ## (z,y,x) arbitrary units but is probably microns
     
     outputLocation = os.path.join(outLocation,'fMOST.zarr')
     
@@ -93,7 +93,7 @@ def convert():
     
     
     multi resolution zarr arrays will be stored in a single directory ir each resolution series:
-    a single array t,c,z,y,x will be stored in each resoltion dir.
+    a single array t,c,z,y,x will be stored in each resolution dir.
     
         r[0-9][0-9] = 5D array (t,c,z,y,x)
                 
@@ -103,7 +103,7 @@ def convert():
     '''
     Resolution series should converge towards 3D isotropic but always with 2x reductions 
     in each dimension and never going beyond iostropic.  
-    this requires knowing the origional z,y,x scale
+    this requires knowing the original z,y,x scale
     
     Fit to exactly iostropic with reductions in resolution no greater than 2x
     
@@ -350,21 +350,21 @@ def convert():
                 # downSampleFactor = tuple([x/y for x,y in zip(resolutions[r-1][1],resolutions[r][1])])
                 sigma = tuple([(x - 1) / 2 for x in downSampleFactor])
                 depth = tuple([math.ceil(2*x) for x in sigma])
-                blured = da.map_overlap(smooth, single_color_stack,sigma=sigma,depth=depth,boundary='reflect',trim=True,dtype=sampleImage.dtype)
+                blurred = da.map_overlap(smooth, single_color_stack,sigma=sigma,depth=depth,boundary='reflect',trim=True,dtype=sampleImage.dtype)
                 
                 
                 if all([isinstance(x, int) for x in downSampleFactor]):
                     print('Single INT index')
-                    a = blured[1::downSampleFactor[0], 1::downSampleFactor[1], 1::downSampleFactor[2]]
+                    a = blurred[1::downSampleFactor[0], 1::downSampleFactor[1], 1::downSampleFactor[2]]
                 else:
                     with dask.config.set(**{'array.slicing.split_large_chunks': True}):
                         print('First index')
                         if isinstance(downSampleFactor[0],int):
                             z = downSampleFactor[0]
-                            a = blured[1::z]
+                            a = blurred[1::z]
                         else:
                             z = list(np.round(np.linspace(0, previousPixels[0] - 1, pixels[0])).astype(int))
-                            a = blured[z]
+                            a = blurred[z]
                         
                         print('Second index')
                         if isinstance(downSampleFactor[1],int):

@@ -110,7 +110,7 @@ def ng_shader(numpy_like_object):
 
     shaderStr = ''
     # shaderStr = shaderStr + '// Init for each channel:\n\n'
-    # shaderStr = shaderStr + '// Channel visability check boxes\n'
+    # shaderStr = shaderStr + '// Channel visibility check boxes\n'
     
     for idx in range(metadata['Channels']):
         shaderStr = shaderStr + f'#uicontrol bool {labels[idx]}_visable checkbox(default={str(isVisable[idx]).lower()});\n'
@@ -137,7 +137,7 @@ def ng_shader(numpy_like_object):
         shaderStr = shaderStr + f'vec3 {labels[idx]} = vec3(0);\n'
     
     shaderStr = shaderStr + '\n\nvoid main() {\n\n'
-    # shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
+    # shaderStr = shaderStr + '// For each color, if visible, get data, adjust with lut, then apply to color\n'
     
     for idx in range(metadata['Channels']):
         shaderStr = shaderStr + f'if ({labels[idx]}_visable == true)\n'
@@ -886,15 +886,15 @@ the disadvantage, however, that chunk data is not shared at all by the 3 views
 
 # # This code enables the python neuroglancer package to start a viewer server that IS SYNCRONIZED to the python process
 # # In this way any change to the remote viewer is captured by the python process and any change to the viewer is
-# # imediately effects the remote viewer.
+# # immediately effects the remote viewer.
 #
 # import neuroglancer
 # neuroglancer.server.set_server_bind_address('128.182.82.56')
 # viewer = neuroglancer.Viewer()
 #
 #
-# # This code enables the python neuroglancer package to start a viewer server that is not syncronized to the python process
-# # In this way an independant view can be designed and then the only requirement is that the server remains active.
+# # This code enables the python neuroglancer package to start a viewer server that is not synchronized to the python process
+# # In this way an independent view can be designed and then the only requirement is that the server remains active.
 # # It appears that an unlimited number of views can be shared off of the same server.
 # import neuroglancer
 #

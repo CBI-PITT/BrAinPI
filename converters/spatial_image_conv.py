@@ -28,7 +28,7 @@ import dask
 import tifffile
 
 '''
-Works to downsample block by block stripped accross z
+Works to downsample block by block stripped across z
 '''
 
 if os.name == 'nt':

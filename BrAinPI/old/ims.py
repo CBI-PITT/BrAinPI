@@ -157,10 +157,10 @@ class ims:
         Any other variation on slice will be coerced to 5 dimensions and 
         extract that array
         
-        If a 6th dimentions is present in the slice, dim[0] is assumed to be the resolutionLevel
+        If a 6th dimensions is present in the slice, dim[0] is assumed to be the resolutionLevel
         this will be used when choosing which array to extract.  Otherwise ResolutionLevelLock
         will be obeyed.  If ResolutionLevelLock is == None - default resolution is 0 (full-res)
-        and a slice of 5 or less dimentions will extract information from resolutionLevel 0.
+        and a slice of 5 or less dimensions will extract information from resolutionLevel 0.
         
         ResolutionLevelLock is used when building a multiresolution series to load into napari
         This option enables a 5D slice to lock on to a specified resolution level.
@@ -230,7 +230,7 @@ class ims:
 
 def sliceFixer(self,sliceObj,dim,res):
     '''
-    Converts slice.stop == None to the origional image dims
+    Converts slice.stop == None to the original image dims
     dim = dimension.  should be str: r,t,c,z,y,x
     
     Always returns a fully filled slice object (ie NO None)
@@ -254,10 +254,10 @@ def sliceFixer(self,sliceObj,dim,res):
     
     if (sliceObj.stop is not None) and (sliceObj.stop > dims[dim]):
         raise ValueError('The specified stop dimension "{}" in larger than the dimensions of the \
-                         origional image'.format(dim))
+                         original image'.format(dim))
     if (sliceObj.start is not None) and (sliceObj.start > dims[dim]):
         raise ValueError('The specified start dimension "{}" in larger than the dimensions of the \
-                         origional image'.format(dim))
+                         original image'.format(dim))
     
     if isinstance(sliceObj.stop,int) and sliceObj.start == None and sliceObj.step == None:
         return slice(
@@ -295,7 +295,7 @@ def sliceFixer(self,sliceObj,dim,res):
 
 def locationGenerator(r,t,c,data='data', contextMgr=False):
     """
-    Given R, T, C, this funtion will generate a path to data in an imaris file
+    Given R, T, C, this function will generate a path to data in an imaris file
     default data == 'data' the path will reference with array of data
     if data == 'attrib' the bath will reference the channel location where attributes are stored
     """
@@ -447,7 +447,7 @@ def getSlice(self,r,t,c,z,y,x):
     
     '''
     IMS stores 3D datasets ONLY with Resolution, Time, and Color as 'directory'
-    structure witing HDF5.  Thus, data access can only happen accross dims XYZ
+    structure witing HDF5.  Thus, data access can only happen across dims XYZ
     for a specific RTC.  
     '''
     
@@ -458,7 +458,7 @@ def getSlice(self,r,t,c,z,y,x):
     ySize = len(range(self.metaData[(r,0,0,'shape')][-2])[y])
     xSize = len(range(self.metaData[(r,0,0,'shape')][-1])[x])
     
-    # Casting zeros to specific dtype signifigantly speeds up data retrieval
+    # Casting zeros to specific dtype significantly speeds up data retrieval
     outputArray = np.zeros((len(tSize),len(cSize),zSize,ySize,xSize), dtype=self.dtype)
     # chunkRequested = outputArray.shape
     
@@ -491,13 +491,13 @@ def getSlice(self,r,t,c,z,y,x):
     
     ''' Some issues here with the output of these arrays.  Napari sometimes expects
     3-dim arrays and sometimes 5-dim arrays which originates from the dask array input representing
-    tczyx dimentions of the imaris file.  When os.environ["NAPARI_ASYNC"] = "1", squeezing
-    the array to 3 dimentions works.  When ASYNC is off squeese does not work.
+    tczyx dimensions of the imaris file.  When os.environ["NAPARI_ASYNC"] = "1", squeezing
+    the array to 3 dimensions works.  When ASYNC is off squeese does not work.
     Napari throws an error because it did not get a 3-dim array.
     
-    Am I implementing slicing wrong?  or does napari have some inconsistancy with the 
-    dimentions of the arrays that it expects with different loading mechanisms if the 
-    arrays have unused single dimentions.
+    Am I implementing slicing wrong?  or does napari have some inconsistency with the 
+    dimensions of the arrays that it expects with different loading mechanisms if the 
+    arrays have unused single dimensions.
     
     Currently "NAPARI_ASYNC" = '1' is set to one in the image loader
     Currently File/Preferences/Render Images Asynchronously must be turned on for this plugin to work

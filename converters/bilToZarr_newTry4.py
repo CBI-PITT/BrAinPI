@@ -99,7 +99,7 @@ imageStack = imageStack[None,:]
 
 def imagePyramidNum(imageStack, origionalChunkSize):
     '''
-    Map of pyramids accross a single 3D color
+    Map of pyramids across a single 3D color
     '''
     
     pyramidMap = {0:[imageStack.shape,origionalChunkSize]}

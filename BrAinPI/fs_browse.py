@@ -6,7 +6,7 @@ Created on Mon Mar 28 11:47:11 2022
 """
 
 '''
-Make a browseable filesystem that limits paths to those configured in 
+Make a browsable filesystem that limits paths to those configured in 
 settings.ini and according to authentication / groups.ini
 '''
 
@@ -149,7 +149,7 @@ def get_path_data(base, request):
         current_path['dirs'] = to_browse
         current_path['files'] = []
         
-        ## Tuples of each derivitive path
+        ## Tuples of each derivative path
         current_path['all_parents'] = [ (html_path_split[-(idx+1)], '/' + os.path.join(*html_path_split[0:len(html_path_split)-idx])) for idx,_ in enumerate(html_path_split) ]
         
         ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)
@@ -263,7 +263,7 @@ def get_path_data(base, request):
                 current_path['dirs'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['dirs']]
                 current_path['files'] = [utils.from_path_to_html(x,path_map,request.path,base) for x in current_path['files']]
                 
-                ## Tuples of each derivitive path
+                ## Tuples of each derivative path
                 current_path['all_parents'] = [ (html_path_split[-(idx+1)], '/' + os.path.join(*html_path_split[0:len(html_path_split)-idx])) for idx,_ in enumerate(html_path_split) ]
                 
                 ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)

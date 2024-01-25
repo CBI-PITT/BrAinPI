@@ -22,7 +22,7 @@ Tiff managers can take a tiff file (tiff_manager) or list of files (tiff_manager
 and present them as sliceable arrays.  
 
 'desired_chunk_depth parameters' allow non-chunked tiff files to appear to be 
-chunked by a desireable number of lines for interacting with downstream libraries
+chunked by a desirable number of lines for interacting with downstream libraries
 like dask array.
 
 Files are only opened during __init__ and when data is requested via slicing

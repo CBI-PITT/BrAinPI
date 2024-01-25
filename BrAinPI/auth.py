@@ -123,7 +123,7 @@ def setup_auth(app):
                 flash('''Your credentials are not valid''')
                 return redirect(url_for('login'))
             if user is None:
-                flash('''An error occured during login: please try again.
+                flash('''An error occurred during login: please try again.
                       If the error persists, please report the problem''')
                 return redirect(url_for('login'))
         else:
@@ -175,7 +175,7 @@ def domain_auth(user_name,password,domain_server=r"ldap://cbilab.pitt.edu:389",d
     Attempts a simple verification of user account on windows domain server
     Return True if auth succeeded
     Return False if auth was rejected
-    Return None if an error occured
+    Return None if an error occurred
     '''
  
     from ldap3 import Server, Connection, ALL, NTLM
@@ -198,6 +198,6 @@ def domain_auth(user_name,password,domain_server=r"ldap://cbilab.pitt.edu:389",d
             print('Authentication Failed')
             return False
     except:
-        print('An error occured while connecting to the domain server')
+        print('An error occurred while connecting to the domain server')
         return None
      

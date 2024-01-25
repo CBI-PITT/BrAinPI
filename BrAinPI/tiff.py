@@ -114,7 +114,7 @@ def setup_tiff(app, config):
         return send_file(
             img_ram,
             as_attachment=True,
-            ## TODO: dynamic naming of file (specifc request or based on region of request)
+            ## TODO: dynamic naming of file (specific request or based on region of request)
             download_name='out.tiff',
             mimetype='image/tiff'
         )

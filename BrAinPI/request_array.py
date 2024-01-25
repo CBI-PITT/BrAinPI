@@ -49,7 +49,7 @@ def initiate_get_array(app, config):
     @app.route('/array', methods=['GET'])
     def get_array():
         '''
-        Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
+        Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with arguments as int or None
         
         tstart,tstop,tstep
         cstart,cstop,cstep
@@ -59,7 +59,7 @@ def initiate_get_array(app, config):
     
         Returns
         -------
-        Bytestring of compresed numpy array
+        Bytestring of compressed numpy array
     
         '''
         

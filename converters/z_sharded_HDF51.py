@@ -121,7 +121,7 @@ class z_sharded_builder:
     
     def imagePyramidNum(self):
         '''
-        Map of pyramids accross a single 3D color
+        Map of pyramids across a single 3D color
         '''
         
         pyramidMap = {0:[self.shape_3d,self.origionalChunkSize]}

@@ -143,7 +143,7 @@ class zarrSeries:
         
         '''
         IMS stores 3D datasets ONLY with Resolution, Time, and Color as 'directory'
-        structure witing HDF5.  Thus, data access can only happen accross dims XYZ
+        structure witing HDF5.  Thus, data access can only happen across dims XYZ
         for a specific RTC.  
         '''
         
@@ -155,7 +155,7 @@ class zarrSeries:
         ySize = len(range(self.metaData[(r,0,0,'shape')][-2])[y])
         xSize = len(range(self.metaData[(r,0,0,'shape')][-1])[x])
         
-        # Casting zeros to specific dtype signifigantly speeds up data retrieval
+        # Casting zeros to specific dtype significantly speeds up data retrieval
         outputArray = np.zeros((len(tSize),len(cSize),zSize,ySize,xSize), dtype=self.dtype)
         # chunkRequested = outputArray.shape
         

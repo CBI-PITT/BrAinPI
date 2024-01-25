@@ -17,7 +17,7 @@ import numpy as np
 class dataWrapper:
     '''
     A wrapper to describe a specific dataset at a specific resolution level as
-    a sliceable array-like object.  It is self describing after receving metadata
+    a sliceable array-like object.  It is self describing after receiving metadata
     from the BrAinPI.  
     
     baseURL specifies the bil_api address:port:

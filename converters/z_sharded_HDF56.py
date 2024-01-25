@@ -154,7 +154,7 @@ class z_sharded_builder:
     
     # def imagePyramidNum(self):
     #     '''
-    #     Map of pyramids accross a single 3D color
+    #     Map of pyramids across a single 3D color
     #     '''
         
     #     pyramidMap = {0:[self.shape_3d,self.origionalChunkSize]}
@@ -169,7 +169,7 @@ class z_sharded_builder:
     
     def imagePyramidNum(self):
         '''
-        Map of pyramids accross a single 3D color
+        Map of pyramids across a single 3D color
         '''
         out_shape = self.shape_3d
         chunk = self.origionalChunkSize
@@ -311,7 +311,7 @@ class z_sharded_builder:
     def write_resolution_series(self,client):
         '''
         Make downsampled versions of dataset based on pyramidMap
-        Requires that a dask.distribuited client be passed for parallel processing
+        Requires that a dask.distributed client be passed for parallel processing
         '''
         for res in range(len(self.pyramidMap)):
             self.write_resolution(res,client)
@@ -351,7 +351,7 @@ class z_sharded_builder:
         
         for t,c in product(range(self.TimePoints),range(self.Channels)):
             files = self.list_files(res,t,c)
-            # Make relative paths for vds file for win+lin compatability
+            # Make relative paths for vds file for win+lin compatibility
             relatives = [x.replace(self.out_location,'.') for x in files]
             for rel,ii in zip(relatives,files):
                     

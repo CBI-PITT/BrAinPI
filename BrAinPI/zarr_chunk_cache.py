@@ -6,11 +6,11 @@ Created on Tue Jul 19 10:29:42 2022
 """
 
 '''
-A Zarr store that uses HDF5 as a containiner to shard chunks accross a single
+A Zarr store that uses HDF5 as a containiner to shard chunks across a single
 axis.  The store is implemented similar to a directory store 
 but on axis[-3] HDF5 files are written which contain
-chunks cooresponding to the remainining axes.  If the shape of the 
-the array are less than 3 axdes, the shards will be accross axis0
+chunks corresponding to the remainining axes.  If the shape of the 
+the array are less than 3 axdes, the shards will be across axis0
 
 Example:
     array.shape = (1,1,200,10000,10000)
@@ -107,7 +107,7 @@ class disk_cache_store(Store):
 
     def __init__(self, store: StoreLike, uuid: str=None, diskcache_object=None, persist=None, meta_data_expire_min=15):
         '''
-        Designating a uuid will allow the cache to persist accross instances
+        Designating a uuid will allow the cache to persist across instances
         '''
         self._store: BaseStore = BaseStore._ensure_store(store)
         self._diskcache_object = diskcache_object
