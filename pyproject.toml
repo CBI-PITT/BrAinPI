@@ -9,5 +9,7 @@ build-backend = "setuptools.build_meta"
 [tool.codespell]
 skip = '.git,*.css,static'
 check-hidden = true
-# ignore-regex = ''
-# ignore-words-list = ''
+# ignore camelCased
+ignore-regex = '\b[a-z]*[A-Z][a-zA-Z]*\b'
+# better be fixed inititate but part of API now
+ignore-words-list = 'inititate'
