@@ -513,7 +513,7 @@ class builder:
         to_run = []
         # Currently hardcoded - works well for 32core, 512GB RAM
         # 4^3 is the break even point for surface area == volume
-        # Higher numbers are better to limt io
+        # Higher numbers are better to limit io
         z_depth = new_chunks[-3] * 8
         y_depth = new_chunks[-2] * 8
         x_depth = new_chunks[-1] * 8
