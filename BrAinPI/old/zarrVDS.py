@@ -230,7 +230,7 @@ def getSlice(imsClass,r,t,c,z,y,x):
     3-dim arrays and sometimes 5-dim arrays which originates from the dask array input representing
     tczyx dimentions of the imaris file.  When os.environ["NAPARI_ASYNC"] = "1", squeezing
     the array to 3 dimentions works.  When ASYNC is off squeese does not work.
-    Napari thows an error because it did not get a 3-dim array.
+    Napari throws an error because it did not get a 3-dim array.
     
     Am I implementing slicing wrong?  or does napari have some inconsistancy with the 
     dimentions of the arrays that it expects with different loading mechanisms if the 
