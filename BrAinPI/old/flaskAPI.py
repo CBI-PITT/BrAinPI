@@ -143,7 +143,7 @@ def grabArrayCache(datapath,intArgs):
 @app.route('/api/fmostCompress', methods=['GET'])
 def fmostCompress():
     '''
-    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with argments as int or None
+    Retrieve a slice: resolutionLevel, (t,c,z,y,x) specified with arguments as int or None
     
     tstart,tstop,tstep
     cstart,cstop,cstep
@@ -153,7 +153,7 @@ def fmostCompress():
 
     Returns
     -------
-    Bytestring of compresed numpy array
+    Bytestring of compressed numpy array
 
     '''
         

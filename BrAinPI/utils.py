@@ -172,7 +172,7 @@ def from_path_to_html(path, path_map, req_path, entry_point):
 
 def dict_key_value_match(a_dict,key_or_value,specific=True):
     '''
-    Searches both key and values in dict and return the cooresponding value
+    Searches both key and values in dict and return the corresponding value
     Key --> value
     value --> key
     '''
@@ -278,7 +278,7 @@ def get_html_split_and_associated_file_path(config,request):
 
 class config:
     '''
-    This class will be used to manage open datasets and persistant cache
+    This class will be used to manage open datasets and persistent cache
     '''
     def __init__(self, 
                  cacheLocation=None, 
@@ -290,7 +290,7 @@ class config:
         '''
         evictionPolicy Options:
             "least-recently-stored" #R only
-            "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
+            "least-recently-used"  #R/W (maybe a performance hit but probably best cache option)
         '''
         self.opendata = {}
         self.cacheLocation = cacheLocation
@@ -536,7 +536,7 @@ def profile(func):
 #             for t, c in itertools.product(range(self.TimePoints), range(self.Channels)):
 #
 #                 # Determine resolution for specific projection multiscale based on proportional change of multiscale in
-#                 # origional dataset
+#                 # original dataset
 #                 out_resolution = [x*y for x,y in zip(self.projection_resolution,resolution_proportion_of_full)]
 #                 new_shape = self.three_d_shape_to_projection_shape(self.reference_dataset.metaData[r, t, c, 'shape'],
 #                                                                    self.reference_dataset.metaData[r, t, c, 'resolution'], out_resolution)

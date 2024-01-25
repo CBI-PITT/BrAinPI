@@ -270,7 +270,7 @@ def pad_3d_2x(image,info,final_pad=2):
     '''
     Force an array to be padded with mirrored data to a specific size (default 2)
     an 'info' dictionary must be provided with keys: 'z','y','x' where the second
-    value is a tuple describing the overlap alreday present on the array.  The 
+    value is a tuple describing the overlap already present on the array.  The 
     overlap values should be between 0 and the 'final_pad'    
     
     {'z':[(2364,8245),(0,1)]}

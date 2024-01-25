@@ -6,7 +6,7 @@ Created on Mon Mar 28 11:47:11 2022
 """
 
 '''
-Make a browseable filesystem that limits paths to those configured in 
+Make a browsable filesystem that limits paths to those configured in 
 settings.ini and according to authentication / groups.ini
 '''
 
@@ -130,7 +130,7 @@ def initiate_browseable(app):
                 # print('after')
                 
                 
-                # Find all available files in the resquested path
+                # Find all available files in the requested path
                 to_browse = glob.glob(to_browse + '/*')
                 
                 

@@ -329,7 +329,7 @@ class ome_zarr_loader:
         
 #         '''
 #         IMS stores 3D datasets ONLY with Resolution, Time, and Color as 'directory'
-#         structure witing HDF5.  Thus, data access can only happen accross dims XYZ
+#         structure witing HDF5.  Thus, data access can only happen across dims XYZ
 #         for a specific RTC.  
 #         '''
         

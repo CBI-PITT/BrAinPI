@@ -33,7 +33,7 @@ img_ram.seek(0)
 return send_file(
     img_ram,
     as_attachment=True,
-    ## TODO: dynamic naming of file (specifc request or based on region of request)
+    ## TODO: dynamic naming of file (specific request or based on region of request)
     download_name='out.tiff', # name needs to match chunk
     mimetype='application/octet-stream'
 )

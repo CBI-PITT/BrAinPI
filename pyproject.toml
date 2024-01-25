@@ -4,3 +4,12 @@ requires = [
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+# Ref: https://github.com/codespell-project/codespell#using-a-config-file
+[tool.codespell]
+skip = '.git,*.css,static'
+check-hidden = true
+# ignore camelCased
+ignore-regex = '\b[a-z]*[A-Z][a-zA-Z]*\b'
+# better be fixed inititate but part of API now
+ignore-words-list = 'inititate'

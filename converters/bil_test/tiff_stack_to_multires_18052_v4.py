@@ -174,7 +174,7 @@ class builder:
     
     def imagePyramidNum(self):
         '''
-        Map of pyramids accross a single 3D color
+        Map of pyramids across a single 3D color
         '''
         out_shape = self.shape_3d
         chunk = self.origionalChunkSize[2:]
@@ -248,7 +248,7 @@ class builder:
     def write_resolution_series(self,client):
         '''
         Make downsampled versions of dataset based on pyramidMap
-        Requies that a dask.distribuited client be passed for parallel processing
+        Requires that a dask.distributed client be passed for parallel processing
         '''
         for res in range(len(self.pyramidMap)):
             self.write_resolution(res,client)
@@ -345,7 +345,7 @@ class builder:
         
         output : two tuples indicating: 
             (start,stop) : index along axis
-            (overlap_neg,overlap_pos) : overlaping depth with adjacent chunk
+            (overlap_neg,overlap_pos) : overlapping depth with adjacent chunk
         '''
         #determine z_start
         overlap_neg = overlap
@@ -378,7 +378,7 @@ class builder:
         '''
         Force an array to be padded with mirrored data to a specific size (default 2)
         an 'info' dictionary must be provided with keys: 'z','y','x' where the second
-        value is a tuple describing the overlap alreday present on the array.  The 
+        value is a tuple describing the overlap already present on the array.  The 
         overlap values should be between 0 and the 'final_pad'    
         
         {'z':[(2364,8245),(0,1)]}
@@ -517,7 +517,7 @@ class builder:
         to_run = []
         # Currently hardcoded - works well for 32core, 512GB RAM
         # 4^3 is the break even point for surface area == volume
-        # Higher numbers are better to limt io
+        # Higher numbers are better to limit io
         z_depth = new_chunks[-3] * 8
         y_depth = new_chunks[-2] * 8
         x_depth = new_chunks[-1] * 8

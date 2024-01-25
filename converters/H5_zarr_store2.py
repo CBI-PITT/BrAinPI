@@ -227,7 +227,7 @@ class H5Store(Store):
         if os.path.exists(h5_file):
             return self._fromfile(h5_file,dset)
         
-        # Must raise KeyError when key does not exist for zarr to load defult 'fill' values
+        # Must raise KeyError when key does not exist for zarr to load default 'fill' values
         else:
             raise KeyError(key)
         raise KeyError(key)

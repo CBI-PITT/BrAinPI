@@ -38,7 +38,7 @@ def ng_links(req_path):
 
 def downloadable(req_path,size=None, max_sizeGB=None):
     '''
-    Determine if the requested file can be downlaoded
+    Determine if the requested file can be downloaded
     max_size imposes a limit on the size of the file that can
     be downloaded
     

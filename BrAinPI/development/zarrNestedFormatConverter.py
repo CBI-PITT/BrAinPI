@@ -28,7 +28,7 @@ dataToConvert = r"H:\globus\pitt\bil"
 dataToConvert = r"H:\globus\pitt\bil\TEST"
 
 
-scale = (1.0, 0.35, 0.35)  ## (z,y,x) arbitraty units but is probably microns
+scale = (1.0, 0.35, 0.35)  ## (z,y,x) arbitrary units but is probably microns
 
 outputLocation = os.path.join(dataToConvert,'fMOST.zarr')
 
@@ -79,7 +79,7 @@ for example stack.shape == (2, 11464, 30801, 20821) is assumed to be (c,z,y,x) w
 
 
 multi resolution zarr arrays will be stored in a single directory ir each resolution series:
-a single array t,c,z,y,x will be stored in each resoltion dir.
+a single array t,c,z,y,x will be stored in each resolution dir.
 
     r[0-9][0-9] = 5D array (t,c,z,y,x)
             
@@ -89,7 +89,7 @@ a single array t,c,z,y,x will be stored in each resoltion dir.
 '''
 Resolution series should converge towards 3D isotropic but always with 2x reductions 
 in each dimension and never going beyond iostropic.  
-this requires knowing the origional z,y,x scale
+this requires knowing the original z,y,x scale
 
 Fit to exactly iostropic with reductions in resolution no greater than 2x
 
@@ -245,16 +245,16 @@ for r in resolutions:
                                               resolutions[r][2][1],
                                               resolutions[r][2][2]))
     else:
-        blured = downSample[r-1]
+        blurred = downSample[r-1]
         
         downSampleFactor = resolutions[r][3]
         # downSampleFactor = tuple([x/y for x,y in zip(resolutions[r-1][1],resolutions[r][1])])
         sigma = tuple([(x - 1) / 2 for x in downSampleFactor])
         depth = tuple([math.ceil(2*x) for x in sigma])
-        blured = blured.map_overlap(smooth,
+        blurred = blurred.map_overlap(smooth,
                                     sigma=sigma, 
                                     depth=depth, 
-                                    boundry='reflect',
+                                    boundary='reflect',
                                     dtype=sampleImage.dtype)
         
         ## HOW TO DEAL WITH NON INT DOWNSAMPLES
@@ -262,7 +262,7 @@ for r in resolutions:
         y = list(np.round(np.linspace(0, resolutions[r-1][1][1] - 1, resolutions[r][1][1])).astype(int))
         x = list(np.round(np.linspace(0, resolutions[r-1][1][2] - 1, resolutions[r][1][2])).astype(int))
 
-        downSample[r] = blured[z,y,x]
+        downSample[r] = blurred[z,y,x]
 
 
 
