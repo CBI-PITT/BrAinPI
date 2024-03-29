@@ -53,6 +53,7 @@ class config:
         print(dataPath)
 
         if dataPath in self.opendata:
+            print(f'DATAPATH ENTRIES__{tuple(self.opendata.keys())}')
             return dataPath
 
         elif os.path.splitext(dataPath)[-1] == '.ims':

@@ -12,7 +12,7 @@ To run development (1 worker, 1 thread):  python -i /CBI_FastStore/cbiPythonTool
 # Place some critical caching tool into the builtins space to enable access across modules
 import builtins
 from cache_tools import cache_head_space
-builtins.brainpi_cache_ram = cache_head_space(20) #Make available accross all modules as simply calling 'cache_ram'
+builtins.brainpi_cache_ram = cache_head_space(10) #Make available accross all modules as simply calling 'cache_ram'
 
 import flask, os
 from flask import request, render_template
@@ -159,12 +159,12 @@ def add_header(response):
         response.headers.add('Pragma', 'no-cache')
         response.headers.add('Expires', '0')
 
-        response = compress_flask_response(response, request, 9)
+        response = compress_flask_response(response, request, 3)
 
     else:
         # Everything else is cached
         response.headers.add('Cache-Control', f'public,max-age={seconds}')
-        response = compress_flask_response(response, request, 9)
+        response = compress_flask_response(response, request, 3)
 
     if APP_NAME:
         response.headers.add('X-Service', APP_NAME)

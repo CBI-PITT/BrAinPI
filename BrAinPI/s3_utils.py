@@ -44,9 +44,9 @@ def s3_catch_exceptions_retry(func):
     return wrapper
 
 
-@brainpi_cache_ram.memoize
-@cache_disk.memoize()
-@s3_catch_exceptions_retry
+# @brainpi_cache_ram.memoize
+# @cache_disk.memoize()
+# @s3_catch_exceptions_retry
 def s3_get_dir_contents(path, recursive=False):
 
     # if not ( 'cache_disk' in locals() or 'cache_disk' in globals() ):
@@ -116,6 +116,11 @@ def s3_get_dir_contents(path, recursive=False):
 
     return out
 
+# Setup caching and error catching decorators
+s3_get_dir_contents = s3_catch_exceptions_retry(s3_get_dir_contents)
+if cache_disk is not None:
+    s3_get_dir_contents = cache_disk.memoize()(s3_get_dir_contents)
+s3_get_dir_contents = brainpi_cache_ram.memoize(s3_get_dir_contents)
 
 def s3_get_bucket_and_path_parts(path):
     path = s3_clean_path(path)
@@ -229,6 +234,7 @@ class s3_boto_store(Store):
 
     def __init__(self, path, normalize_keys=False, dimension_separator='/', s3_cred='anon', mode='r'):
 
+        self.path = path
         self.raw_path = path
         self.bucket, path_split = s3_get_bucket_and_path_parts(self.raw_path)
         if len(path_split) > 1:

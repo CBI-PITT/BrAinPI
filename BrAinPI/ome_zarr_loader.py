@@ -113,7 +113,8 @@ class ome_zarr_loader:
         self.resolution = self.metaData[self.ResolutionLevelLock,0,0,'resolution']
         self.dtype = self.metaData[self.ResolutionLevelLock,0,0,'dtype']
     
-    
+
+
     def __getitem__(self,key):
         
         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
@@ -213,16 +214,28 @@ class ome_zarr_loader:
     
     def open_array(self,res):
         store = self.zarr_store_type(self.locationGenerator(res))
-        # try:
-        #     if self.cache is not None:
-        #         store = disk_cache_store(store=store, uuid=self.locationGenerator(res), diskcache_object=self.cache, persist=None, meta_data_expire_min=15)
-        # except Exception as e:
-        #     print('Caught Exception')
-        #     print(e)
-        #     pass
+        print('OPENING ARRAYS')
+        store = self.wrap_store_in_chunk_cache(store)
+        # if self.cache is not None:
+        #     print('OPENING CHUNK CACHE ARRAYS')
+        #     from zarr_stores.zarr_disk_cache import Disk_Cache_Store
+        #     store = Disk_Cache_Store(store, unique_id=store.path, diskcache_object=self.cache, persist=False)
+        # # try:
+        # #     if self.cache is not None:
+        # #         store = disk_cache_store(store=store, uuid=self.locationGenerator(res), diskcache_object=self.cache, persist=None, meta_data_expire_min=15)
+        # # except Exception as e:
+        # #     print('Caught Exception')
+        # #     print(e)
+        # #     pass
         return zarr.open(store)
-    
-    
+
+
+    def wrap_store_in_chunk_cache(self, store):
+        if self.cache is not None:
+            print('OPENING CHUNK CACHE ARRAYS')
+            from zarr_stores.zarr_disk_cache import Disk_Cache_Store
+            store = Disk_Cache_Store(store, unique_id=store.path, diskcache_object=self.cache, persist=True)
+        return store
 
 
 

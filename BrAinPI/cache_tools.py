@@ -24,8 +24,12 @@ def get_cache():
         shards=settings.getint('disk_cache', 'shards')
         timeout=settings.getfloat('disk_cache', 'timeout')
 
-        return FanoutCache(cacheLocation, shards=shards, timeout=timeout,
-                                     size_limit=cacheSizeBytes, eviction_policy=evictionPolicy)
+        # return FanoutCache(cacheLocation, shards=shards, timeout=timeout,
+        #                              size_limit=cacheSizeBytes, eviction_policy=evictionPolicy)
+        cache = FanoutCache(cacheLocation, shards=shards, timeout=timeout,
+                           size_limit=cacheSizeBytes, eviction_policy=evictionPolicy)
+        cache.close()
+        return cache
 
 import sys
 from psutil import virtual_memory
@@ -55,10 +59,12 @@ class cache_head_space:
             # print(key)
             out = self.__getitem__(key)
             if out is not None:
-                return out
-
-            out = func(*args, **kwargs)
-            self.__setitem__(key, out)
+                pass
+            else:
+                out = func(*args, **kwargs)
+                self.__setitem__(key, out)
+                print('SETITEM 66')
+                print(out)
             return out
         return wrapper
 
@@ -72,11 +78,13 @@ class cache_head_space:
         return sys.getsizeof(object)
 
     def __getitem__(self, key):
+        print('GETITEM 80')
         result = self.cache.get(key)
         if result is not None:
             self.cache.move_to_end(key)
-            # print('Got from RAM CACHE')
+            print('Got from RAM CACHE')
         self.trim_cache()
+        print('GETITEM 86')
         return result
 
     def __setitem__(self, key, value):
@@ -95,9 +103,10 @@ class cache_head_space:
             space_available = self.trim_cache(extra_space=new_obj_size)
             if space_available:
                 self.cache[key] = value
-                # print('SET TO RAM CACHE')
+                print('SET TO RAM CACHE')
         finally:
             if self.cache.get('lock') == self.uuid:
+                print('IM HERE IN FINALLY NOW')
                 self.cache.pop('lock')
 
     def trim_cache(self, extra_space=0):
