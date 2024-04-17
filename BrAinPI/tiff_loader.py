@@ -6,14 +6,6 @@
 # from PIL import Image
 # import io
 
-# # Load .tif file
-# # tif_file = '/home/kelin/Documents/BrainPI_image_data/imput_image_multi_chanel/BrainA_25_atlas_ch0_autof.tif'
-# # tif_file = '/home/kelin/Documents/BrainPI_image_data/imput_image_multi_chanel/BrainA_25_atlas_ch1.tif'
-# # tif_file = '/home/kelin/Documents/BrainPI_image_data/input_image/frame_5gb.tif'
-# tif_file = (
-#     "/home/kelin/Documents/BrainPI_image_data/imput_image_multi_chanel/frame_t_0.tif"
-# )
-
 # class tiff_loader:
 #     def __init__(self, file_location) -> None:
 #         self.location = file_location
@@ -253,15 +245,6 @@ import zarr
 import os
 import config_tools
 import time
-
-
-
-# tif_file = '/home/kelin/Documents/BrainPI_image_data/imput_image_multi_chanel/BrainA_25_atlas_ch0_autof.tif'
-# tif_file = '/home/kelin/Documents/BrainPI_image_data/imput_image_multi_chanel/BrainA_25_atlas_ch1.tif'
-# tif_file = '/home/kelin/Documents/BrainPI_image_data/input_image/frame_5gb.tif'
-tif_file = (
-    "/home/kelin/Documents/BrainPI_image_data/imput_image_multi_chanel/frame_t_0.tif"
-)
 import hashlib
 
 def calculate_hash(input_string):
