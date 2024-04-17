@@ -755,7 +755,7 @@ def get_path_data(base, request):
         current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
         current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
         current_path['files_dl'] = [fts.downloadable(x, size=current_path['files_stat'][idx].st_size, max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
-
+        current_path['files_opsd_slug'] = [fts.opsd_links(x) for x in current_path['files']]
     else:
 
         try:
@@ -878,7 +878,7 @@ def get_path_data(base, request):
                 current_path['files_ng_slug'] = [fts.ng_links(x) for x in current_path['files']]
                 current_path['files_ng_info'] = [os.path.join(x,'info') if x is not None else None for x in current_path['files_ng_slug']]
                 current_path['files_dl'] = [fts.downloadable(x, size=utils.get_file_size(current_path['files_real_path'][idx]), max_sizeGB=settings.getint('browser','max_dl_file_size_GB')) for idx, x in enumerate(current_path['files'])]
-
+                current_path['files_opsd_slug'] = [fts.opsd_links(x) for x in current_path['files']]
             else:
                 # If a non-file / dir is passed, move backward to the nearest file/dir
                 return redirect(current_path['parent_path'])
@@ -902,7 +902,7 @@ def get_path_data(base, request):
         files_json[file]['files_ng_slug'] = current_path['files_ng_slug'][idx] #+ '/?neuroglancer' if isinstance(current_path['files_ng_slug'][idx],str) else ''  #Assist with google analytics
         files_json[file]['files_ng_info'] = current_path['files_ng_info'][idx]
         files_json[file]['files_dl'] = current_path['files_dl'][idx]
-
+        files_json[file]['files_opsd_slug'] = current_path['files_opsd_slug'][idx]
     current_path['files_json'] = files_json
     # print(files_json)
 
