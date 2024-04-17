@@ -233,8 +233,9 @@ class ome_zarr_loader:
     def wrap_store_in_chunk_cache(self, store):
         if self.cache is not None:
             print('OPENING CHUNK CACHE ARRAYS')
-            from zarr_stores.zarr_disk_cache import Disk_Cache_Store
-            store = Disk_Cache_Store(store, unique_id=store.path, diskcache_object=self.cache, persist=True)
+            print(store.path)
+            from zarr_chunk_cache import disk_cache_store as Disk_Cache_Store
+            store = Disk_Cache_Store(store, uuid=store.path, diskcache_object=self.cache, persist=True)
         return store
 
 
