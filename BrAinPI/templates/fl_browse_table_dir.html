@@ -78,6 +78,7 @@
     data-fileslug="{{ current_path['files_dl'][loop.index0] }}" 
     data-ngslug="{{ current_path['files_ng_slug'][loop.index0] }}" 
     data-filesize="{{ current_path['files_size'][loop.index0] }}"
+    data-opsdslug="{{current_path['files_opsd_slug'][loop.index0]}}"
     data-updated="{{ current_path['files_modtime'][loop.index0] }}" 
     data-bs-toggle="modal" data-bs-target="#brainModal">
     <span class="ms-4">{{ current_path['files_name'][loop.index0] }}</span>
@@ -111,6 +112,7 @@
         </div>
         <div class="modal-footer">
           <a href="#" type="button" id="brainModalNgSlug" class="btn btn-primary btn-sm" target="ngwindow">View on NG</a>
+          <a href="#" type="button" id="brainModalOpsdSlug" class="btn btn-primary btn-sm" target="opsdwindow">View on OPSD</a>
           <a href="#" type="button" id="brainModalFileSlug" class="btn btn-primary btn-sm" target="dlwindow">Download</a>
           <a href="#" type="button" id="brainModalFileInfo" class="btn btn-primary btn-sm" target="nginfowindow">NG Info</a>
           <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
@@ -154,6 +156,20 @@ brainModalEl.addEventListener('show.bs.modal', function (event) {
   event.target.querySelector('#brainModalFileSize').innerHTML = fdata.files_size[0] + ' ' + fdata.files_size[1];
 
 // Button Configuration for file options
+
+// OPSD Button 
+
+var opsd_btn = event.target.querySelector('#brainModalOpsdSlug')
+  if (fdata.files_opsd_slug)
+{
+  console.log('exist')
+  opsd_btn.setAttribute('href',fdata.files_opsd_slug);
+  opsd_btn.classList.remove('d-none');
+}
+else{
+  opsd_btn.setAttribute('href',fdata.files_opsd_slug)
+  opsd_btn.classList.add('d-none');
+}  
 
 // Neuroglancer Button and Info
 
