@@ -323,9 +323,9 @@ class tiff_loader:
                 store = tifffile.imread(self.location, aszarr=True, series=r)
                 print(type(store))
                 zarr_store = zarr.open(store)
-                if isinstance(zarr_store, zarr.core.Array):
-                    self.arrays[r] = zarr.open(store)
-                    # print(self.arrays[r].shape)           
+                # if isinstance(zarr_store, zarr.core.Array):
+                self.arrays[r] = zarr_store
+                # print(self.arrays[r].shape)           
         print(self.arrays)
         print("Arrays building complete")
 
