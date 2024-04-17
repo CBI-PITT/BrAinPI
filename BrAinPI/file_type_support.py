@@ -16,7 +16,7 @@ another process
 import utils
 from flask import url_for
 import neuroGlancer
-
+import openSeadragon
 def ng_links(req_path):
     '''
     req_path is a string from the 'browse_fs' endpoint to a file.
@@ -30,6 +30,16 @@ def ng_links(req_path):
     
     if file_type_supported:
         new_path = req_path.replace(url_for('browse_fs'),url_for('neuro_glancer_entry'),1)
+        return new_path
+    
+    else:
+        return None
+
+def opsd_links(req_path):
+    file_types = openSeadragon.openseadragon_dtypes()
+    file_type_supported = utils.is_file_type(file_types, req_path)
+    if file_type_supported:
+        new_path = req_path.replace(url_for('browse_fs'),url_for('openseadragon_entry'),1)
         return new_path
     
     else:
