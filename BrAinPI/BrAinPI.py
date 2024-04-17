@@ -94,6 +94,10 @@ print('Importing Neuroglancer endpoints')
 import neuroGlancer
 app = neuroGlancer.setup_neuroglancer(app, config)
 
+print('Importing Openseadragon endpoints')
+import openSeadragon
+openSeadragon.setup_openseadragon(app, config)
+
 print('Initiating Coordination endpoints')
 from coordination_endpoints import inititate
 app = inititate(app, config)
