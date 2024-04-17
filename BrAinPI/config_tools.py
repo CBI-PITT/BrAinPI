@@ -9,7 +9,13 @@ import imaris_ims_file_reader as ims
 from zarr.storage import NestedDirectoryStore
 from zarr_stores.archived_nested_store import Archived_Nested_Store
 from zarr_stores.h5_nested_store import H5_Nested_Store
+import tiff_loader
+import hashlib
 
+def calculate_hash(input_string):
+    # Calculate the SHA-256 hash of the input string
+    hash_result = hashlib.sha256(input_string.encode()).hexdigest()
+    return hash_result
 def get_config(file='settings.ini',allow_no_value=True):
     import configparser
     # file = os.path.join(os.path.split(os.path.abspath(__file__))[0],file)
@@ -17,7 +23,19 @@ def get_config(file='settings.ini',allow_no_value=True):
     config = configparser.ConfigParser(allow_no_value=allow_no_value)
     config.read(file)
     return config
+def get_pyramid_images_connection():
+    connection = {}
+    settings = get_config()
+    directory = settings.get('tif_loader', 'pyramids_images_store')
 
+    # Get all file names in the directory
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            extension_index = file.rfind('.ome.tif')
+            hash_value = file[:extension_index]
+            file_path = os.path.join(root, file)
+            connection[hash_value] = file_path
+    return connection
 
 class config:
     '''
@@ -31,6 +49,7 @@ class config:
             "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
         '''
         self.opendata = {}
+        self.pyramid_images_connection = get_pyramid_images_connection()
         from cache_tools import get_cache
         print('INIT OF CACHE IN CONFIG CLASS')
         self.cache = get_cache()
@@ -83,7 +102,9 @@ class config:
             from s3_utils import s3_boto_store
             self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3_boto_store,
                                                       cache=self.cache)
-
+        elif os.path.splitext(dataPath)[-1] == '.tif':
+            # To do for metadata attribute building
+            self.opendata[dataPath] = tiff_loader.tiff_loader(dataPath, self.pyramid_images_connection)
         ## Append extracted metadata as attribute to open dataset
         try:
             from utils import metaDataExtraction # Here to get around curcular import at BrAinPI init
