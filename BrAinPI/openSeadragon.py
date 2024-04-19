@@ -141,7 +141,12 @@ import tiff_loader
 
 def openseadragon_dtypes():
     return [".tif",
-            ".ome.tif"]
+            ".tiff",
+            ".ome.tif",
+            ".ome.tiff",
+            ".ome-tif",
+            ".ome-tiff"
+            ]
 
 
 openSeadragonPath = "/op_seadragon/"

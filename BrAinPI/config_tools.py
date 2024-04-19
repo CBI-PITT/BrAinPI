@@ -102,7 +102,7 @@ class config:
             from s3_utils import s3_boto_store
             self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3_boto_store,
                                                       cache=self.cache)
-        elif os.path.splitext(dataPath)[-1] == '.tif':
+        elif dataPath.endswith('tif') or dataPath.endswith('tiff'):
             # To do for metadata attribute building
             self.opendata[dataPath] = tiff_loader.tiff_loader(dataPath, self.pyramid_images_connection)
         ## Append extracted metadata as attribute to open dataset
