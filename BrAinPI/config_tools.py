@@ -9,8 +9,10 @@ import imaris_ims_file_reader as ims
 from zarr.storage import NestedDirectoryStore
 from zarr_stores.archived_nested_store import Archived_Nested_Store
 from zarr_stores.h5_nested_store import H5_Nested_Store
+# from watchdog.observers import Observer
 import tiff_loader
 import hashlib
+
 
 def calculate_hash(input_string):
     # Calculate the SHA-256 hash of the input string
@@ -23,9 +25,9 @@ def get_config(file='settings.ini',allow_no_value=True):
     config = configparser.ConfigParser(allow_no_value=allow_no_value)
     config.read(file)
     return config
-def get_pyramid_images_connection():
+def get_pyramid_images_connection(settings):
+    os.makedirs(settings.get('tif_loader','pyramids_images_store'),exist_ok=True)
     connection = {}
-    settings = get_config()
     directory = settings.get('tif_loader', 'pyramids_images_store')
 
     # Get all file names in the directory
@@ -49,7 +51,9 @@ class config:
             "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
         '''
         self.opendata = {}
-        self.pyramid_images_connection = get_pyramid_images_connection()
+        self.settings = get_config('settings.ini')
+        self.pyramid_images_connection = get_pyramid_images_connection(self.settings)
+        # self.Observation()
         from cache_tools import get_cache
         print('INIT OF CACHE IN CONFIG CLASS')
         self.cache = get_cache()
@@ -104,7 +108,7 @@ class config:
                                                       cache=self.cache)
         elif dataPath.endswith('tif') or dataPath.endswith('tiff'):
             # To do for metadata attribute building
-            self.opendata[dataPath] = tiff_loader.tiff_loader(dataPath, self.pyramid_images_connection)
+            self.opendata[dataPath] = tiff_loader.tiff_loader(dataPath, self.pyramid_images_connection, cache = self.cache)
         ## Append extracted metadata as attribute to open dataset
         try:
             from utils import metaDataExtraction # Here to get around curcular import at BrAinPI init
@@ -113,4 +117,24 @@ class config:
             pass
 
         return dataPath
-
+    
+    # def Observation(self):
+    #     from utils import Handler
+    #     original_image_event_handler = Handler()
+    #     observer_original_image = Observer()
+    #     observer_original_image.schedule(original_image_event_handler, path=self.settings.get('tif_loader','original_images_store'), recursive=True)  # Replace with your directory path
+        
+    #     pyramid_image_event_handler = Handler()
+    #     observer_pyramid_image = Observer()
+    #     observer_pyramid_image.schedule(pyramid_image_event_handler, path=self.settings.get('tif_loader','pyramids_images_store'), recursive=True)  # Replace with your directory path
+        
+    #     observer_original_image.start()
+    #     observer_pyramid_image.start()
+    #     try:
+    #         while True:
+    #             pass
+    #     except KeyboardInterrupt:
+    #         observer_original_image.stop()
+    #         observer_pyramid_image.stop()
+    #     observer_original_image.join()  
+    #     observer_pyramid_image.join()
