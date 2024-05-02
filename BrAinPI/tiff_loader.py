@@ -253,9 +253,11 @@ def calculate_hash(input_string):
     return hash_result
 
 class tiff_loader:
-    def __init__(self, file_location, pyramid_images_connection) -> None:
+    def __init__(self, file_location, pyramid_images_connection, cache) -> None:
         # print('pyramid_images_connection',pyramid_images_connection)
+        self.cache = cache
         self.settings = config_tools.get_config('settings.ini')
+        self.datapath = file_location
         self.location = file_location
         # print(self.location)
         self.image = tifffile.TiffFile(self.location)
@@ -307,7 +309,7 @@ class tiff_loader:
 
         # if already pyramid image --> building the arrays
         # elif no pyramid but connection exist --> replace the location, building the arrays
-        # elif no prramid and no connection --> pyramid image generation, building connection using hash func and replace location, building arrays 
+        # elif no pyramid and no connection --> pyramid image generation, building connection using hash func and replace location, building arrays 
         self.pyramid_validators(self.image)
         if self.location.endswith('.ome.tif'):
             store = tifffile.imread(self.location, aszarr=True, series=0)
@@ -329,55 +331,7 @@ class tiff_loader:
         print(self.arrays)
         print("Arrays building complete")
 
-        # type_str = self.image.series[0].axes
-        # characters = list(type_str)
-        # shape = self.image.series[0].shape
-        # for index, value in enumerate(characters):
-        #     if char in dic:
-        #         dic[char] = shape(index)
-
-        # if self.type.endswith("S"):
-        #     num_axes = 6
-        # else:
-        #     num_axes = 5
-
-        # for r in range(self.resolutions):
-        #     temp = [1] * num_axes
-        #     nparray = self.image.series[r].asarray()
-        #     shape = nparray.shape
-        #     print("Original shape:", shape)
-        #     print(self.image.series[r].dims)
-        #     print(self.image.series[r].ndim)
-        #     print(self.image.series[r].shape)
-        #     # print(self.image.series[r][0][0][0])
-        #     type_str = self.image.series[r].axes
-        #     characters = list(type_str)
-        #     print("Axis characters:", characters)
-        #     for index, char in enumerate(characters):
-        #         if char in dic:
-        #             temp[dic[char]] = shape[index]
-        #     temp_tuple = tuple(temp)
-        #     nparray = nparray.reshape(temp_tuple)
-        #     print("Reshaped shape:", nparray.shape)
-        #     if (
-        #         r != 0 and
-        #         (nparray.shape[3] != self.array[r-1].shape[3] // 2
-        #         or nparray.shape[4] != self.array[r-1].shape[4] // 2)
-        #     ):
-        #         self.pyramid_inspector(r=r-1, num_axes=num_axes,width=self.array[r-1].shape[4] // 2,height=self.array[r-1].shape[3])
-        #     self.array[r] = nparray
-        #     # print('r = ',r)
-
-        #     if r == self.resolutions - 1:
-        #         self.pyramid_inspector(r=r, num_axes=num_axes,
-        #                                width = self.image.series[r].pages[0].tags["ImageWidth"].value,
-        # height = self.image.series[r].pages[0].tags["ImageLength"].value
-        #                                )
-
-        # for i in self.array:
-        #     print("level: ", i)
-        #     print("shape: ", self.array[i].shape)
-        # # numbers of channels and z using t = 0
+        
 
     def __getitem__(self, key):
         "r t c z y x (s)"
@@ -390,13 +344,17 @@ class tiff_loader:
         tile_size = int(self.tile_size[0])
         tp = tuple(filter(lambda x: x is not None, (t, c, z)))
         # print("tp",tp)
-        
-        return self.arrays[r][*tp, y * tile_size:(y + 1) * tile_size, x * tile_size:(x + 1) * tile_size]
+        result = self.arrays[r][*tp, y * tile_size:(y + 1) * tile_size, x * tile_size:(x + 1) * tile_size]
+        cache_key = f'opsd_{self.datapath}-{key[0]}-{key[1]}-{key[2]}-{key[3]}-{key[4]}--{key[5]}'
+        if self.cache is not None:
+                self.cache.set(cache_key, result, expire=None, tag=self.datapath, retry=True)
+        return result
         numpy_array = np.random.randint(0, 255, size=(256, 256, 3), dtype=np.uint8)
         return numpy_array
 
     def pyramid_validators(self, tif):
         inspector_result = self.pyramid_inspectors(tif)
+        # inspector_result = False
         print(f"inspector_result: {inspector_result}")
         if inspector_result:
             return 
@@ -406,13 +364,13 @@ class tiff_loader:
 
     def pyramid_inspectors(self, tif):
         series = tif.series[0]
-        if tif.filename.endswith("ome.tif"):
+        if tif.filename.endswith(".ome.tif") or tif.filename.endswith(".ome-tif") or tif.filename.endswith(".ome.tiff") or tif.filename.endswith(".ome-tiff"):
             if series.is_pyramidal:
                 # may need more check opeation
                 return True
             else:
                 return False
-        elif tif.filename.endswith(".tif"):
+        elif tif.filename.endswith(".tif") or tif.filename.endswith(".tiff"):
             for r in range(len(tif.series)):
                 if r != 0 and (
                     tif.series[r].shape[self.axes_pos_dic.get("Y")]
@@ -437,41 +395,76 @@ class tiff_loader:
             extension_index = self.location.rfind('.ome.tif')
             file = self.location[:extension_index]
             extension = '.ome.tif'
+        elif self.location.endswith('.ome.tiff'):
+            extension_index = self.location.rfind('.ome.tiff')
+            file = self.location[:extension_index]
+            extension = '.ome.tiff'
+        elif self.location.endswith('.ome-tiff'):
+            extension_index = self.location.rfind('.ome-tiff')
+            file = self.location[:extension_index]
+            extension = '.ome-tiff'
+        elif self.location.endswith('.ome-tif'):
+            extension_index = self.location.rfind('.ome-tif')
+            file = self.location[:extension_index]
+            extension = '.ome-tif'
         elif self.location.endswith('.tif'):
             extension_index = self.location.rfind('.tif')
             file = self.location[:extension_index]
             extension = '.tif'
+        elif self.location.endswith('.tiff'):
+            extension_index = self.location.rfind('.tiff')
+            file = self.location[:extension_index]
+            extension = '.tiff'
+        
         return [file,extension]
     def pyramid_builders(self, tif):
         hash_value = calculate_hash(self.location)
-        if self.pyramid_dic.get(hash_value):
+        pyramids_images_store = self.settings.get('tif_loader', 'pyramids_images_store')
+        suffix = '.ome.tif'
+        pyramid_image_location = pyramids_images_store  + hash_value + suffix
+        if self.pyramid_dic.get(hash_value) and os.path.exists(pyramid_image_location):
             self.location = self.pyramid_dic.get(hash_value)
             print('Location replaced by generated pyramid image')
-            # return tifffile.TiffFile(self.pyramid_dic.get(self.location))
         else:
-            if tif.filename.endswith("ome.tif"):
-                # write ome.tif pyramids
-                self.pyramid_building_process(tif.series[0].level[0],2,hash_value)
-                print('pyramid image building complete!')
-            elif tif.filename.endswith("tif"):
-                print('pyramid image is building...')
-                start_time = time.time()
-                # write tif pyramids
-                self.pyramid_building_process(tif.series[0],2,hash_value)
-                end_time = time.time()
-                execution_time = end_time - start_time
-                print(f'pyramid image building complete, execution time: {execution_time}')
-                # pyramid_images = tifffile.imread(self.pyramid_dic.get(self.filename),aszarr=True)
-                # return tif
-    def pyramid_building_process(self, first_series,factor,hash_value):
+            # Avoid other gunicore workers to build pyramids images 
+            if os.path.exists(pyramid_image_location):
+                print("Pyramid image was already built by first worker and picked up now by others")
+                self.pyramid_dic[hash_value] = pyramid_image_location
+                self.location = pyramids_images_store  + hash_value + suffix
+            # 1 hash exists but the pyramid images are deleted during server running
+            # 2 no hash and no pyramid images (first time generation)
+            else:
+                if tif.filename.endswith("ome.tif"):
+                    # write ome.tif pyramids
+                    self.pyramid_building_process(tif.series[0].levels[0],2,hash_value, pyramid_image_location)
+                    print('pyramid image building complete!')
+                elif tif.filename.endswith(".tif") or tif.filename.endswith(".tiff"):
+                    # print('pyramid image is building...')
+                    # start_time = time.time()
+                    # write tif pyramids
+                    self.pyramid_building_process(tif.series[0],2,hash_value, pyramid_image_location)
+                    # end_time = time.time()
+                    # execution_time = end_time - start_time
+                    # print(f'pyramid image building complete, execution time: {execution_time}')
+                    # pyramid_images = tifffile.imread(self.pyramid_dic.get(self.filename),aszarr=True)
+                    # return tif
+    def pyramid_building_process(self, first_series,factor,hash_value, pyramid_image_location):
+        print('pyramid image is building...')
+        start_time = time.time()
         subresolutions = self.divide_time(first_series.shape,factor,self.tile_size)
+        start_load = time.time()
         data = first_series.asarray()
+        # data = tifffile.imread(self.location)
+        end_load = time.time()
+        load_time = end_load - start_load
+        print(f'time for loading first series or level: {load_time}')
         pixelsize = 0.29  # micrometer
         # prefix = 'py_'
-        suffix = '.ome.tif'
-        pyramids_images_store = self.settings.get('tif_loader', 'pyramids_images_store')
-        pyramid_image_location = pyramids_images_store  + calculate_hash(self.location) + suffix
+        # suffix = '.ome.tif'
+        # pyramids_images_store = self.settings.get('tif_loader', 'pyramids_images_store')
+        # pyramid_image_location = pyramids_images_store  + hash_value + suffix
         with tifffile.TiffWriter(pyramid_image_location, bigtiff=True) as tif:
+            
             metadata={
                 'axes': self.type,
                 'SignificantBits': 10,
@@ -490,6 +483,7 @@ class tiff_loader:
                 compression=self.compression,
                 resolutionunit='CENTIMETER'
             )
+            
             tif.write(
                 data,
                 subifds=subresolutions,
@@ -515,6 +509,10 @@ class tiff_loader:
                         resolution=(1e4 / mag / pixelsize, 1e4 / mag / pixelsize),
                         **options
                     )
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f'time for actual pyramid generation: {execution_time - load_time}')
+        print(f'pyramid image building complete, total execution time: {execution_time}')
         self.pyramid_dic[hash_value] = pyramid_image_location
         self.location = pyramid_image_location
         
