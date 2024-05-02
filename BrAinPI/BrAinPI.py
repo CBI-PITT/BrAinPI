@@ -51,7 +51,7 @@ settings = config_tools.get_config('settings.ini')
 #     )
 config = config_tools.config()
 # Read settings.ini file and append to the config class
-config.settings = config_tools.get_config('settings.ini') #<-- need to add this to config class so each chunk access doesn't require a read of settings file
+# config.settings = config_tools.get_config('settings.ini') #<-- need to add this to config class so each chunk access doesn't require a read of settings file
 
 # Establish constants based on settings.ini
 TEMPLATE_DIR = os.path.abspath(settings.get('app','templates_location'))
