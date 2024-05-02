@@ -5,12 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Deep Zoom Viewer</title>
     <!-- Include OpenSeadragon library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.4.2/openseadragon.min.js"></script>
-    <!-- Optional: OpenSeadragon default styles -->
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.4.2/openseadragon.min.css"
-    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.3.1/openseadragon.min.js"></script>
     <!-- CSS for viewer container -->
     <style>
       html,
@@ -154,7 +149,7 @@
           viewer = OpenSeadragon({
               id: "viewer",
               // Optional: set prefixUrl for OpenSeadragon images (e.g., zoom in/out icons)
-              prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.4.2/images/",
+              prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/images/",
               backgroundColor: "#333333",
               tileCache: true,
               showNavigator: true, // Enable the image navigator control
@@ -173,7 +168,7 @@
               // maxLevel:maxLevel: {{resolutions}} - 1,
               getTileUrl: function(level, x, y) {
                   var reversedLevel = this.maxLevel - level;
-                  return "http://localhost:5001/{{parent_url}}/" +
+                  return "{{host}}/{{parent_url}}/" +
                       reversedLevel + "/" + t_point +"/"+channel + "/" +z_stack + "/" + y + "/" + x + "/" + "r" + 
                       reversedLevel + "-t" + t_point +"-c" + channel +  "-z" + z_stack +"-y" + y + "-x" + x + ".png";
               }
