@@ -17,6 +17,8 @@ import requests
 from skimage import img_as_float32, img_as_float64, img_as_uint, img_as_ubyte
 import difflib
 import datetime
+import logging
+# from watchdog.events import FileSystemEventHandler
 
 
 import s3_utils
@@ -33,6 +35,15 @@ from flask import (
     )
 
 import blosc
+
+# class Handler(FileSystemEventHandler):
+#   def on_created(self, event):
+#     print(f"A file was created: {event.src_path}")
+
+#   def on_deleted(self, event):
+#     print(f"A file was deleted: {event.src_path}")
+
+
 
 
 def format_file_size(in_bytes):
