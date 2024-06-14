@@ -1,231 +1,184 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Deep Zoom Viewer</title>
-    <!-- Include OpenSeadragon library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.3.1/openseadragon.min.js"></script>
-    <!-- CSS for viewer container -->
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        /* overflow: hidden; */
-      }
-      /* Set the OpenSeadragon viewer container to occupy the full viewport */
-      #viewer {
-    width: 100%;
-    height: 95%;
-    /* margin: 3%; */
-    background-color: #e9c5c5; /* Light gray background */
-    border: 1px solid #ddd; /* Light gray border */
-    border-radius: 5px;
-    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow effect */
-    overflow: hidden; /* Hide overflow content */
-    position: relative;
-}
 
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deep Zoom Viewer</title>
+  <!-- Include OpenSeadragon library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.3.1/openseadragon.min.js"></script>
+  <!-- CSS for viewer container -->
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      /* overflow: hidden; */
+    }
 
-/* Style for the loading spinner */
-.spinner {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-      #control_panel {
-    background-color: #f0f0f0;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    padding: 15px;
-    /* margin-bottom: 20px; */
-    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
-    font-family: Arial, sans-serif;
-  }
-
-  #control_panel select {
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 3px;
-    font-size: 14px;
-    margin-right: 10px;
-  }
-
-  #control_panel select:focus {
-    outline: none;
-    border-color: #4CAF50;
-  }
-    </style>
-  </head>
-  <body>
-    <!-- Viewer container
-    <select id="channelSelect">
-      {% for channel in range(value) %}
-      <option value="{{ channel }}" {% if channel == 0 %} selected {% endif %}>Channel {{ channel }}</option>
-    {% endfor %}
-
-    </select>
-    <div id="viewer"></div>
-    <script>
-      var viewer = OpenSeadragon({
-        id: "viewer",
-        // Optional: set prefixUrl for OpenSeadragon images (e.g., zoom in/out icons)
-        prefixUrl:
-          "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.4.2/images/",
-        // Specify the path to the DZI file
-        // tileSources: "/BrainPI_image_data/output_5gb/output_5gb.dzi",
-        tileSources: {
-          height:{{height}},
-          width:{{width}},
-          tileSize:{{tileSize}},
-          // minLevel:0,
-          // maxLevel:maxLevel: {{resolutions}} - 1,
-          getTileUrl: function( level, x, y ){
-            var reversedLevel = this.maxLevel - level;
-        return "http://localhost:5001/{{parent_url}}" + "/" +
-        reversedLevel + "/" + "{{ channel_value }}" + "/" + y +"/"+ x + "/"+
-        reversedLevel + "-channel" + {{ channel_value }} + "-r" + y + "-c" + x + ".png";
-          }
-        },
-        backgroundColor: "#333333",
-        tileCache: true,
-        showNavigator: true, // Enable the image navigator control
-        navigatorPosition: 'TOP_RIGHT', // Set the position of the image navigator
-        navigatorSizeRatio: 0.2
-      });
-
-
-      function updateViewer(selectedChannel) {
-      var tileSource;
+    /* Set the OpenSeadragon viewer container to occupy the full viewport */
+    #viewer {
+      width: 100%;
+      height: 95%;
+      /* margin: 3%; */
+      background-color: #e9c5c5;
+      /* Light gray background */
+      border: 1px solid #ddd;
+      /* Light gray border */
+      border-radius: 5px;
+      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+      /* Subtle shadow effect */
+      overflow: hidden;
+      /* Hide overflow content */
+      position: relative;
     }
 
 
-      document.getElementById("channelSelect").addEventListener("change", function(event) {
-      // Get the selected value from the dropdown list
-      var selectedChannel = event.target.value;
-      // Update the viewer based on the selected image
-      updateViewer(selectedChannel);
-    });
-    </script> -->
-   
-    
-  <!-- <input type="range" id="channelSlider" min="0" max="{{ value - 1 }}" value="0"> -->
-  <div id = "control_panel">
+    /* Style for the loading spinner */
+    .spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    #control_panel {
+      background-color: #f0f0f0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 15px;
+      /* margin-bottom: 20px; */
+      box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+      font-family: Arial, sans-serif;
+    }
+
+    #control_panel select {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+
+    #control_panel select:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="control_panel">
     Time Point
     <select id="t_point_select">
-      
+
       {% for t in range(t_point) %}
-      <option value="{{ t }}" {% if t == 0 %} selected {% endif %}> {{ t }}</option>
+      <option value="{{ t }}" {% if t==0 %} selected {% endif %}> {{ t }}</option>
       {% endfor %}
     </select>
     Channel
     <select id="channelSelect">
       {% for channel in range(value) %}
-      <option value="{{ channel }}" {% if channel == 0 %} selected {% endif %}> {{ channel }}</option>
+      <option value="{{ channel }}" {% if channel==0 %} selected {% endif %}> {{ channel }}</option>
       {% endfor %}
     </select>
     Z Stack
     <select id="z_stack_select">
       {% for z in range(z_stack) %}
-      <option value="{{ z }}" {% if z == 0 %} selected {% endif %}> {{ z }}</option>
+      <option value="{{ z }}" {% if z==0 %} selected {% endif %}> {{ z }}</option>
       {% endfor %}
     </select>
   </div>
   <div id="viewer"></div>
 
-  
-    
-    
-
-  
   <script>
-      var viewer;
+    var viewer;
+    const maxLevel = Math.ceil(Math.log2(Math.max('{{ width }}',' {{ height }}') / '{{  tileSize }}'));
+    function initializeViewer(t_point, channel, z_stack) {
+      viewer = OpenSeadragon({
+        id: "viewer",
+        // Optional: set prefixUrl for OpenSeadragon images (e.g., zoom in/out icons)
+        prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/images/",
+        backgroundColor: "#333333",
+        tileCache: true,
+        showNavigator: true, // Enable the image navigator control
+        navigatorPosition: 'TOP_RIGHT', // Set the position of the image navigator
+        navigatorSizeRatio: 0.2,
+        tileSources: generateTileSource(t_point, channel, z_stack)
+      });
+    }
 
-      function initializeViewer(t_point,channel, z_stack) {
-          viewer = OpenSeadragon({
-              id: "viewer",
-              // Optional: set prefixUrl for OpenSeadragon images (e.g., zoom in/out icons)
-              prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.1/images/",
-              backgroundColor: "#333333",
-              tileCache: true,
-              showNavigator: true, // Enable the image navigator control
-              navigatorPosition: 'TOP_RIGHT', // Set the position of the image navigator
-              navigatorSizeRatio: 0.2,
-              tileSources: generateTileSource(t_point,channel, z_stack)
-          });
+    function generateTileSource(t_point, channel, z_stack) {
+      return {
+        height: parseInt('{{ height }}'),
+        width: parseInt('{{ width }}'),
+        tileSize: parseInt('{{ tileSize }}'),
+        minLevel: 0,
+        maxLevel: maxLevel,
+        getTileUrl: function (level, x, y) {
+          var reversedLevel = maxLevel - level;
+          // console.log(maxLevel,level)
+          return "{{host}}/{{parent_url}}/" +
+            reversedLevel + "/" + t_point + "/" + channel + "/" + z_stack + "/" + y + "/" + x + "/" + "r" +
+            reversedLevel + "-t" + t_point + "-c" + channel + "-z" + z_stack + "-y" + y + "-x" + x + ".png";
+        }
+      };
+    }
+
+    function updateViewer(selected_t_point, selectedChannel, selected_z_stack) {
+      viewer.open(generateTileSource(selected_t_point, selectedChannel, selected_z_stack));
+    }
+
+    // Initialize the viewer with the default channel
+    initializeViewer(0, 0, 0);
+    document.addEventListener("DOMContentLoaded", function () {
+      // Add event listener for channel selection change
+      var channelSelect = document.getElementById("channelSelect");
+      if (channelSelect) {
+        channelSelect.addEventListener("change", function (event) {
+          var selectedChannel = parseInt(event.target.value);
+          var selectedZStack = parseInt(document.getElementById("z_stack_select").value);
+          var selectedTpoint = parseInt(document.getElementById("t_point_select").value);
+          updateViewer(selectedTpoint, selectedChannel, selectedZStack);
+        });
       }
 
-      function generateTileSource(t_point,channel, z_stack) {
-          return {
-              height: {{height}},
-              width: {{width}},
-              tileSize: {{tileSize}},
-              // minLevel:0,
-              // maxLevel:maxLevel: {{resolutions}} - 1,
-              getTileUrl: function(level, x, y) {
-                  var reversedLevel = this.maxLevel - level;
-                  return "{{host}}/{{parent_url}}/" +
-                      reversedLevel + "/" + t_point +"/"+channel + "/" +z_stack + "/" + y + "/" + x + "/" + "r" + 
-                      reversedLevel + "-t" + t_point +"-c" + channel +  "-z" + z_stack +"-y" + y + "-x" + x + ".png";
-              }
-          };
+      // Add event listener for z-stack selection change
+      var zStackSelect = document.getElementById("z_stack_select");
+      if (zStackSelect) {
+        zStackSelect.addEventListener("change", function (event) {
+          var selectedTpoint = parseInt(document.getElementById("t_point_select").value);
+          var selectedZStack = parseInt(event.target.value);
+          var selectedChannel = parseInt(document.getElementById("channelSelect").value);
+          updateViewer(selectedTpoint, selectedChannel, selectedZStack);
+        });
       }
 
-      function updateViewer(selected_t_point,selectedChannel,selected_z_stack) {
-          viewer.open(generateTileSource(selected_t_point,selectedChannel,selected_z_stack));
+      var tPointSelect = document.getElementById("t_point_select");
+      if (tPointSelect) {
+        tPointSelect.addEventListener("change", function (event) {
+          var selectedTpoint = parseInt(event.target.value);
+          var selectedZStack = parseInt(document.getElementById("z_stack_select").value);
+          var selectedChannel = parseInt(document.getElementById("channelSelect").value);
+          updateViewer(selectedTpoint, selectedChannel, selectedZStack);
+        });
       }
-
-      // Initialize the viewer with the default channel
-      initializeViewer(0,0,0);
-      document.addEventListener("DOMContentLoaded", function() {
-        // Add event listener for channel selection change
-        var channelSelect = document.getElementById("channelSelect");
-        if (channelSelect) {
-            channelSelect.addEventListener("change", function(event) {
-                var selectedChannel = parseInt(event.target.value);
-                var selectedZStack = parseInt(document.getElementById("z_stack_select").value);
-                var selectedTpoint = parseInt(document.getElementById("t_point_select").value);
-                updateViewer(selectedTpoint,selectedChannel, selectedZStack);
-            });
-        }
-
-        // Add event listener for z-stack selection change
-        var zStackSelect = document.getElementById("z_stack_select");
-        if (zStackSelect) {
-            zStackSelect.addEventListener("change", function(event) {
-                var selectedTpoint = parseInt(document.getElementById("t_point_select").value);
-                var selectedZStack = parseInt(event.target.value);
-                var selectedChannel = parseInt(document.getElementById("channelSelect").value);
-                updateViewer(selectedTpoint,selectedChannel, selectedZStack);
-            });
-        }
-
-        var tPointSelect = document.getElementById("t_point_select");
-        if (tPointSelect) {
-            tPointSelect.addEventListener("change", function(event) {
-                var selectedTpoint = parseInt(event.target.value);
-                var selectedZStack = parseInt(document.getElementById("z_stack_select").value);
-                var selectedChannel = parseInt(document.getElementById("channelSelect").value);
-                updateViewer(selectedTpoint,selectedChannel, selectedZStack);
-            });
-        }
     });
-      // document.getElementById("channelSelect").addEventListener("change", function(event) {
-      //     // Get the selected value from the dropdown list
-      //     var selectedChannel = event.target.value;
-      //     // Update the viewer based on the selected channel
-      //     updateViewer(selectedChannel);
-      // });
-      // document.getElementById("z_stack_select").addEventListener("change", function(event) {
-      //     // Get the selected value from the dropdown list
-      //     var selected_z_stack = event.target.value;
-      //     // Update the viewer based on the selected channel
-      //     updateViewer(selected_z_stack);
-      // });
+    // document.getElementById("channelSelect").addEventListener("change", function(event) {
+    //     // Get the selected value from the dropdown list
+    //     var selectedChannel = event.target.value;
+    //     // Update the viewer based on the selected channel
+    //     updateViewer(selectedChannel);
+    // });
+    // document.getElementById("z_stack_select").addEventListener("change", function(event) {
+    //     // Get the selected value from the dropdown list
+    //     var selected_z_stack = event.target.value;
+    //     // Update the viewer based on the selected channel
+    //     updateViewer(selected_z_stack);
+    // });
 
     //   document.getElementById("channelSlider").addEventListener("input", function(event) {
     //     // Get the selected value from the slider
@@ -234,5 +187,6 @@
     //     updateViewer(selectedChannel);
     // });
   </script>
-  </body>
+</body>
+
 </html>
