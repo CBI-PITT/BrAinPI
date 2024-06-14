@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    {% if gtag %}
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id={{gtag}}"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "{{gtag}}");
+    </script>
+    {% endif %}
+    <title>{{ redirect_name }}:{{ description }}</title>
+    <meta http-equiv="refresh" content="0; url='{{ redirect_url }}'" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      /* Center the content vertically and horizontally */
+      html,
+      body {
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: #f0e9e9; /* Light gray background */
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; /* Font style */
+        color: #ece6e6; /* Dark gray color for text */
+      }
+      /* Style the container */
+      .container {
+        text-align: center; /* Center the content */
+        background-color: #e7dcdc; /* White background */
+        padding: 30px; /* Add padding */
+        border-radius: 10px; /* Rounded corners */
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Add shadow */
+      }
+      .loading-img {
+        border-radius: 1%; /* Make the image round */
+        box-shadow: 10px 10px 10px rgb(104, 81, 81); /* Add shadow to the image (right and bottom) */
+        margin-bottom: 20px; /* Margin space below the image */
+      }
+      /* Style the loading text */
+      .loading-text {
+        font-size: 24px; /* Font size */
+        font-weight: bold; /* Bold font weight */
+        margin-bottom: 20px; /* Margin space below the text */
+        color: #333; /* Dark gray color */
+      }
+      /* Style for the information text */
+      .info-text {
+        font-size: 18px; /* Font size */
+        font-style: italic; /* Italic font style */
+        text-align: left; /* Align text to the left */
+        color: #666; /* Medium gray color */
+        margin-top: 10px; /* Margin space at the top */
+      }
+      /* Style the loading spinner */
+      .loader {
+        border: 5px solid #3498db; /* Blue border for spinner */
+        border-top: 5px solid #f3f3f3; /* Light gray border */
+        border-radius: 50%; /* Rounded border for circle shape */
+        width: 30px; /* Width of the spinner */
+        height: 30px; /* Height of the spinner */
+        animation: spin 1s linear infinite; /* Animation for rotation */
+        margin: 20px auto; /* Center the spinner horizontally with margin */
+      }
+      /* Animation for rotation */
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Container for the content -->
+    <div class="container">
+      <!-- Image -->
+      <img
+        src="{{ url_for('static', filename='images/file_loading.png')}}"
+        alt="Loading img"
+        class="loading-img"
+      />
+      <!-- Loading text -->
+      <div class="loading-text">File: {{file_name}} is being loaded...</div>
+      <!-- Loading spinner -->
+      <div class="loader"></div>
+      <!-- Information text -->
+      <ul class="info-list">
+        <li class="info-text">
+          Image loading time varies by image size and type.
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

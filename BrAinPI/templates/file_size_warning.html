@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    {% if gtag %}
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id={{gtag}}"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "{{gtag}}");
+    </script>
+    {% endif %}
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>File Size Warning</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      .container {
+        text-align: center; /* Center the content */
+        background-color: #e7dcdc; /* White background */
+        padding: 30px; /* Add padding */
+        border-radius: 10px; /* Rounded corners */
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Add shadow */
+      }
+      .warning-img {
+        border-radius: 1%; /* Make the image round */
+        box-shadow: 10px 10px 10px rgb(104, 81, 81); /* Add shadow to the image (right and bottom) */
+        margin-bottom: 20px; /* Margin space below the image */
+      }
+      h1 {
+        color: #dc3545;
+        font-size: 24px;
+        margin-bottom: 20px;
+      }
+      p {
+        color: #6c757d;
+        font-size: 18px;
+        margin-bottom: 20px;
+      }
+      .file-size {
+        font-weight: bold;
+        color: #495057;
+      }
+      /* .button {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        } */
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img
+        src="{{ url_for('static', filename='images/file_size_exceed.png')}}"
+        alt="Warning img"
+        class="warning-img"
+      />
+      <h1>Warning: File Size Limit Exceeded</h1>
+      <p>
+        Due to resource constraints, image files that do not have a pyramid
+        structure and are larger than
+        <span class="file-size">{{variable}}GB</span> cannot participate in the
+        pyramid generation process.
+      </p>
+      <!-- <a href="#" class="button" onclick="history.back()">Go Back</a> -->
+    </div>
+  </body>
+</html>
