@@ -174,7 +174,7 @@ def setup_extractor_endpoint(app, config):
         elif isinstance(resolution, (int,float)):
             resolution = (resolution,resolution,resolution)
 
-        datapath = config.loadDataset(datapath)
+        datapath = config.loadDataset(datapath,datapath)
 
         output = get_Volume_At_Specific_Resolution(
             config.opendata[datapath], output_resolution=resolution, time_point=time_point, channel=channel, anti_aliasing=False
