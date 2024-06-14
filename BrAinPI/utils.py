@@ -17,9 +17,9 @@ import requests
 from skimage import img_as_float32, img_as_float64, img_as_uint, img_as_ubyte
 import difflib
 import datetime
-import logging
+# import logging
 # from watchdog.events import FileSystemEventHandler
-
+# from watchdog.observers import Observer
 
 import s3_utils
 
@@ -35,16 +35,12 @@ from flask import (
     )
 
 import blosc
+import hashlib
 
-# class Handler(FileSystemEventHandler):
-#   def on_created(self, event):
-#     print(f"A file was created: {event.src_path}")
-
-#   def on_deleted(self, event):
-#     print(f"A file was deleted: {event.src_path}")
-
-
-
+def calculate_hash(input_string):
+    # Calculate the SHA-256 hash of the input string
+    hash_result = hashlib.sha256(input_string.encode()).hexdigest()
+    return hash_result       
 
 def format_file_size(in_bytes):
     '''
