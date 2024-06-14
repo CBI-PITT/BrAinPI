@@ -24,8 +24,9 @@ from flask_cors import cross_origin
 
 # from urllib.parse import quote
 
-from file_type_support import ng_links
+from file_type_support import ng_links,opsd_links
 from neuroGlancer import neuroglancer_dtypes
+from openSeadragon import openseadragon_dtypes
 from utils import (from_path_to_html,
                    get_path_map,
                    dict_key_value_match,
@@ -42,6 +43,11 @@ def inititate(app,config):
     @cross_origin(allow_headers=['Content-Type'])
     def neuroglancer_support():
         return jsonify(neuroglancer_dtypes())
+    
+    @app.route('/opsd_supported_filetypes/', methods=['GET'])
+    @cross_origin(allow_headers=['Content-Type'])
+    def opsd_support():
+        return jsonify(openseadragon_dtypes())
 
     @app.route('/path_to_html_options/', methods=['GET'])
     @cross_origin(allow_headers=['Content-Type'])
@@ -56,22 +62,22 @@ def inititate(app,config):
             verify_file_exists = False
         return jsonify(path_to_html_options(request.args['path'],verify_file_exists=verify_file_exists))
 
-    paths = {}
-    paths['path'] = None
+    # paths = {}
+    # paths['path'] = None
 
-    paths['neuroglancer'] = None
-    paths['neuroglancer_metadata'] = None
+    # paths['neuroglancer'] = None
+    # paths['neuroglancer_metadata'] = None
 
-    paths['omezarr'] = None
-    paths['omezarr_neuroglancer_optimized'] = None
-    paths['omezarr_8bit'] = None
-    paths['omezarr_8bit_neuroglancer_optimized'] = None
-    paths['omezarr_metadata'] = None
-    paths['omezarr_8bit_metadata'] = None
-    paths['omezarr_validator'] = None
-    paths['omezarr_8bit_validator'] = None
-    paths['omezarr_neuroglancer_optimized'] = None
-    paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
+    # paths['omezarr'] = None
+    # paths['omezarr_neuroglancer_optimized'] = None
+    # paths['omezarr_8bit'] = None
+    # paths['omezarr_8bit_neuroglancer_optimized'] = None
+    # paths['omezarr_metadata'] = None
+    # paths['omezarr_8bit_metadata'] = None
+    # paths['omezarr_validator'] = None
+    # paths['omezarr_8bit_validator'] = None
+    # paths['omezarr_neuroglancer_optimized'] = None
+    # paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
 
     def path_to_html_options(path, verify_file_exists=True):
         '''
@@ -86,23 +92,24 @@ def inititate(app,config):
         if len(key.strip()) == 0 or len(key.strip()) == '/':
             key = '/'
 
-        # paths = {}
+        paths = {}
         paths['path'] = key
 
-        # paths['neuroglancer'] = None
-        # paths['neuroglancer_metadata'] = None
-        #
-        # paths['omezarr'] = None
-        # paths['omezarr_neuroglancer_optimized'] = None
-        # paths['omezarr_8bit'] = None
-        # paths['omezarr_8bit_neuroglancer_optimized'] = None
-        # paths['omezarr_metadata'] = None
-        # paths['omezarr_8bit_metadata'] = None
-        # paths['omezarr_validator'] = None
-        # paths['omezarr_8bit_validator'] = None
-        # paths['omezarr_neuroglancer_optimized'] = None
-        # paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
-
+        paths['neuroglancer'] = None
+        paths['neuroglancer_metadata'] = None
+        
+        paths['omezarr'] = None
+        paths['omezarr_neuroglancer_optimized'] = None
+        paths['omezarr_8bit'] = None
+        paths['omezarr_8bit_neuroglancer_optimized'] = None
+        paths['omezarr_metadata'] = None
+        paths['omezarr_8bit_metadata'] = None
+        paths['omezarr_validator'] = None
+        paths['omezarr_8bit_validator'] = None
+        paths['omezarr_neuroglancer_optimized'] = None
+        paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
+        paths['openseadragon'] = None
+        paths['openseadragon_metadata'] = None
 
         print(f"{paths['path']=}")
         if verify_file_exists:
@@ -120,7 +127,9 @@ def inititate(app,config):
             req_path = html_path.replace(html_base, '')
             print(req_path)
             ng_link = ng_links('/' + req_path)
+            opsd_link = opsd_links('/' + req_path)
             print('ng_link', ng_link)
+            print('opsd_link', opsd_link)
             if ng_link is not None:
                 validator_url = 'https://ome.github.io/ome-ngff-validator'
                 validator_url = validator_url + '/?source='
@@ -147,9 +156,17 @@ def inititate(app,config):
                 # Probably others that are missing
                 for key,value in paths.items():
                     # Replace space with %20 (' ')
-                    if value.startswith('http'):
+                    if value is not None and value.startswith('http'):
                         paths[key] = fix_special_characters_in_html(value)
+            if opsd_link is not None:
+                opsd_link = html_base + '/' + strip_leading_trailing_slash(opsd_link)
 
+                paths['openseadragon'] = opsd_link
+                paths['openseadragon_metadata'] = paths['openseadragon'] + '/info'
+                for key,value in paths.items():
+                    # Replace space with %20 (' ')
+                    if value is not None and value.startswith('http'):
+                        paths[key] = fix_special_characters_in_html(value)
         return paths
 
     # @app.route('/curated_datasets/', methods=['GET'])
