@@ -406,7 +406,7 @@ def neuroglancer_dtypes():
 
 def open_ng_dataset(config,datapath):
     
-    datapath = config.loadDataset(datapath)
+    datapath = config.loadDataset(datapath,datapath)
 
     print('IN OPEN NG DATASET 411')
     
