@@ -2,7 +2,7 @@ body{
   font-family: arial, sans-serif;
   display:grid;
  
-  grid-template-rows: .1fr auto .1fr;
+  grid-template-rows: auto 1fr auto;
   height:100vh;
   
 }
@@ -48,7 +48,7 @@ a.cb-button{
   }
 
 .cb-button:hover{
-  â€ƒbackground-color:#4095c6;
+  background-color:#4095c6;
   }
  /*
   @media all and (max-width:30em){
