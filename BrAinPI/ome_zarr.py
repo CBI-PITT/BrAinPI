@@ -427,7 +427,7 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
 
 def open_omezarr_dataset(config,datapath):
 
-    datapath = config.loadDataset(datapath)
+    datapath = config.loadDataset(datapath,datapath)
 
     # if not hasattr(config.opendata[datapath],'ng_json'):
         # or not hasattr(config.opendata[datapath],'ng_files'):
