@@ -402,6 +402,7 @@ def neuroglancer_dtypes():
         '.zarr', #Custom multiscale zarr implementation
         # '.weave',
         # '.z_sharded'
+        '.terafly'
         ]
 
 def open_ng_dataset(config,datapath):
@@ -543,6 +544,8 @@ def setup_neuroglancer(app, config):
             if config.cache is not None:
                 key = f'ng_{datapath}-{res}-{x}-{y}-{z}'
                 img = config.cache.get(key, default=None, retry=True)
+                if img is not None:
+                    print('cached encoded ng chunck found')
 
             if img is None:
                 img = config.opendata[datapath][
