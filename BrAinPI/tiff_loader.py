@@ -486,7 +486,7 @@ class tiff_loader:
         z = int(key[3]) if self.axes_value_dic.get("Z") else None
         y = int(key[4])
         x = int(key[5])
-        tile_size_heiht = int(self.tile_size[0])
+        tile_size_height = int(self.tile_size[0])
         tile_size_width = int(self.tile_size[1])
         tp = tuple(filter(lambda x: x is not None, (t, c, z)))
         # print("tp",tp)
@@ -502,11 +502,21 @@ class tiff_loader:
         #     zarr_array = self.image.aszarr(series=0, level=r)
         #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=r)
         zarr_store = zarr.open(zarr_array)
-        result = zarr_store[
-            *tp,
-            y * tile_size_heiht : (y + 1) * tile_size_heiht,
-            x * tile_size_width : (x + 1) * tile_size_width,
-        ]
+
+        index_tuple = tp + (
+        slice(y * tile_size_height, (y + 1) * tile_size_height),
+        slice(x * tile_size_width, (x + 1) * tile_size_width)
+        )
+
+        # Index into zarr_store using the constructed tuple
+        result = zarr_store[index_tuple]
+
+        # Here for python > 3.11, to use the unpack operator *
+        # result = zarr_store[
+        #     *(tp),
+        #     y * tile_size_heiht : (y + 1) * tile_size_heiht,
+        #     x * tile_size_width : (x + 1) * tile_size_width,
+        # ]
 
         # numpy_array = np.random.randint(0, 255, size=(256, 256, 3), dtype=np.uint8)
         # return numpy_array
