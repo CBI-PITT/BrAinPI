@@ -1,5 +1,4 @@
 import itertools
-
 import numpy as np
 import os
 import re
@@ -19,11 +18,17 @@ class terafly_loader:
         self.ResolutionLevelLock = (
             0 if ResolutionLevelLock is None else ResolutionLevelLock
         )
+
+        # todo later
+        # ok for the current imgs we have
+        # assign to 1 and seems no time point can be obtained by the functions provided
         self.TimePoints = 1
+
         self.array = {}
         self.metaData = {}
         for res, file in enumerate(file_list):
             self.array[res] = TeraflyInterface(file)
+            # get the numbers of channel and the data type
             if res == len(file_list) - 1:
                 self.dtype = str(self.array[res].get_sub_volume(0, 1, 0, 1, 0, 1).dtype)
                 dim_x_y_z_c = self.array[res].get_dim()
@@ -160,6 +165,8 @@ class terafly_loader:
             z_start = 0
             z_stop = dim_x_y_z[2]
         # print(x_start, x_stop, y_start, y_stop, z_start, z_stop)
+
+        # returns the specific chuncks with all channels if available
         result = self.array[r].get_sub_volume(
             x_start, x_stop, y_start, y_stop, z_start, z_stop
         )
