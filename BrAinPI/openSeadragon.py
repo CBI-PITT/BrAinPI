@@ -16,6 +16,8 @@ import tifffile
 from tiff_loader import tif_file_precheck
 import gc
 from pympler import asizeof
+
+
 def openseadragon_dtypes():
     return [".tif", ".tiff", ".ome.tif", ".ome.tiff", ".ome-tif", ".ome-tiff"]
 
@@ -30,10 +32,12 @@ openSeadragonPath = "/op_seadragon/"
 
 
 def setup_openseadragon(app, config):
-    allowed_file_size_gb = int(config.settings.get('tif_loader', 'pyramids_images_allowed_generation_size_gb'))
+    allowed_file_size_gb = int(
+        config.settings.get("tif_loader", "pyramids_images_allowed_generation_size_gb")
+    )
     allowed_file_size_byte = allowed_file_size_gb * 1024 * 1024 * 1024
     # print('allowed_file_size',allowed_file_size_byte)
-     
+
     get_html_split_and_associated_file_path = (
         utils.get_html_split_and_associated_file_path
     )
@@ -41,22 +45,23 @@ def setup_openseadragon(app, config):
     def openseadragon_entry(req_path):
         path_split, datapath = get_html_split_and_associated_file_path(config, request)
         print(path_split, datapath)
-        
-        
+
         if utils.split_html(datapath)[-1].endswith(tuple(openseadragon_dtypes())):
             datapath_split = datapath.split("/")
             file_name = datapath_split[-1]
-            
+
             view_path = request.path + "/view"
-            file_precheck_info = ''
+            file_precheck_info = ""
             try:
                 file_precheck_info = tif_file_precheck(datapath)
-                print(f'----------\n file precheck info, is_pyramidal: {file_precheck_info.is_pyramidal}, inspector result: {file_precheck_info.inspectors_result}\n----------')
-            except Exception as e :
+                print(
+                    f"----------\n file precheck info, is_pyramidal: {file_precheck_info.is_pyramidal}, inspector result: {file_precheck_info.inspectors_result}\n----------"
+                )
+            except Exception as e:
                 return render_template(
-                    'file_read_exception.html',
+                    "file_read_exception.html",
                     gtag=config.settings.get("GA4", "gtag"),
-                    exception = e
+                    exception=e,
                 )
             inspector_result = file_precheck_info.inspectors_result
             file_size = file_precheck_info.size
@@ -75,10 +80,10 @@ def setup_openseadragon(app, config):
             else:
                 if file_size > allowed_file_size_byte:
                     return render_template(
-                    "file_size_warning.html",
-                    gtag=config.settings.get("GA4", "gtag"),
-                    variable = allowed_file_size_gb
-                )
+                        "file_size_warning.html",
+                        gtag=config.settings.get("GA4", "gtag"),
+                        variable=allowed_file_size_gb,
+                    )
                 else:
                     return render_template(
                         "py_generation.html",
@@ -87,9 +92,7 @@ def setup_openseadragon(app, config):
                         redirect_name="OpenSeadragon",
                         description=datapath,
                         file_name=file_name,
-                )
-            
-            
+                    )
 
         elif utils.split_html(datapath)[-1].endswith("view"):
             path_split_list = list(path_split)
@@ -105,8 +108,10 @@ def setup_openseadragon(app, config):
             #   mainly used for the generated pyramid images
             if not os.path.exists(tif_obj.datapath):
                 print("may delete")
-                del config.opendata[file_ino +modification_time]
-                datapath_key = config.loadDataset(file_ino + modification_time, datapath)
+                del config.opendata[file_ino + modification_time]
+                datapath_key = config.loadDataset(
+                    file_ino + modification_time, datapath
+                )
                 tif_obj = config.opendata[datapath_key]
             return render_template(
                 "openseadragon_temp.html",
@@ -128,11 +133,11 @@ def setup_openseadragon(app, config):
             stat = os.stat(datapath)
             file_ino = str(stat.st_ino)
             modification_time = str(stat.st_mtime)
-            datapath_key = config.loadDataset(file_ino + modification_time,datapath)
+            datapath_key = config.loadDataset(file_ino + modification_time, datapath)
             # print('datapath', datapath)
-            
+
             tif_obj = config.opendata[datapath_key]
-            
+
             key = datapath_split[-7:-1]
             # return get_slice(tif_obj,key)
             cache_key = f"opsd_{datapath_key}-{key[0]}-{key[1]}-{key[2]}-{key[3]}-{key[4]}--{key[5]}"
@@ -161,9 +166,9 @@ def setup_openseadragon(app, config):
             #     config.cache.set(cache_key, slice, expire=None, tag=datapath, retry=True)
             return Response(slice, mimetype="image/png")
         elif utils.split_html(datapath)[-1].endswith("info"):
-            datapath = datapath.replace('/info','')
+            datapath = datapath.replace("/info", "")
             print(datapath)
-            
+
             # stat = os.stat(datapath)
             # file_ino = str(stat.st_ino)
             # modification_time = str(stat.st_mtime)
