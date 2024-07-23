@@ -13,7 +13,6 @@ from zarr_stores.h5_nested_store import H5_Nested_Store
 import tiff_loader
 import hashlib
 import psutil
-import terafly_loader
 
 def calculate_hash(input_string):
     # Calculate the SHA-256 hash of the input string
@@ -107,6 +106,7 @@ class config:
             # To do for metadata attribute rebuild, currently not compatible
             self.opendata[key] = tiff_loader.tiff_loader(dataPath, self.pyramid_images_connection, self.cache,self.settings)
         elif dataPath.endswith('.terafly'):
+            import terafly_loader
             self.opendata[key] = terafly_loader.terafly_loader(dataPath, squeeze=False,cache=self.cache)
 
         ## Append extracted metadata as attribute to open dataset
