@@ -30,7 +30,7 @@ from flask import (
 import glob, os
 from natsort import natsorted
 import datetime
-
+from logger_tools import logger
 ## Project-specific imports
 import utils, auth
 import file_type_support as fts
@@ -620,7 +620,7 @@ path_info = { # Name of object that tracks path information for browser endpoint
 def get_path_data(base, request):
     # Split the requested path to a tuple that can be reused below
     html_path_split = utils.split_html(request.path)
-    print(html_path_split)
+    logger.info(html_path_split)
 
     # Extract settings information that can be reused
     # Doing this here allows changes to paths to be dynamic (ie changes can be made while server is live)
@@ -656,7 +656,7 @@ def get_path_data(base, request):
                 if current_user.id.lower() == oo.lower(): # Current user matches the user in the group
                     # print('Line 168')
                     allowed_list.append(ii.lower())
-        print(allowed_list)
+        logger.info(allowed_list)
 
 
     # If browsing the root gather current_path info in a special way
@@ -759,7 +759,7 @@ def get_path_data(base, request):
     else:
 
         try:
-            print('Line 73')
+            logger.info('Line 73')
 
             if html_path_split[1] not in path_map:
                 flash('You are not authorized to browse to path {}'.format(request.path))
@@ -781,7 +781,7 @@ def get_path_data(base, request):
 
             # Construct real paths from names in path_map dict
             to_browse = utils.from_html_to_path(request.path, path_map)
-            print('Live 110')
+            logger.info('Live 110')
 
             if utils.isfile(to_browse):
                 return utils.send_file(to_browse)
@@ -885,7 +885,7 @@ def get_path_data(base, request):
 
         except Exception:
             flash('You must not be authorized to browse to path {}'.format(request.path))
-            print(traceback.format_exc())
+            logger.info(traceback.format_exc())
             return redirect(url_for('login'))
 
     '''
@@ -927,7 +927,7 @@ def initiate_browseable(app,config):
     def browse_fs(req_path):
         
         
-        print(request.path)
+        logger.info(request.path)
         # print(request.remote_addr)
         # print(request.environ.get('HTTP_X_REAL_IP', request.remote_addr))
         # print(request.environ['REMOTE_ADDR'])
