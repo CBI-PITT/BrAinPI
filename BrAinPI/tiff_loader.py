@@ -106,7 +106,7 @@ class tiff_loader:
         self.arrays = {}
 
         self.type = self.image.series[0].axes
-        self.axes_pos_dic = self.axes_char_extract(self.type)
+        self.axes_pos_dic = self.axes_pos_extract(self.type)
         self.axes_value_dic = self.axes_value_extract(
             self.type, self.image.series[0].shape
         )
@@ -116,18 +116,22 @@ class tiff_loader:
         self.z = self.axes_value_dic.get("Z") if self.axes_value_dic.get("Z") else 1
         self.t = (
             self.axes_value_dic.get("T")
-            if self.axes_value_dic.get("T")
+            if self.axes_value_dic.get("T") != 1
             else (
                 self.axes_value_dic.get("Q")
-                if self.axes_value_dic.get("Q")
-                else self.axes_value_dic.get("I") if self.axes_value_dic.get("I") else 1
+                if self.axes_value_dic.get("Q") != 1
+                else (
+                    self.axes_value_dic.get("I")
+                    if self.axes_value_dic.get("I") != 1
+                    else 1
+                )
             )
         )
 
         self.pyramid_dic = pyramid_images_connection
         logger.info(self.type)
-        print("axes_pos_dic", self.axes_pos_dic)
-        print("axes_value_dic", self.axes_value_dic)
+        logger.info(f"axes_pos_dic, {self.axes_pos_dic}")
+        logger.info(f"axes_value_dic, {self.axes_value_dic}")
         for i_s, s in enumerate(self.image.series):
             logger.info(f"Series {i_s}: {s}")
             for i_l, level in enumerate(s.levels):
@@ -137,7 +141,7 @@ class tiff_loader:
         # elif no pyramid but connection exist --> replace the location, building the arrays
         # elif no pyramid and no connection --> pyramid image generation, building connection using hash func and replace location, building arrays
         self.pyramid_validators(self.image)
-
+        logger.info(self.t)
         # del self.image
         # gc.collect()
 
@@ -269,8 +273,8 @@ class tiff_loader:
         zarr_store = zarr.open(zarr_array)
 
         index_tuple = tp + (
-        slice(y * tile_size_height, (y + 1) * tile_size_height),
-        slice(x * tile_size_width, (x + 1) * tile_size_width)
+            slice(y * tile_size_height, (y + 1) * tile_size_height),
+            slice(x * tile_size_width, (x + 1) * tile_size_width),
         )
 
         # Index into zarr_store using the constructed tuple
@@ -295,16 +299,16 @@ class tiff_loader:
 
     def pyramid_validators(self, tif):
         inspector_result = self.pyramid_inspectors(tif)
-        # inspector_result = False
+        inspector_result = False
         logger.info(f"inspector_result: {inspector_result}")
         if inspector_result:
             return
         else:
             self.pyramid_builders(tif)
-            return       
+            return
+
     def pyramid_inspectors(self, tif):
-        
-        
+
         if self.is_pyramidal:
             # may need more check opeation
             return True
@@ -418,7 +422,7 @@ class tiff_loader:
         file_temp = pyramid_image_location.replace(hash_value, "temp_" + hash_value)
         file_temp_lock = file_temp + ".lock"
         file_lock = FileLock(file_temp_lock)
-        try: 
+        try:
             with file_lock.acquire():
                 logger.info("File lock acquired.")
                 if not os.path.exists(pyramid_image_location):
@@ -443,11 +447,7 @@ class tiff_loader:
                     with tifffile.TiffWriter(file_temp, bigtiff=True) as tif:
 
                         metadata = {
-                            "axes": (
-                                self.type.replace("I", "T")
-                                if "I" in self.type
-                                else self.type
-                            ),
+                            "axes": self.axe_compatibility_check(),
                             "SignificantBits": 10,
                             "TimeIncrement": 0.1,
                             "TimeIncrementUnit": "s",
@@ -523,11 +523,19 @@ class tiff_loader:
         except Exception as e:
             logger.error(f"An error occurred during generation process: {e}")
         finally:
-        # self.image = tifffile.TiffFile(pyramid_image_location)
+            # self.image = tifffile.TiffFile(pyramid_image_location)
             # Ensure any allocated memory or resources are released
-            if 'data' in locals():
+            if "data" in locals():
                 del data
             logger.success("Resources cleaned up.")
+
+    def axe_compatibility_check(self):
+        if "I" in self.type:
+            self.type = self.type.replace("I", "T")
+        if "Q" in self.type:
+            self.type = self.type.replace("Q", "T")
+            logger.info(self.type)
+        return self.type
 
     def divide_time(self, shape, factor, tile_size):
         # max_axes = max(
@@ -542,7 +550,7 @@ class tiff_loader:
             times = times + 1
         return times
 
-    def axes_char_extract(self, axes):
+    def axes_pos_extract(self, axes):
         dic = {
             "T": None,
             "C": None,
