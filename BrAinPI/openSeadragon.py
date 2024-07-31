@@ -56,7 +56,7 @@ def setup_openseadragon(app, config):
             try:
                 file_precheck_info = tif_file_precheck(datapath)
                 logger.info(
-                    f"----------\n file precheck info, is_pyramidal: {file_precheck_info.is_pyramidal}, inspector result: {file_precheck_info.inspectors_result}\n----------"
+                    f"file precheck info, is_pyramidal: {file_precheck_info.is_pyramidal}, inspector result: {file_precheck_info.inspectors_result}"
                 )
             except Exception as e:
                 return render_template(
