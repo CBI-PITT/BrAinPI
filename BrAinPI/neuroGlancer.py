@@ -290,7 +290,6 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
     # Start server simply to build viewer state
     token = 'qwertysplithereqwertysplithereqwerty'
     viewer = neuroglancer.UnsynchronizedViewer(token=token)
-    print('---------',viewer.get_viewer_url())
     source = 'precomputed://' + brainpi_url + compatible_file_link
 
     with viewer.txn() as s:
