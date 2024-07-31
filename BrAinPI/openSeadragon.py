@@ -12,10 +12,10 @@ import io
 from flask_cors import cross_origin
 
 import hashlib
-import tifffile
+from logger_tools import logger
 from tiff_loader import tif_file_precheck
 import gc
-from pympler import asizeof
+
 
 
 def openseadragon_dtypes():
@@ -41,10 +41,11 @@ def setup_openseadragon(app, config):
     get_html_split_and_associated_file_path = (
         utils.get_html_split_and_associated_file_path
     )
-
+    @logger.catch
     def openseadragon_entry(req_path):
         path_split, datapath = get_html_split_and_associated_file_path(config, request)
-        print(path_split, datapath)
+        logger.trace(req_path)
+        # logger.info(path_split, datapath)
 
         if utils.split_html(datapath)[-1].endswith(tuple(openseadragon_dtypes())):
             datapath_split = datapath.split("/")
@@ -54,7 +55,7 @@ def setup_openseadragon(app, config):
             file_precheck_info = ""
             try:
                 file_precheck_info = tif_file_precheck(datapath)
-                print(
+                logger.info(
                     f"----------\n file precheck info, is_pyramidal: {file_precheck_info.is_pyramidal}, inspector result: {file_precheck_info.inspectors_result}\n----------"
                 )
             except Exception as e:
@@ -107,7 +108,7 @@ def setup_openseadragon(app, config):
             #   further check if the file has been deleted during server runing
             #   mainly used for the generated pyramid images
             if not os.path.exists(tif_obj.datapath):
-                print("may delete")
+                logger.info("may delete")
                 del config.opendata[file_ino + modification_time]
                 datapath_key = config.loadDataset(
                     file_ino + modification_time, datapath
@@ -146,10 +147,10 @@ def setup_openseadragon(app, config):
                 # print("cache not none")
                 slice = config.cache.get(cache_key, default=None, retry=True)
                 if slice is not None:
-                    print("return from cache")
+                    logger.info("slice returned from cache")
             if slice is None:
                 slice = tif_obj[key]
-                print("return from disk")
+                logger.info("slice returned from disk")
             pil_image = Image.fromarray(slice)
 
             # Create an in-memory byte stream to store the image data
@@ -167,7 +168,7 @@ def setup_openseadragon(app, config):
             return Response(slice, mimetype="image/png")
         elif utils.split_html(datapath)[-1].endswith("info"):
             datapath = datapath.replace("/info", "")
-            print(datapath)
+            # print(datapath)
 
             # stat = os.stat(datapath)
             # file_ino = str(stat.st_ino)

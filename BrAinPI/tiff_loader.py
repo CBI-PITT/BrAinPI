@@ -1,239 +1,3 @@
-# import tifffile
-# import numpy as np
-# from skimage import io, img_as_uint, img_as_ubyte, img_as_float32, img_as_float64
-# import math
-# from itertools import product
-# from PIL import Image
-# import io
-
-# class tiff_loader:
-#     def __init__(self, file_location) -> None:
-#         self.location = file_location
-#         self.image = tifffile.TiffFile(self.location)
-#         self.tags = self.image.pages[0].tags
-
-#         # Extract width and height
-#         self.width = self.tags["ImageWidth"].value
-#         self.height = self.tags["ImageLength"].value
-
-#         self.dataType = self.image.pages[0].dtype
-#         print(self.dataType)
-#         self.resolutions = len(self.image.series)
-#         self.channels = len(self.image.series[0])
-#         if self.image.pages[0].is_tiled:
-#             # Get the tile size
-#             self.tile_size = (
-#                 self.image.pages[0].tilewidth,
-#                 self.image.pages[0].tilelength,
-#             )
-#         else:
-#             self.tile_size = (512, 512)
-#         # if self.image.pages[0].is_tiled:
-#         #     # Get the tile size
-#         #     self.tile_size = (
-#         #         128,
-#         #         128
-#         #     )
-#         # else:
-#         #     self.tile_size = (128, 128)
-#         # Extract image format
-
-#         print("Width:", self.width)
-#         print("Height:", self.height)
-#         print("Tile Size:", self.tile_size)
-#         self.array = {}
-
-#         self.type = self.image.series[0].axes
-#         dic = {"T": 0, "C": 1, "Z": 2, "Q": 2, "Y": 3, "X": 4, "S": 5}
-#         if self.type.endswith("S"):
-#             num_axes = 6
-#         else:
-#             num_axes = 5
-#         print("resolutions", self.resolutions)
-#         for r in range(self.resolutions):
-#             temp = [1] * num_axes
-#             nparray = self.image.series[r].asarray()
-#             shape = nparray.shape
-#             print("Original shape:", shape)
-#             print(self.image.series[r].dims)
-#             print(self.image.series[r].ndim)
-#             print(self.image.series[r].get_shape)
-#             print(self.image.series[r].shape)
-#             type_str = self.image.series[r].axes
-#             characters = list(type_str)
-#             print("Axis characters:", characters)
-#             for index, char in enumerate(characters):
-#                 if char in dic:
-#                     temp[dic[char]] = shape[index]
-#             temp_tuple = tuple(temp)
-#             nparray = nparray.reshape(temp_tuple)
-#             print("Reshaped shape:", nparray.shape)
-#             if (
-#                 r != 0 and
-#                 (nparray.shape[3] != self.array[r-1].shape[3] // 2
-#                 or nparray.shape[4] != self.array[r-1].shape[4] // 2)
-#             ):
-#                 self.pyramid_inspector(r=r-1, num_axes=num_axes,width=self.array[r-1].shape[4] // 2,height=self.array[r-1].shape[3])
-#             self.array[r] = nparray
-#             # print('r = ',r)
-
-#             if r == self.resolutions - 1:
-#                 self.pyramid_inspector(r=r, num_axes=num_axes,
-#                                        width = self.image.series[r].pages[0].tags["ImageWidth"].value,
-#         height = self.image.series[r].pages[0].tags["ImageLength"].value
-#                                        )
-
-#         for i in self.array:
-#             print("level: ", i)
-#             print("shape: ", self.array[i].shape)
-#         # numbers of channels and z using t = 0
-#         self.channels = self.array[0][0].shape[0]
-#         self.z = self.array[0][0].shape[1]
-
-#     def pyramid_inspector(self, r, num_axes,width,height):
-#         # width = self.image.series[r].pages[0].tags["ImageWidth"].value
-#         # height = self.image.series[r].pages[0].tags["ImageLength"].value
-#         if num_axes == 5:
-#             cur = r
-#             while self.pyramid_validator(width=width, height=height) != True:
-#                 print("Grey-scale image pyramids bulding...")
-#                 cur_shape = self.array[cur].shape
-#                 next = cur + 1
-#                 self.array[next] = np.empty(
-#                     (
-#                         cur_shape[0],
-#                         cur_shape[1],
-#                         cur_shape[2],
-#                         cur_shape[3] // 2,
-#                         cur_shape[4] // 2,
-#                     ),
-#                     dtype=self.dataType,
-#                 )
-#                 for t in range(cur_shape[0]):
-#                     for c in range(cur_shape[1]):
-#                         for z in range(cur_shape[2]):
-#                             result = self.local_mean_downsample_grey(
-#                                 image=self.array[cur][t, c, z],
-#                                 dataType=self.array[cur][t, c, z].dtype,
-#                             )
-#                             self.array[next][t, c, z] = result
-#                 cur = next
-#                 height = result.shape[0]
-#                 width = result.shape[1]
-#         elif num_axes == 6:
-#             cur = r
-#             while self.pyramid_validator(width=width, height=height) != True:
-#                 print("RGB image pyramids bulding...")
-#                 cur_shape = self.array[cur].shape
-#                 next = cur + 1
-#                 self.array[next] = np.empty(
-#                     (
-#                         cur_shape[0],
-#                         cur_shape[1],
-#                         cur_shape[2],
-#                         cur_shape[3] // 2,
-#                         cur_shape[4] // 2,
-#                         cur_shape[5],
-#                     ),
-#                     dtype=self.dataType,
-#                 )
-#                 for t in range(cur_shape[0]):
-#                     for c in range(cur_shape[1]):
-#                         for z in range(cur_shape[2]):
-#                             print("========", self.array[cur][t, c, z].shape)
-#                             print("dataType: ", self.array[cur][t, c, z].dtype)
-#                             result = self.local_mean_downsample_rgb(
-#                                 image=self.array[cur][t, c, z],
-#                                 dataType=self.array[cur][t, c, z].dtype,
-#                             )
-#                             print("--------", result.shape)
-#                             self.array[next][t, c, z] = result
-#                 cur = next
-#                 height = result.shape[0]
-#                 width = result.shape[1]
-
-#     def pyramid_validator(self, width, height):
-#         if width > self.tile_size[0] or height > self.tile_size[1]:
-#             return False
-#         else:
-#             return True
-
-#     def local_mean_downsample_rgb(self, image, dataType, down_sample_ratio=(2, 2, 1)):
-#         print("first int", dataType)
-#         image = img_as_float32(image)
-#         canvas = np.zeros(
-#             (
-#                 image.shape[0] // down_sample_ratio[0],
-#                 image.shape[1] // down_sample_ratio[1],
-#                 image.shape[2] // down_sample_ratio[2],
-#             ),
-#             dtype=np.dtype("float32"),
-#         )
-
-#         # print(canvas.shape)
-#         for z, y, x in product(
-#             range(down_sample_ratio[0]),
-#             range(down_sample_ratio[1]),
-#             range(down_sample_ratio[2]),
-#         ):
-#             tmp = image[
-#                 z :: down_sample_ratio[0],
-#                 y :: down_sample_ratio[1],
-#                 x :: down_sample_ratio[2],
-#             ][0 : canvas.shape[0], 0 : canvas.shape[1], 0 : canvas.shape[2]]
-#             canvas[0 : tmp.shape[0], 0 : tmp.shape[1], 0 : tmp.shape[2]] += tmp
-
-#         canvas /= math.prod(down_sample_ratio)
-#         if dataType == np.dtype("uint16"):
-#             return img_as_uint(canvas)
-
-#         if dataType == np.dtype("ubyte"):
-#             return img_as_ubyte(canvas)
-
-#         if dataType == np.dtype("float32"):
-#             return img_as_float32(canvas)
-
-#         if dataType == np.dtype(float):
-#             print("float64 checked")
-#             return img_as_float64(canvas)
-
-#     def local_mean_downsample_grey(self, image, dataType, down_sample_ratio=(2, 2)):
-
-#         image = img_as_float32(image)
-#         canvas = np.zeros(
-#             (
-#                 image.shape[0] // down_sample_ratio[0],
-#                 image.shape[1] // down_sample_ratio[1],
-#             ),
-#             # dtype=np.dtype('float32')
-#         )
-
-#         # print(canvas.shape)
-#         for y, x in product(range(down_sample_ratio[0]), range(down_sample_ratio[1])):
-#             tmp = image[y :: down_sample_ratio[0], x :: down_sample_ratio[1]][
-#                 0 : canvas.shape[0], 0 : canvas.shape[1]
-#             ]
-#             canvas[0 : tmp.shape[0], 0 : tmp.shape[1]] += tmp
-
-#         canvas /= math.prod(down_sample_ratio)
-
-#         if dataType == np.dtype("uint16"):
-#             print("uint16")
-#             return img_as_uint(canvas)
-
-#         if dataType == np.dtype("ubyte"):
-#             print("ubyte")
-#             return img_as_ubyte(canvas)
-
-#         if dataType == np.dtype("float32"):
-#             print("float32")
-#             return img_as_float32(canvas)
-
-#         if dataType == np.dtype(float):
-#             print("float")
-#             return img_as_float64(canvas)
-
-
 import tifffile
 import numpy as np
 from skimage import io, img_as_uint, img_as_ubyte, img_as_float32, img_as_float64
@@ -254,6 +18,7 @@ import sys
 from pympler import asizeof
 from zarr.storage import KVStore
 import gc
+from logger_tools import logger
 
 
 def calculate_hash(input_string):
@@ -283,19 +48,19 @@ def delete_oldest_files(directory, size_limit):
             item_size = os.path.getsize(item)
             os.remove(item)
             total_size -= item_size
-            print(f"Deleted file {item} of size {item_size} bytes")
+            logger.success(f"Deleted file {item} of size {item_size} bytes")
         elif item.is_dir():
             dir_size = get_directory_size(item)
             shutil.rmtree(item)
             total_size -= dir_size
-            print(f"Deleted directory {item} of size {dir_size} bytes")
+            logger.success(f"Deleted directory {item} of size {dir_size} bytes")
 
 
 class tiff_loader:
     def __init__(
         self, file_location, pyramid_images_connection, cache, settings
     ) -> None:
-        # print('pyramid_images_connection',pyramid_images_connection)
+        # logger.info('pyramid_images_connection',pyramid_images_connection)
         self.cache = cache
         self.settings = settings
         self.datapath = file_location
@@ -320,14 +85,14 @@ class tiff_loader:
         # Extract width and height
         self.height = self.tags["ImageLength"].value
         self.width = self.tags["ImageWidth"].value
-        # print(self.width,self.height)
+        # logger.info(self.width,self.height)
         self.dataType = self.image.pages[0].dtype
         self.metaData["dataType"] = self.dataType
-        # print(self.dataType)
+        # logger.info(self.dataType)
         self.series = len(self.image.series)
         self.is_pyramidal = self.image.series[0].is_pyramidal
-        # print("series", self.series)
-        # print("levels", len(self.image.series[0].levels))
+        # logger.info("series", self.series)
+        # logger.info("levels", len(self.image.series[0].levels))
         if self.image.pages[0].is_tiled:
             # Get the tile size
             self.tile_size = (
@@ -335,7 +100,7 @@ class tiff_loader:
                 self.image.pages[0].tilewidth,
             )
         else:
-            print("Assigning tile size (128, 128)")
+            logger.info("Assigning tile size (128, 128)")
             self.tile_size = (128, 128)
 
         self.arrays = {}
@@ -346,27 +111,27 @@ class tiff_loader:
             self.type, self.image.series[0].shape
         )
         self.channels = (
-            self.axes_value_dic.get("C") if self.axes_value_dic.get("C") else 0
+            self.axes_value_dic.get("C") if self.axes_value_dic.get("C") else 1
         )
-        self.z = self.axes_value_dic.get("Z") if self.axes_value_dic.get("Z") else 0
+        self.z = self.axes_value_dic.get("Z") if self.axes_value_dic.get("Z") else 1
         self.t = (
             self.axes_value_dic.get("T")
             if self.axes_value_dic.get("T")
             else (
                 self.axes_value_dic.get("Q")
                 if self.axes_value_dic.get("Q")
-                else self.axes_value_dic.get("I") if self.axes_value_dic.get("I") else 0
+                else self.axes_value_dic.get("I") if self.axes_value_dic.get("I") else 1
             )
         )
 
         self.pyramid_dic = pyramid_images_connection
-        print(self.type)
+        logger.info(self.type)
         print("axes_pos_dic", self.axes_pos_dic)
         print("axes_value_dic", self.axes_value_dic)
         for i_s, s in enumerate(self.image.series):
-            print(f"Series {i_s}: {s}")
+            logger.info(f"Series {i_s}: {s}")
             for i_l, level in enumerate(s.levels):
-                print(f"Level {i_l}: {level}")
+                logger.info(f"Level {i_l}: {level}")
                 self.metaData[f"Series:{i_s}, Level:{i_l}"] = str(level)
         # if already pyramid image --> building the arrays
         # elif no pyramid but connection exist --> replace the location, building the arrays
@@ -378,24 +143,24 @@ class tiff_loader:
 
         # if self.datapath.endswith(".ome.tif"):
         #     store = self.load_data(series=0)
-        #     print(type(store))
+        #     logger.info(type(store))
         #     zarr_store = zarr.open(store, mode="r")
         #     for r in range(len(zarr_store)):
         #         self.arrays[r] = zarr_store[r]
-        #         # print(self.arrays[r].shape)
+        #         # logger.info(self.arrays[r].shape)
 
         # elif self.datapath.endswith(".tif"):
-        #     print("zarr.core.Array")
+        #     logger.info("zarr.core.Array")
         #     for r in range(len(self.image.series)):
         #         store = self.load_data(series=r)
-        #         print(type(store))
-        #         # print("Memory consumption of store:", asizeof.asizeof(store), "bytes")
+        #         logger.info(type(store))
+        #         # logger.info("Memory consumption of store:", asizeof.asizeof(store), "bytes")
         #         zarr_store = zarr.open(store, mode="r")
-        #         # print("Memory consumption of zarr_store:", asizeof.asizeof(zarr_store), "bytes")
+        #         # logger.info("Memory consumption of zarr_store:", asizeof.asizeof(zarr_store), "bytes")
         #         self.arrays[r] = zarr_store
-        #         # print(self.arrays[r].shape)
-        # print(self.arrays)
-        # print("Arrays building complete")
+        #         # logger.info(self.arrays[r].shape)
+        # logger.info(self.arrays)
+        # logger.info("Arrays building complete")
 
     # def load_data(self, series):
 
@@ -416,7 +181,7 @@ class tiff_loader:
     #     x = int(key[5])
     #     tile_size = int(self.tile_size[0])
     #     tp = tuple(filter(lambda x: x is not None, (t, c, z)))
-    #     # print("tp",tp)
+    #     # logger.info("tp",tp)
     #     result = self.arrays[r][
     #         *tp,
     #         y * tile_size : (y + 1) * tile_size,
@@ -445,7 +210,7 @@ class tiff_loader:
         # x = int(key[5])
         # tile_size = int(self.tile_size[0])
         # tp = tuple(filter(lambda x: x is not None, (t, c, z)))
-        # # print("tp",tp)
+        # # logger.info("tp",tp)
         # # series = self.image.series[r]
         # zarr_array = None
         # if self.filename_extension in['.ome.tif','.ome-tif','.ome.tiff','.ome-tiff']:
@@ -456,8 +221,8 @@ class tiff_loader:
         #     zarr_array = tifffile.imread(self.datapath,series=r, selection=(slice(c,c+1),slice(z,z+1),slice(y *tile_size,(y+1)* tile_size), slice(x* tile_size, (x+1)*tile_size)))
         #     zarr_array = np.squeeze(zarr_array)
         #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=r)
-        #     print(zarr_array.shape)
-        #     print(asizeof.asizeof(zarr_array))
+        #     logger.info(zarr_array.shape)
+        #     logger.info(asizeof.asizeof(zarr_array))
         # return zarr_array
         # numpy_array = np.random.randint(0, 255, size=(256, 256, 3), dtype=np.uint8)
         # return numpy_array
@@ -477,19 +242,19 @@ class tiff_loader:
         r = int(key[0])
         t = (
             int(key[1])
-            if self.axes_value_dic.get("T")
-            or self.axes_value_dic.get("Q")
-            or self.axes_value_dic.get("I")
+            if self.axes_value_dic.get("T") != 1
+            or self.axes_value_dic.get("Q") != 1
+            or self.axes_value_dic.get("I") != 1
             else None
         )
-        c = int(key[2]) if self.axes_value_dic.get("C") else None
-        z = int(key[3]) if self.axes_value_dic.get("Z") else None
+        c = int(key[2]) if self.axes_value_dic.get("C") != 1 else None
+        z = int(key[3]) if self.axes_value_dic.get("Z") != 1 else None
         y = int(key[4])
         x = int(key[5])
         tile_size_height = int(self.tile_size[0])
         tile_size_width = int(self.tile_size[1])
         tp = tuple(filter(lambda x: x is not None, (t, c, z)))
-        # print("tp",tp)
+        # logger.info("tp",tp)
         zarr_array = None
         if self.is_pyramidal:
             zarr_array = self.image.aszarr(series=0, level=r)
@@ -531,7 +296,7 @@ class tiff_loader:
     def pyramid_validators(self, tif):
         inspector_result = self.pyramid_inspectors(tif)
         # inspector_result = False
-        print(f"inspector_result: {inspector_result}")
+        logger.info(f"inspector_result: {inspector_result}")
         if inspector_result:
             return
         else:
@@ -566,7 +331,7 @@ class tiff_loader:
         file = None
         extension = None
         image_name = self.image.filename
-        # print(f'image name',{image_name})
+        # logger.info(f'image name',{image_name})
         if image_name.endswith(".ome.tif"):
             extension_index = image_name.rfind(".ome.tif")
             file = image_name[:extension_index]
@@ -605,11 +370,11 @@ class tiff_loader:
         if self.pyramid_dic.get(hash_value) and os.path.exists(pyramid_image_location):
             self.datapath = self.pyramid_dic.get(hash_value)
             # self.image = tifffile.TiffFile(pyramid_image_location)
-            print("Location replaced by generated pyramid image")
+            logger.info("Location replaced by generated pyramid image")
         else:
             # Avoid other gunicore workers to build pyramids images
             if os.path.exists(pyramid_image_location):
-                print(
+                logger.info(
                     "Pyramid image was already built by first worker and picked up now by others"
                 )
                 self.pyramid_dic[hash_value] = pyramid_image_location
@@ -655,9 +420,9 @@ class tiff_loader:
         file_lock = FileLock(file_temp_lock)
         try: 
             with file_lock.acquire():
-                print("File lock acquired.")
+                logger.info("File lock acquired.")
                 if not os.path.exists(pyramid_image_location):
-                    print(f"==> pyramid image is building...")
+                    logger.success(f"==> pyramid image is building...")
                     start_time = time.time()
                     subresolutions = self.divide_time(
                         first_series.shape, factor, self.tile_size
@@ -667,8 +432,8 @@ class tiff_loader:
                     # data = tifffile.imread(self.location)
                     end_load = time.time()
                     load_time = end_load - start_load
-                    print(
-                        f"----------\nloading first series or level\n{self.datapath}\ntime: {load_time}\n----------"
+                    logger.success(
+                        f"loading first series or level {self.datapath} time: {load_time}"
                     )
                     pixelsize = 0.29  # micrometer
                     # prefix = 'py_'
@@ -732,15 +497,15 @@ class tiff_loader:
                                 )
                     end_time = time.time()
                     execution_time = end_time - start_time
-                    print(
-                        f"----------\nactual pyramid generation\n{self.datapath}\ntime:{execution_time - load_time}\n----------"
-                    )
-                    print(
-                        f"----------\npyramid image building complete\n{self.datapath}\ntotal execution time: {execution_time}\n----------"
+                    logger.success(
+                        f"actual pyramid generation {self.datapath} time:{execution_time - load_time}"
                     )
                     os.rename(file_temp, pyramid_image_location)
-                    print(
-                        f"----------\n{self.datapath} connected to ==> {pyramid_image_location}\n----------"
+                    logger.success(
+                        f"{self.datapath} connected to ==> {pyramid_image_location}"
+                    )
+                    logger.success(
+                        f"pyramid image building complete {self.datapath} total execution time: {execution_time}"
                     )
                     if (
                         get_directory_size(pyramids_images_store)
@@ -750,19 +515,19 @@ class tiff_loader:
                             pyramids_images_store, self.allowed_file_size_byte
                         )
                 else:
-                    print("file detected!")
+                    logger.info("file detected!")
                     if os.path.exists(file_temp):
                         os.remove(file_temp)
             self.pyramid_dic[hash_value] = pyramid_image_location
             self.datapath = pyramid_image_location
         except Exception as e:
-            print(f"An error occurred during generation process: {e}")
+            logger.error(f"An error occurred during generation process: {e}")
         finally:
         # self.image = tifffile.TiffFile(pyramid_image_location)
             # Ensure any allocated memory or resources are released
             if 'data' in locals():
                 del data
-            print("Resources cleaned up.")
+            logger.success("Resources cleaned up.")
 
     def divide_time(self, shape, factor, tile_size):
         # max_axes = max(
@@ -789,16 +554,16 @@ class tiff_loader:
             "S": None,
         }
         characters = list(axes)
-        # print("Axis characters:", characters)
+        # logger.info("Axis characters:", characters)
         for index, char in enumerate(characters):
             if char in dic:
                 dic[char] = index
         return dic
 
     def axes_value_extract(self, axes, shape):
-        dic = {"T": None, "C": None, "Z": None, "Q": None, "I": None}
+        dic = {"T": 1, "C": 1, "Z": 1, "Q": 1, "I": 1}
         characters = list(axes)
-        # print("Axis characters:", characters)
+        # logger.info("Axis characters:", characters)
         for index, char in enumerate(characters):
             if char in dic:
                 dic[char] = shape[index]
@@ -821,7 +586,7 @@ class tif_file_precheck:
                 self.image.pages[0].tilewidth,
             )
         else:
-            print("Assigning tile size (128, 128)")
+            logger.info("Assigning tile size (128, 128)")
             self.tile_size = (128, 128)
         self.type = self.image.series[0].axes
         self.is_pyramidal = self.image.series[0].is_pyramidal
@@ -829,13 +594,12 @@ class tif_file_precheck:
         self.inspectors_result = self.pyramid_inspectors(self.image)
         self.metaData["inspectors_result"] = self.inspectors_result
         for i_s, s in enumerate(self.image.series):
-            print(f"Series {i_s}: {s}")
+            logger.info(f"Series {i_s}: {s}")
             for i_l, level in enumerate(s.levels):
-                print(f"Level {i_l}: {level}")
+                logger.info(f"Level {i_l}: {level}")
                 self.metaData[f"Series:{i_s}, Level:{i_l}"] = str(level)
         del self.image
         gc.collect()
-        # print('precheck size',asizeof.asizeof(self.image))
 
     def pyramid_inspectors(self, tif):
         if self.is_pyramidal:
@@ -872,7 +636,7 @@ class tif_file_precheck:
             "S": None,
         }
         characters = list(axes)
-        # print("Axis characters:", characters)
+        # logger.info("Axis characters:", characters)
         for index, char in enumerate(characters):
             if char in dic:
                 dic[char] = index

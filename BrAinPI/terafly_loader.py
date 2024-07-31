@@ -3,7 +3,7 @@ import numpy as np
 import os
 import re
 from v3dpy.terafly import TeraflyInterface
-
+from logger_tools import logger
 
 class terafly_loader:
     def __init__(
@@ -48,7 +48,7 @@ class terafly_loader:
                 self.metaData[r, t, c, "dtype"] = self.dtype
                 self.metaData[r, t, c, "ndim"] = len(self.array[r].get_dim()) + 1
         self.change_resolution_lock(0)
-        print(self.metaData)
+        logger.info(self.metaData)
 
     def extract_and_sort_by_multiplication(self, directory):
         entries = [
@@ -144,7 +144,7 @@ class terafly_loader:
             # key = self.location + '_getSlice_' + str(incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
-                print(f"Returned from cache: {incomingSlices}")
+                logger.info(f"Returned from cache: {incomingSlices}")
                 return result
 
         x_start = x.start

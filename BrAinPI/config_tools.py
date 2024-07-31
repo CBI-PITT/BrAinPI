@@ -10,10 +10,9 @@ from zarr.storage import NestedDirectoryStore
 from zarr_stores.archived_nested_store import Archived_Nested_Store
 from zarr_stores.h5_nested_store import H5_Nested_Store
 # from watchdog.observers import Observer
-import tiff_loader
+# import tiff_loader
 import hashlib
 import psutil
-
 def calculate_hash(input_string):
     # Calculate the SHA-256 hash of the input string
     hash_result = hashlib.sha256(input_string.encode()).hexdigest()
@@ -71,9 +70,9 @@ class config:
         '''
 
         # print(dataPath , file_ino , modification_time)
-        
+        from logger_tools import logger
         if key in self.opendata:
-            print(f'DATAPATH ENTRIES__{tuple(self.opendata.keys())}')
+            logger.info(f'DATAPATH ENTRIES__{tuple(self.opendata.keys())}')
             return key
         if os.path.splitext(dataPath)[-1] == '.ims':
 
@@ -103,6 +102,7 @@ class config:
             self.opendata[key] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3_boto_store,
                                                     cache=self.cache)
         elif dataPath.endswith('tif') or dataPath.endswith('tiff'):
+            import tiff_loader
             # To do for metadata attribute rebuild, currently not compatible
             self.opendata[key] = tiff_loader.tiff_loader(dataPath, self.pyramid_images_connection, self.cache,self.settings)
         elif dataPath.endswith('.terafly'):

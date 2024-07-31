@@ -12,13 +12,11 @@ import re
 from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
 import numpy as np
 import os
-
-
+from logger_tools import logger
 ## Project imports
 import utils
 from utils import compress_flask_response
 import config_tools
-
 from flask import (
     render_template,
     request,
@@ -60,7 +58,7 @@ def ng_shader(numpy_like_object):
     isVisable = []
     for ii in range(metadata['Channels']):
         if omero:
-            print(omero)
+            logger.info(omero)
             channelMins.append(omero['channels'][ii]['window']['start'])
             channelMaxs.append(omero['channels'][ii]['window']['end'])
             windowMins.append(omero['channels'][ii]['window']['min'])
@@ -178,12 +176,12 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     scales = []
     current_scale = {}
     for res in range(metadata['ResolutionLevels']):
-        print('Creating JSON')
+        logger.info('Creating JSON')
         try:
             chunks = list(reversed(list(metadata[(res,0,0,'chunks')][-3:]))) #<-- [x,y,z] orientation
         except:
             chunks = list(reversed(list(metadata[(res,'chunks')][-3:]))) #<-- [x,y,z] orientation
-        print(chunks)
+        logger.info(chunks)
         if different_chunks == False:
             current_scale["chunk_sizes"] = [
                         list(chunks)
@@ -224,7 +222,7 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
     # neuro_info['shader'] = ng_shader(numpy_like_object)
     
     
-    print(neuro_info)
+    logger.info(neuro_info)
     if file is None:
         b = io.BytesIO()
         b.write(json.dumps(neuro_info).encode())
@@ -276,7 +274,7 @@ def ng_files(numpy_like_object):
                 
                 )
             fileLists[res].append(currentName)
-            print(currentName)
+            logger.info(currentName)
     return fileLists
 
 
@@ -292,7 +290,7 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
     # Start server simply to build viewer state
     token = 'qwertysplithereqwertysplithereqwerty'
     viewer = neuroglancer.UnsynchronizedViewer(token=token)
-
+    print('---------',viewer.get_viewer_url())
     source = 'precomputed://' + brainpi_url + compatible_file_link
 
     with viewer.txn() as s:
@@ -335,7 +333,7 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
         ngURL = ngURL.replace('https://', 'http://')
 
     outURL = ngURL + state
-    print(outURL)
+    logger.info(outURL)
 
     # Cleanup to unsure that the neuroglancer server is no longer running
     if neuroglancer.server.is_server_running():
@@ -409,10 +407,10 @@ def open_ng_dataset(config,datapath):
     
     datapath = config.loadDataset(datapath,datapath)
 
-    print('IN OPEN NG DATASET 411')
+    logger.info('IN OPEN NG DATASET 411')
     
     if not hasattr(config.opendata[datapath],'ng_json'):
-        print('IN NO ATTR DATASET 414')
+        logger.info('IN NO ATTR DATASET 414')
         # or not hasattr(config.opendata[datapath],'ng_files'):
             
         ## Forms a comrehensive file list for all chunks
@@ -450,6 +448,7 @@ def setup_neuroglancer(app, config):
 
     # get_server will only open 1 server if it does not already exist.
     if config.settings.getboolean('neuroglancer','use_local_server'):
+        logger.warning(config.settings.getboolean('neuroglancer','use_local_server'))
         from neuroglancer_server import get_server
         ng_server = get_server()
         config.ng_server = ng_server
@@ -462,11 +461,11 @@ def setup_neuroglancer(app, config):
     match = re.match
     Match_class = re.Match
 
-
+    @logger.catch
     def neuro_glancer_entry(req_path, request=request):
         # Request is an option for using this function separate from traditional flask response
         # See usage in tokenized_urls module
-
+        logger.trace(request.path)
         path_split, datapath = get_html_split_and_associated_file_path(config,request)
         
         # Test for different patterns
@@ -527,7 +526,7 @@ def setup_neuroglancer(app, config):
         ## Serve neuroglancer raw-format files
         elif isinstance(match(file_pattern,path_split[-1]),Match_class):
             
-            print(request.path + '\n')
+            # logger.info(request.path + '\n')
             
             x,y,z = path_split[-1].split('_')
             x = x.split('-')
@@ -545,7 +544,7 @@ def setup_neuroglancer(app, config):
                 key = f'ng_{datapath}-{res}-{x}-{y}-{z}'
                 img = config.cache.get(key, default=None, retry=True)
                 if img is not None:
-                    print('cached encoded ng chunck found')
+                    logger.info('cached encoded ng chunck found')
 
             if img is None:
                 img = config.opendata[datapath][
@@ -560,7 +559,7 @@ def setup_neuroglancer(app, config):
                 while img.ndim > 4:
                     img = np.squeeze(img,axis=0)
 
-                print(img.shape)
+                logger.info(img.shape)
 
                 img = encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
 
