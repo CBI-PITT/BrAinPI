@@ -299,7 +299,7 @@ class tiff_loader:
 
     def pyramid_validators(self, tif):
         inspector_result = self.pyramid_inspectors(tif)
-        inspector_result = False
+        # inspector_result = False
         logger.info(f"inspector_result: {inspector_result}")
         if inspector_result:
             return
