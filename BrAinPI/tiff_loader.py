@@ -141,7 +141,7 @@ class tiff_loader:
         # elif no pyramid but connection exist --> replace the location, building the arrays
         # elif no pyramid and no connection --> pyramid image generation, building connection using hash func and replace location, building arrays
         self.pyramid_validators(self.image)
-        logger.info(self.t)
+        # logger.info(self.t)
         # del self.image
         # gc.collect()
 
@@ -299,7 +299,7 @@ class tiff_loader:
 
     def pyramid_validators(self, tif):
         inspector_result = self.pyramid_inspectors(tif)
-        # inspector_result = False
+        inspector_result = False
         logger.info(f"inspector_result: {inspector_result}")
         if inspector_result:
             return
@@ -393,6 +393,7 @@ class tiff_loader:
                         tif.series[0].levels[0],
                         2,
                         hash_value,
+                        pyramids_images_store,
                         pyramids_images_store_dir,
                         pyramid_image_location,
                     )
