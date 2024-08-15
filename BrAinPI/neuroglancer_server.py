@@ -1,6 +1,6 @@
 import neuroglancer
 import urllib.request
-
+from logger_tools import logger
 # Project specific imports
 import config_tools
 def get_server():
@@ -28,7 +28,7 @@ def get_server():
             neuroglancer.set_server_bind_address(bind_address=ip, bind_port=port)
             viewer = neuroglancer.UnsynchronizedViewer(token='base')
             # viewer = neuroglancer.Viewer()
-            print(viewer)
+            logger.info(viewer)
             return viewer
         except OSError:
             del viewer

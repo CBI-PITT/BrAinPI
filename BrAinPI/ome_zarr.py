@@ -6,26 +6,26 @@ Created on Mon May 16 22:48:44 2022
 """
 
 # import zarr
+from logger_tools import logger
 import numpy as np
 import numcodecs
 from numcodecs import Blosc
 try:
     from imagecodecs.numcodecs import JpegXl
     numcodecs.register_codec(JpegXl)
-    # print('Imported JpegXl')
+    # logger.info('Imported JpegXl')
 except:
     pass
 try:
     from imagecodecs.numcodecs import Jpegxl
     numcodecs.register_codec(Jpegxl)
-    # print('Imported Jpegxl')
+    # logger.info('Imported Jpegxl')
 except:
     pass
 import io
 import re
 import os
 import math
-
 from flask import (
     render_template,
     request,
@@ -469,18 +469,18 @@ def setup_omezarr(app, config):
 
         path_split, datapath = get_html_split_and_associated_file_path(config,request)
 
-        # print(path_split)
-        # print(datapath)
+        # logger.info(path_split)
+        # logger.info(datapath)
         ##  HAck if ignores '.' as dimension_sperator
         try:
             new_path = path_split[-5:]
-            # print(new_path)
+            # logger.info(new_path)
             if all([isinstance(int(x),int) for x in new_path]):
-                # print('in if')
+                # logger.info('in if')
                 new_path = '.'.join(new_path)
-                # print(new_path)
+                # logger.info(new_path)
                 request.path = '/' + os.path.join(*path_split[:-5],new_path)
-                # print(request.path)
+                # logger.info(request.path)
                 path_split, datapath = get_html_split_and_associated_file_path(config,request)
             else:
                 pass
@@ -500,7 +500,7 @@ def setup_omezarr(app, config):
             if len(datapath.split(ext)) > 1:
                 datapath = datapath.replace(ext,'')
                 if ext == '.ng.ome.zarr': isNeuroGlancer = True
-                # print(f'DATAPATH MINUS EXT: {datapath}')
+                # logger.info(f'DATAPATH MINUS EXT: {datapath}')
                 break
 
         # Define chunk size if specified in the path otherwise keep None
@@ -508,8 +508,8 @@ def setup_omezarr(app, config):
         if match(chunks_size_pattern, datapath):
             # Modified chunk size must be designated as an extension that comes before any other extenstions
             # designated as .##x##x##. where ## is pixels numbers in axes (Z,Y,X)
-            print('INSIDE THE PATTERN ######################################')
-            print(datapath)
+            logger.info('INSIDE THE PATTERN ######################################')
+            logger.info(datapath)
             reverse_split = datapath.split('.')[::-1]
             any_matches = tuple(
                 (
@@ -522,7 +522,7 @@ def setup_omezarr(app, config):
             if len(any_matches) > 0:
                 for ii in any_matches:
                     chunk = ii.split('x')
-                    print(f'CHUNKS ######## {chunk}')
+                    logger.info(f'CHUNKS ######## {chunk}')
                     chunk_size = tuple(
                         (int(x) for x in chunk)
                     )
@@ -533,20 +533,20 @@ def setup_omezarr(app, config):
                         chunk_size = (1, *chunk_size)
                     elif len(chunk_size) == 2:
                         chunk_size = (1, 1, 1, *chunk_size)
-                    print(f'CHUNK SHAPE {chunk_size}')
+                    logger.info(f'CHUNK SHAPE {chunk_size}')
 
                     datapath = datapath.replace(f'.{ii}.', '.')
-                    print(f'DATAPATH ###### {datapath}')
-                    print(f'CHUNK SIZE ###### {chunk_size}')
+                    logger.info(f'DATAPATH ###### {datapath}')
+                    logger.info(f'CHUNK SIZE ###### {chunk_size}')
 
                     ####  SWITCH TO None to negate the chunk setting block and default to default chunks ####
                     # chunk_Size = None
                     # Only use the first match
                     break
 
-            print(path_split)
+            logger.info(path_split)
 
-        print(path_split)
+        logger.info(path_split)
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
         # If only the file name is requested this will redirect to a
@@ -563,20 +563,20 @@ def setup_omezarr(app, config):
             config.opendata[datapath].metadata
 
             if isNeuroGlancer:
-                # print(451)
+                # logger.info(451)
                 chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
-                # print(453)
-                # print(chunk_size)
+                # logger.info(453)
+                # logger.info(chunk_size)
             else:
                 chunk_size = config.opendata[datapath].metadata[(resolution,0,0,'chunks')]
-                # print(456)
+                # logger.info(456)
 
             # Determine where the chunk is in the actual dataset
             dataset_shape = config.opendata[datapath].metadata[(resolution, 0, 0, 'shape')]
-            # print(dataset_shape)
+            # logger.info(dataset_shape)
             locationDict = where_is_that_chunk(chunk_name=chunk_name, dataset_shape=dataset_shape, chunk_size=chunk_size)
-            # print('Chunk is here:')
-            # print(locationDict)
+            # logger.info('Chunk is here:')
+            # logger.info(locationDict)
 
             chunk = None
             if config.cache is not None:
@@ -585,13 +585,13 @@ def setup_omezarr(app, config):
 
             if chunk is None:
                 chunk = get_chunk(locationDict,resolution,config.opendata[datapath],chunk_size)
-                # print(chunk.shape)
+                # logger.info(chunk.shape)
                 chunk = pad_chunk(chunk, chunk_size)
                 if force8Bit:
                     chunk = utils.conv_np_dtypes(chunk, 'uint8')
-                # print(chunk.shape)
+                # logger.info(chunk.shape)
                 # chunk = np.squeeze(chunk)
-                # print(chunk.shape)
+                # logger.info(chunk.shape)
                 chunk = compress_zarr_chunk(chunk,compressor=get_compressor())
 
                 # Add to cache
@@ -657,9 +657,9 @@ def setup_omezarr(app, config):
 
     # Decorating neuro_glancer_entry to allow caching ##
     # if config.cache is not None:
-    #     print('Caching setup')
+    #     logger.info('Caching setup')
     #     omezarr_entry = config.cache.memoize()(omezarr_entry)
-    #     print(omezarr_entry)
+    #     logger.info(omezarr_entry)
     # neuro_glancer_entry = login_required(neuro_glancer_entry)
 
     omezarr_entry = cross_origin(allow_headers=['Content-Type'])(omezarr_entry)
@@ -758,7 +758,7 @@ Single channel, multiscale, EM:
 #         range(chunk_range[4])
 #         ):
 #     tmp = chunk_template.format(t,c,z,y,x)
-#     print(tmp)
+#     logger.info(tmp)
 #     chunks_list.append(tmp)
     
 
