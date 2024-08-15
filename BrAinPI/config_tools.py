@@ -76,11 +76,11 @@ class config:
             return key
         if os.path.splitext(dataPath)[-1] == '.ims':
 
-            print('Creating ims object')
+            logger.info('Creating ims object')
             self.opendata[key] = ims.ims(dataPath, squeeze_output=False)
 
             if self.opendata[key].hf is None or self.opendata[key].dataset is None:
-                print('opening ims object')
+                logger.info('opening ims object')
                 self.opendata[key].open()
 
 
