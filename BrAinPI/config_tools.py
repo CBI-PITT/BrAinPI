@@ -1,9 +1,6 @@
 
 import os
 import sys
-
-from ome_zarr_loader import ome_zarr_loader
-
 import imaris_ims_file_reader as ims
 # Import zarr stores
 from zarr.storage import NestedDirectoryStore
@@ -85,13 +82,16 @@ class config:
 
 
         elif dataPath.endswith('.ome.zarr'):
+            from ome_zarr_loader import ome_zarr_loader
             self.opendata[key] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=NestedDirectoryStore, cache=self.cache)
             # self.opendata[dataPath].isomezarr = True
 
         elif '.omezans' in os.path.split(dataPath)[-1]:
+            from ome_zarr_loader import ome_zarr_loader
             self.opendata[key] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=Archived_Nested_Store, cache=self.cache)
 
         elif '.omehans' in os.path.split(dataPath)[-1]:
+            from ome_zarr_loader import ome_zarr_loader
             self.opendata[key] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=H5_Nested_Store, cache=self.cache)
 
         elif 's3://' in dataPath and dataPath.endswith('.zarr'):
