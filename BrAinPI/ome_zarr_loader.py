@@ -19,7 +19,7 @@ from zarr._storage.store import Store, BaseStore
 from typing import Union
 Path = Union[str, bytes, None]
 StoreLike = Union[BaseStore, Store, MutableMapping]
-
+from logger_tools import logger
 # import s3fs
 
 class ome_zarr_loader:
@@ -50,7 +50,7 @@ class ome_zarr_loader:
         # self.omero = zgroup.attrs['omero']
         assert 'multiscales' in self.zattrs
         self.multiscales = zgroup.attrs['multiscales']
-        print(self.multiscales)
+        logger.info(self.multiscales)
         del zgroup
         del store
         
@@ -118,14 +118,14 @@ class ome_zarr_loader:
     def __getitem__(self,key):
         
         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
-        print(key)
+        logger.info(key)
         if isinstance(key,slice) == False and isinstance(key,int) == False and len(key) == 6:
             res = key[0]
             if res >= self.ResolutionLevels:
                 raise ValueError('Layer is larger than the number of ResolutionLevels')
             key = tuple([x for x in key[1::]])
-        print(res)
-        print(key)
+        logger.info(res)
+        logger.info(key)
         
         if isinstance(key, int):
             key = [slice(key,key+1)]
@@ -139,7 +139,7 @@ class ome_zarr_loader:
                 key.append(slice(None))
             key = tuple(key)
         
-        print(key)
+        logger.info(key)
         newKey = []
         for ss in key:
             if ss.start is None and isinstance(ss.stop,int):
@@ -148,7 +148,7 @@ class ome_zarr_loader:
                 newKey.append(ss)
                 
         key = tuple(newKey)
-        print(key)
+        logger.info(key)
         
         
         array = self.getSlice(
@@ -184,13 +184,13 @@ class ome_zarr_loader:
         '''
         
         incomingSlices = (r,t,c,z,y,x)
-        print(incomingSlices)
+        logger.info(incomingSlices)
         if self.cache is not None:
             key = f'{self.location}_getSlice_{str(incomingSlices)}'
             # key = self.location + '_getSlice_' + str(incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
-                print(f'Returned from cache: {incomingSlices}')
+                logger.info(f'Returned from cache: {incomingSlices}')
                 return result
         
         result = self.arrays[r][t,c,z,y,x]
@@ -199,7 +199,7 @@ class ome_zarr_loader:
             self.cache.set(key, result, expire=None, tag=self.location, retry=True)
             # test = True
             # while test:
-            #     # print('Caching slice')
+            #     # logger.info('Caching slice')
             #     self.cache.set(key, result, expire=None, tag=self.location, retry=True)
             #     if result == self.getSlice(*incomingSlices):
             #         test = False
@@ -214,26 +214,26 @@ class ome_zarr_loader:
     
     def open_array(self,res):
         store = self.zarr_store_type(self.locationGenerator(res))
-        print('OPENING ARRAYS')
+        logger.info('OPENING ARRAYS')
         store = self.wrap_store_in_chunk_cache(store)
         # if self.cache is not None:
-        #     print('OPENING CHUNK CACHE ARRAYS')
+        #     logger.info('OPENING CHUNK CACHE ARRAYS')
         #     from zarr_stores.zarr_disk_cache import Disk_Cache_Store
         #     store = Disk_Cache_Store(store, unique_id=store.path, diskcache_object=self.cache, persist=False)
         # # try:
         # #     if self.cache is not None:
         # #         store = disk_cache_store(store=store, uuid=self.locationGenerator(res), diskcache_object=self.cache, persist=None, meta_data_expire_min=15)
         # # except Exception as e:
-        # #     print('Caught Exception')
-        # #     print(e)
+        # #     logger.info('Caught Exception')
+        # #     logger.info(e)
         # #     pass
         return zarr.open(store)
 
 
     def wrap_store_in_chunk_cache(self, store):
         if self.cache is not None:
-            print('OPENING CHUNK CACHE ARRAYS')
-            print(store.path)
+            logger.info('OPENING CHUNK CACHE ARRAYS')
+            logger.info(store.path)
             from zarr_chunk_cache import disk_cache_store as Disk_Cache_Store
             store = Disk_Cache_Store(store, uuid=store.path, diskcache_object=self.cache, persist=True)
         return store
@@ -305,14 +305,14 @@ class ome_zarr_loader:
 #     def __getitem__(self,key):
         
 #         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
-#         print(key)
+#         logger.info(key)
 #         if isinstance(key,slice) == False and isinstance(key,int) == False and len(key) == 6:
 #             res = key[0]
 #             if res >= self.ResolutionLevels:
 #                 raise ValueError('Layer is larger than the number of ResolutionLevels')
 #             key = tuple([x for x in key[1::]])
-#         print(res)
-#         print(key)
+#         logger.info(res)
+#         logger.info(key)
         
 #         if isinstance(key, int):
 #             key = [slice(key,key+1)]
@@ -326,7 +326,7 @@ class ome_zarr_loader:
 #                 key.append(slice(None))
 #             key = tuple(key)
         
-#         print(key)
+#         logger.info(key)
 #         newKey = []
 #         for ss in key:
 #             if ss.start is None and isinstance(ss.stop,int):
@@ -335,7 +335,7 @@ class ome_zarr_loader:
 #                 newKey.append(ss)
                 
 #         key = tuple(newKey)
-#         print(key)
+#         logger.info(key)
         
         
 #         return self.getSlice(
@@ -358,7 +358,7 @@ class ome_zarr_loader:
 #         '''
         
 #         incomingSlices = (r,t,c,z,y,x)
-#         print(incomingSlices)
+#         logger.info(incomingSlices)
         
 #         array = self.open_array(r)[t,c,z,y,x]
 #         if self.squeeze:
@@ -453,7 +453,7 @@ import functools
 def s3_get_bucket_and_path_parts(path):
     path = s3_clean_path(path)
     path_split = path.split('/')
-    # print(path_split)
+    # logger.info(path_split)
     if isinstance(path_split, str):
         path_split = [path_split]
     bucket = path_split[0]
