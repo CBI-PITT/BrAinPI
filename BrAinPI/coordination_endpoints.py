@@ -23,7 +23,7 @@ from flask import (
 from flask_cors import cross_origin
 
 # from urllib.parse import quote
-
+from logger_tools import logger
 from file_type_support import ng_links,opsd_links
 from neuroGlancer import neuroglancer_dtypes
 from openSeadragon import openseadragon_dtypes
@@ -52,7 +52,7 @@ def inititate(app,config):
     @app.route('/path_to_html_options/', methods=['GET'])
     @cross_origin(allow_headers=['Content-Type'])
     def html_options():
-        print(request.remote_addr)
+        logger.info(f"{request.remote_addr=}")
         assert(isinstance(request.args, dict)), 'Expects a dictionary'
         assert 'path' in request.args, 'Expects a path key'
         verify_file_exists = request.args.get('verify_file_exists')
@@ -111,7 +111,7 @@ def inititate(app,config):
         paths['openseadragon'] = None
         paths['openseadragon_metadata'] = None
 
-        print(f"{paths['path']=}")
+        logger.info(f"{paths['path']=}")
         if verify_file_exists:
             if not exists(paths['path']):
                 return paths
@@ -120,16 +120,16 @@ def inititate(app,config):
 
         html_base = settings.get('app','url')
         html_base = strip_leading_trailing_slash(html_base)
-        print('html_base',html_base)
+        logger.info(f"{html_base=}")
         html_path = from_path_to_browser_html(paths['path'],path_map, html_base)
 
         if html_path is not None:
             req_path = html_path.replace(html_base, '')
-            print(req_path)
+            logger.info(f"{req_path=}")
             ng_link = ng_links('/' + req_path)
             opsd_link = opsd_links('/' + req_path)
-            print('ng_link', ng_link)
-            print('opsd_link', opsd_link)
+            logger.info(f"{ng_link=}")
+            logger.info(f"{opsd_link=}")
             if ng_link is not None:
                 validator_url = 'https://ome.github.io/ome-ngff-validator'
                 validator_url = validator_url + '/?source='
@@ -154,19 +154,19 @@ def inititate(app,config):
 
                 # Replace values that don't translate directly to url
                 # Probably others that are missing
-                for key,value in paths.items():
-                    # Replace space with %20 (' ')
-                    if value is not None and value.startswith('http'):
-                        paths[key] = fix_special_characters_in_html(value)
+                # for key,value in paths.items():
+                #     # Replace space with %20 (' ')
+                #     if value is not None and value.startswith('http'):
+                #         paths[key] = fix_special_characters_in_html(value)
             if opsd_link is not None:
                 opsd_link = html_base + '/' + strip_leading_trailing_slash(opsd_link)
 
                 paths['openseadragon'] = opsd_link
                 paths['openseadragon_metadata'] = paths['openseadragon'] + '/info'
-                for key,value in paths.items():
-                    # Replace space with %20 (' ')
-                    if value is not None and value.startswith('http'):
-                        paths[key] = fix_special_characters_in_html(value)
+            for key,value in paths.items():
+                # Replace space with %20 (' ')
+                if value is not None and value.startswith('http'):
+                    paths[key] = fix_special_characters_in_html(value)
         return paths
 
     # @app.route('/curated_datasets/', methods=['GET'])
@@ -235,7 +235,7 @@ def inititate(app,config):
                     details.append(dataset)
                     # datasets['collections'][set_name].append(dataset)
             current_collection['details'] = details
-            print(f'Sending {len(details)} entries for set {set_name}')
+            logger.info(f'Sending {len(details)} entries for set {set_name}')
             datasets['collections'].append(current_collection)
             # from pprint import pprint as print
             # print(datasets)

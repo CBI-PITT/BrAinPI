@@ -17,6 +17,7 @@ import requests
 from skimage import img_as_float32, img_as_float64, img_as_uint, img_as_ubyte
 import difflib
 import datetime
+from logger_tools import logger
 # import logging
 # from watchdog.events import FileSystemEventHandler
 # from watchdog.observers import Observer
@@ -313,13 +314,13 @@ def from_path_to_browser_html(path, path_map, html_base):
             matches[value] = key
     if len(matches) == 0:
         return
-    print(matches)
+    logger.info(f"{matches=}")
     match = list(difflib.get_close_matches(path,matches,cutoff=0.01))
-    print(match)
+    logger.info(f"{match=}")
     best_match = match if len(match) == 0 else match[0]
-    print(best_match)
+    logger.info(f"{best_match=}")
     end = path.replace(best_match,matches[best_match])
-    print(end)
+    logger.info(f"{end=}")
     end = strip_leading_trailing_slash(end)
 
     main = f'{url_for("browse_fs")}/{end}'.replace('//','/')
@@ -329,7 +330,7 @@ def from_path_to_browser_html(path, path_map, html_base):
 
 
     html_path = f'{html_base}/{main}'
-    print(html_path)
+    logger.info(f"{html_path=}")
     return html_path
 
 def get_base_paths(settings_config_parser_object,user_authenticated=False):
@@ -377,9 +378,9 @@ def get_html_split_and_associated_file_path(config,request):
     
     
 def prettyPrintDict(aDict):
-    print('{}{}{}'.format('Number'.ljust(10),'Name'.ljust(20),'File'))
+    logger.info('{}{}{}'.format('Number'.ljust(10),'Name'.ljust(20),'File'))
     for k,v in aDict.items():
-        print('{}{}{}'.format(k.ljust(10),v[0].ljust(20),v[1]))
+        logger.info('{}{}{}'.format(k.ljust(10),v[0].ljust(20),v[1]))
     
     
 def metaDataExtraction(numpy_like_object,strKey=False):
@@ -411,7 +412,7 @@ def metaDataExtraction(numpy_like_object,strKey=False):
                 newMetaDict[str(key)] = numpy_like_object.metaData[key] \
                     if isinstance(numpy_like_object.metaData[key],np.dtype) == False \
                         else str(numpy_like_object.metaData[key])
-        # print(newMetaDict)
+        # logger.info(newMetaDict)
         metadata.update(newMetaDict)
     
     except Exception:
@@ -489,7 +490,7 @@ def profile(func):
         sortby = SortKey.CUMULATIVE  # 'cumulative'
         ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
         ps.print_stats()
-        print(s.getvalue())
+        logger.info(s.getvalue())
         return retval
 
     return wrapper
