@@ -15,8 +15,7 @@ import hashlib
 from logger_tools import logger
 from tiff_loader import tif_file_precheck
 import gc
-
-
+import cv2
 
 def openseadragon_dtypes():
     return [".tif", ".tiff", ".ome.tif", ".ome.tiff", ".ome-tif", ".ome-tiff"]
@@ -151,21 +150,36 @@ def setup_openseadragon(app, config):
             if slice is None:
                 slice = tif_obj[key]
                 logger.info("slice returned from disk")
-            pil_image = Image.fromarray(slice)
+            # pil_image = Image.fromarray(slice)
 
-            # Create an in-memory byte stream to store the image data
+            # # Create an in-memory byte stream to store the image data
+            # image_stream = io.BytesIO()
+
+            # # Save the PIL image as png to the in-memory byte stream
+            # pil_image.save(image_stream, format="png")
+
+            # # Seek to the beginning of the stream (important
+            # image_stream.seek(0)
+            # slice = image_stream
+            # return Response(slice, mimetype="image/png")
+            if len(slice.shape) == 3 and slice.shape[2] == 3:  # Color image
+                slice = cv2.cvtColor(slice, cv2.COLOR_RGB2BGR)
+
             image_stream = io.BytesIO()
 
-            # Save the PIL image as png to the in-memory byte stream
-            pil_image.save(image_stream, format="png")
+            # Encode the image as PNG and write it to the in-memory byte stream
+            success, encoded_image = cv2.imencode('.png', slice)
+            if not success:
+                raise RuntimeError("Failed to encode image as PNG")
 
-            # Seek to the beginning of the stream (important
+            image_stream.write(encoded_image.tobytes())
+
+            # Seek to the beginning of the stream (important)
             image_stream.seek(0)
-            slice = image_stream
-
+            
             # if config.cache is not None:
             #     config.cache.set(cache_key, slice, expire=None, tag=datapath, retry=True)
-            return Response(slice, mimetype="image/png")
+            return Response(image_stream, mimetype="image/png")
         elif utils.split_html(datapath)[-1].endswith("info"):
             datapath = datapath.replace("/info", "")
             # print(datapath)
