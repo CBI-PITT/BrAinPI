@@ -110,10 +110,8 @@ class tiff_loader:
         self.axes_value_dic = self.axes_value_extract(
             self.type, self.image.series[0].shape
         )
-        self.channels = (
-            self.axes_value_dic.get("C") if self.axes_value_dic.get("C") else 1
-        )
-        self.z = self.axes_value_dic.get("Z") if self.axes_value_dic.get("Z") else 1
+        self.channels = self.axes_value_dic.get("C")
+        self.z = self.axes_value_dic.get("Z")
         self.t = (
             self.axes_value_dic.get("T")
             if self.axes_value_dic.get("T") != 1
@@ -145,140 +143,85 @@ class tiff_loader:
         # del self.image
         # gc.collect()
 
-        # if self.datapath.endswith(".ome.tif"):
-        #     store = self.load_data(series=0)
-        #     logger.info(type(store))
-        #     zarr_store = zarr.open(store, mode="r")
-        #     for r in range(len(zarr_store)):
-        #         self.arrays[r] = zarr_store[r]
-        #         # logger.info(self.arrays[r].shape)
 
-        # elif self.datapath.endswith(".tif"):
-        #     logger.info("zarr.core.Array")
-        #     for r in range(len(self.image.series)):
-        #         store = self.load_data(series=r)
-        #         logger.info(type(store))
-        #         # logger.info("Memory consumption of store:", asizeof.asizeof(store), "bytes")
-        #         zarr_store = zarr.open(store, mode="r")
-        #         # logger.info("Memory consumption of zarr_store:", asizeof.asizeof(zarr_store), "bytes")
-        #         self.arrays[r] = zarr_store
-        #         # logger.info(self.arrays[r].shape)
-        # logger.info(self.arrays)
-        # logger.info("Arrays building complete")
 
-    # def load_data(self, series):
-
-    #     store = tifffile.imread(self.datapath, aszarr=True, series=series)
-    #     return store
-
-    # def __getitem__(self, key):
-    #     "r t c z y x (s)"
-    #     r = int(key[0])
-    #     t = int(key[1]) if self.axes_value_dic.get("T") else None
-    #     c = int(key[2]) if self.axes_value_dic.get("C") else None
-    #     z = (
-    #         int(key[3])
-    #         if self.axes_value_dic.get("Z") or self.axes_value_dic.get("Q")
-    #         else None
-    #     )
-    #     y = int(key[4])
-    #     x = int(key[5])
-    #     tile_size = int(self.tile_size[0])
-    #     tp = tuple(filter(lambda x: x is not None, (t, c, z)))
-    #     # logger.info("tp",tp)
-    #     result = self.arrays[r][
-    #         *tp,
-    #         y * tile_size : (y + 1) * tile_size,
-    #         x * tile_size : (x + 1) * tile_size,
-    #     ]
-    #     cache_key = f"opsd_{self.file_ino + self.modification_time}-{key[0]}-{key[1]}-{key[2]}-{key[3]}-{key[4]}--{key[5]}"
-    #     if self.cache is not None:
-    #         self.cache.set(
-    #             cache_key, result, expire=None, tag=self.datapath, retry=True
-    #         )
-    #     return result
-    #     numpy_array = np.random.randint(0, 255, size=(256, 256, 3), dtype=np.uint8)
-    #     return numpy_array
 
     def __getitem__(self, key):
-
-        # r = int(key[0])
-        # t = int(key[1]) if self.axes_value_dic.get("T") else None
-        # c = int(key[2]) if self.axes_value_dic.get("C") else None
-        # z = (
-        #     int(key[3])
-        #     if self.axes_value_dic.get("Z") or self.axes_value_dic.get("Q")
+        list_tp = None
+        if self.type.endswith("S"):
+            list_tp = [0] * (len(self.type) - 1)
+        else:
+            list_tp = [0] * len(self.type)
+        r = int(key[0])
+        # t = (
+        #     int(key[1])
+        #     if self.axes_value_dic.get("T") != 1
+        #     or self.axes_value_dic.get("Q") != 1
+        #     or self.axes_value_dic.get("I") != 1
         #     else None
         # )
+        # c = int(key[2]) if self.axes_value_dic.get("C") != 1 else None
+        # z = int(key[3]) if self.axes_value_dic.get("Z") != 1 else None
         # y = int(key[4])
         # x = int(key[5])
-        # tile_size = int(self.tile_size[0])
         # tp = tuple(filter(lambda x: x is not None, (t, c, z)))
-        # # logger.info("tp",tp)
-        # # series = self.image.series[r]
+        # tile_size_height = int(self.tile_size[0])
+        # tile_size_width = int(self.tile_size[1])
+        # index_tuple = tp + (
+        #     slice(y * tile_size_height, (y + 1) * tile_size_height),
+        #     slice(x * tile_size_width, (x + 1) * tile_size_width),
+        # )
         # zarr_array = None
-        # if self.filename_extension in['.ome.tif','.ome-tif','.ome.tiff','.ome-tiff']:
-        #     zarr_array = tifffile.imread(self.datapath,series=0, level=r,selection=(slice(c,c+1),slice(y *tile_size,(y+1)* tile_size), slice(x* tile_size, (x+1)*tile_size)))
-        #     zarr_array = np.squeeze(zarr_array)
-        #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=0,level=r)
-        # elif self.filename_extension in['.tif','.tiff']:
-        #     zarr_array = tifffile.imread(self.datapath,series=r, selection=(slice(c,c+1),slice(z,z+1),slice(y *tile_size,(y+1)* tile_size), slice(x* tile_size, (x+1)*tile_size)))
-        #     zarr_array = np.squeeze(zarr_array)
-        #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=r)
-        #     logger.info(zarr_array.shape)
-        #     logger.info(asizeof.asizeof(zarr_array))
-        # return zarr_array
-        # numpy_array = np.random.randint(0, 255, size=(256, 256, 3), dtype=np.uint8)
-        # return numpy_array
-        # result = self.arrays[r][
-        #     *tp,
-        #     y * tile_size : (y + 1) * tile_size,
-        #     x * tile_size : (x + 1) * tile_size,
-        # ]
-        # cache_key = f"opsd_{self.file_ino + self.modification_time}-{key[0]}-{key[1]}-{key[2]}-{key[3]}-{key[4]}--{key[5]}"
-        # if self.cache is not None:
-        #     self.cache.set(
-        #         cache_key, result, expire=None, tag=self.datapath, retry=True
-        #     )
+        # if self.is_pyramidal:
+        #     zarr_array = self.image.aszarr(series=0, level=r)
+        # else:
+        #     zarr_array = self.image.aszarr(series=r, level=0)
+        # index_tuple = tp + (
+        #     slice(y * tile_size_height, (y + 1) * tile_size_height),
+        #     slice(x * tile_size_width, (x + 1) * tile_size_width),
+        # )
+        # print (index_tuple)
+        # # if self.datapath.endswith((".ome.tif", ".ome-tif", ".ome.tiff", ".ome-tiff")):
+        # #     zarr_array = self.image.aszarr(series=0, level=r)
+        # #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=0,level=r)
+        # # elif self.datapath.endswith((".tif", ".tiff")):
+        # #     zarr_array = self.image.aszarr(series=0, level=r)
+        # #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=r)
+        # zarr_store = zarr.open(zarr_array)
+        # result = zarr_store[index_tuple]
         # return result
 
-        # # "r t c z y x (s)"
-        r = int(key[0])
-        t = (
-            int(key[1])
-            if self.axes_value_dic.get("T") != 1
-            or self.axes_value_dic.get("Q") != 1
-            or self.axes_value_dic.get("I") != 1
-            else None
-        )
-        c = int(key[2]) if self.axes_value_dic.get("C") != 1 else None
-        z = int(key[3]) if self.axes_value_dic.get("Z") != 1 else None
-        y = int(key[4])
-        x = int(key[5])
-        tile_size_height = int(self.tile_size[0])
-        tile_size_width = int(self.tile_size[1])
-        tp = tuple(filter(lambda x: x is not None, (t, c, z)))
+        if self.axes_pos_dic.get("T") != None or self.axes_pos_dic.get("Q") != None or self.axes_pos_dic.get("I") != None :
+            t= int(key[1])
+            if self.axes_pos_dic.get("T") != None:
+                list_tp[self.axes_pos_dic.get("T")] = t
+            elif self.axes_pos_dic.get("Q") != None:
+                list_tp[self.axes_pos_dic.get("Q")] = t
+            elif self.axes_pos_dic.get("I") != None:
+                list_tp[self.axes_pos_dic.get("I")] = t
+        if self.axes_pos_dic.get("C") != None:
+            c = int(key[2])
+            list_tp[self.axes_pos_dic.get("C")] = c
+        if self.axes_pos_dic.get("Z") != None:
+            z = int(key[3])
+            list_tp[self.axes_pos_dic.get("Z")] = z
+        if self.axes_pos_dic.get("Y") != None:
+            tile_size_height = int(self.tile_size[0])
+            y = int(key[4])
+            list_tp[self.axes_pos_dic.get("Y")] = slice(y * tile_size_height, (y + 1) * tile_size_height)
+        if self.axes_pos_dic.get("X") != None:
+            tile_size_width = int(self.tile_size[1])
+            x = int(key[5])
+            list_tp[self.axes_pos_dic.get("X")] = slice(x * tile_size_width, (x + 1) * tile_size_width)
         # logger.info("tp",tp)
         zarr_array = None
         if self.is_pyramidal:
             zarr_array = self.image.aszarr(series=0, level=r)
         else:
             zarr_array = self.image.aszarr(series=r, level=0)
-        # if self.datapath.endswith((".ome.tif", ".ome-tif", ".ome.tiff", ".ome-tiff")):
-        #     zarr_array = self.image.aszarr(series=0, level=r)
-        #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=0,level=r)
-        # elif self.datapath.endswith((".tif", ".tiff")):
-        #     zarr_array = self.image.aszarr(series=0, level=r)
-        #     # zarr_array = tifffile.imread(self.datapath,aszarr=True,series=r)
         zarr_store = zarr.open(zarr_array)
-
-        index_tuple = tp + (
-            slice(y * tile_size_height, (y + 1) * tile_size_height),
-            slice(x * tile_size_width, (x + 1) * tile_size_width),
-        )
-
-        # Index into zarr_store using the constructed tuple
-        result = zarr_store[index_tuple]
+        tp = tuple(list_tp)
+        result = zarr_store[tp]
 
         # Here for python > 3.11, to use the unpack operator *
         # result = zarr_store[
