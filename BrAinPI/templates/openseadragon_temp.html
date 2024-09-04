@@ -43,38 +43,57 @@
       left: 50%;
       transform: translate(-50%, -50%);
     }
-
     #control_panel {
       background-color: #f0f0f0;
       border: 1px solid #ccc;
-      border-radius: 5px;
-      padding: 15px;
-      /* margin-bottom: 20px; */
-      box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+      box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
       font-family: Arial, sans-serif;
     }
 
+    #select_wrapper {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        background-color: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
     #control_panel select {
-      padding: 8px;
-      border: 1px solid #ccc;
-      border-radius: 3px;
-      font-size: 14px;
-      margin-right: 10px;
+        padding: 10px 15px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        font-size: 14px;
+        background-color: #f9f9f9;
+        color: #333;
+        background-position: right 10px center;
+        cursor: pointer;
+        transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
     }
 
     #control_panel select:focus {
-      outline: none;
-      border-color: #4CAF50;
+        outline: none;
+        border-color: #4CAF50;
+        box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+        background-color: #fff;
     }
+
+    #control_panel select:hover {
+        border-color: #888;
+        background-color: #fff;
+    }
+
   </style>
 </head>
 
 <body>
 
   <div id="control_panel">
+    <div id="select_wrapper">
     Time Point
     <select id="t_point_select">
-
       {% for t in range(t_point) %}
       <option value="{{ t }}" {% if t==0 %} selected {% endif %}> {{ t }}</option>
       {% endfor %}
@@ -91,6 +110,10 @@
       <option value="{{ z }}" {% if z==0 %} selected {% endif %}> {{ z }}</option>
       {% endfor %}
     </select>
+    <div style="display: inline-block; font-size: 15px; color: #31708f; background-color: #d9edf7; padding: 5px 10px; border: 1px solid #bce8f1; border-radius: 4px; margin-left: 10px; vertical-align: middle;">
+      Non-standard axes (if existed) will be wrapped to T axe (Time Point) for display purpose
+    </div>
+  </div>
   </div>
   <div id="viewer"></div>
 
