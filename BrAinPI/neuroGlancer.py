@@ -83,7 +83,7 @@ def ng_shader(numpy_like_object):
             windowMins.append(0)
             if numpy_like_object.dtype == 'uint16':
                 windowMaxs.append(65535)
-            elif numpy_like_object.dtype == 'uint':
+            elif numpy_like_object.dtype == 'uint8':
                 windowMaxs.append(255)
             elif numpy_like_object.dtype == float:
                 windowMaxs.append(1)
