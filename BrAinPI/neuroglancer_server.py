@@ -29,7 +29,7 @@ def get_server():
             neuroglancer.set_server_bind_address(bind_address=ip, bind_port=port)
             viewer = neuroglancer.UnsynchronizedViewer(token='base')
             # viewer = neuroglancer.Viewer()
-            logger.info(viewer)
+            logger.success(viewer)
             return viewer
         except OSError:
             del viewer
