@@ -1,5 +1,6 @@
 import neuroglancer
 import urllib.request
+import signal
 from logger_tools import logger
 # Project specific imports
 import config_tools
@@ -37,5 +38,10 @@ def get_server():
             del viewer
             return
 
+def keep_alive():
+    signal.pause()  # Wait for signals (Ctrl+C will exit)
+
 if __name__ == '__main__':
         viewer = get_server()
+        if viewer:
+            keep_alive()
