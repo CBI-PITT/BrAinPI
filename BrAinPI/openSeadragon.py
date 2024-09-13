@@ -46,7 +46,7 @@ def setup_openseadragon(app, config):
         logger.trace(req_path)
         # logger.info(path_split, datapath)
 
-        if utils.split_html(datapath)[-1].endswith(tuple(openseadragon_dtypes())):
+        if utils.split_html(datapath)[-1].lower().endswith(tuple(openseadragon_dtypes())):
             datapath_split = datapath.split("/")
             file_name = datapath_split[-1]
 

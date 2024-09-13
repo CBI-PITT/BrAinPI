@@ -101,11 +101,11 @@ class config:
             from s3_utils import s3_boto_store
             self.opendata[key] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3_boto_store,
                                                     cache=self.cache)
-        elif dataPath.endswith('tif') or dataPath.endswith('tiff'):
+        elif dataPath.lower().endswith('tif') or dataPath.lower().endswith('tiff'):
             import tiff_loader
             # To do for metadata attribute rebuild, currently not compatible
             self.opendata[key] = tiff_loader.tiff_loader(dataPath, self.pyramid_images_connection, self.cache,self.settings)
-        elif dataPath.endswith('.terafly'):
+        elif dataPath.lower().endswith('.terafly'):
             import terafly_loader
             self.opendata[key] = terafly_loader.terafly_loader(dataPath, squeeze=False,cache=self.cache)
 
