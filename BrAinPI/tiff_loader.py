@@ -143,9 +143,6 @@ class tiff_loader:
         # del self.image
         # gc.collect()
 
-
-
-
     def __getitem__(self, key):
         list_tp = None
         if self.type.endswith("S"):
@@ -191,8 +188,12 @@ class tiff_loader:
         # result = zarr_store[index_tuple]
         # return result
 
-        if self.axes_pos_dic.get("T") != None or self.axes_pos_dic.get("Q") != None or self.axes_pos_dic.get("I") != None :
-            t= int(key[1])
+        if (
+            self.axes_pos_dic.get("T") != None
+            or self.axes_pos_dic.get("Q") != None
+            or self.axes_pos_dic.get("I") != None
+        ):
+            t = int(key[1])
             if self.axes_pos_dic.get("T") != None:
                 list_tp[self.axes_pos_dic.get("T")] = t
             elif self.axes_pos_dic.get("Q") != None:
@@ -208,11 +209,15 @@ class tiff_loader:
         if self.axes_pos_dic.get("Y") != None:
             tile_size_height = int(self.tile_size[0])
             y = int(key[4])
-            list_tp[self.axes_pos_dic.get("Y")] = slice(y * tile_size_height, (y + 1) * tile_size_height)
+            list_tp[self.axes_pos_dic.get("Y")] = slice(
+                y * tile_size_height, (y + 1) * tile_size_height
+            )
         if self.axes_pos_dic.get("X") != None:
             tile_size_width = int(self.tile_size[1])
             x = int(key[5])
-            list_tp[self.axes_pos_dic.get("X")] = slice(x * tile_size_width, (x + 1) * tile_size_width)
+            list_tp[self.axes_pos_dic.get("X")] = slice(
+                x * tile_size_width, (x + 1) * tile_size_width
+            )
         # logger.info("tp",tp)
         zarr_array = None
         if self.is_pyramidal:
@@ -257,13 +262,19 @@ class tiff_loader:
             return True
         else:
             for r in range(len(tif.series)):
-                if r != 0 and (
-                    tif.series[r].shape[self.axes_pos_dic.get("Y")]
-                    != tif.series[r - 1].shape[self.axes_pos_dic.get("Y")] // 2
-                    or tif.series[r].shape[self.axes_pos_dic.get("Y")]
-                    != tif.series[r - 1].shape[self.axes_pos_dic.get("Y")] // 2
-                ):
-                    return False
+                if r != 0:
+                    x_value_cur = tif.series[r].shape[self.axes_pos_dic.get("X")]
+                    x_value_pre = tif.series[r - 1].shape[self.axes_pos_dic.get("X")]
+                    y_value_cur = tif.series[r].shape[self.axes_pos_dic.get("Y")]
+                    y_value_pre = tif.series[r - 1].shape[self.axes_pos_dic.get("Y")]
+                    if (
+                        x_value_cur != x_value_pre // 2
+                        or y_value_cur != y_value_pre // 2
+                    ) and (
+                        x_value_cur != math.ceil(x_value_pre / 2)
+                        or y_value_cur != math.ceil(y_value_pre / 2)
+                    ):
+                        return False
                 if r == len(tif.series) - 1:
                     if (
                         tif.series[r].pages[0].imagelength > self.tile_size[0]
@@ -559,13 +570,19 @@ class tif_file_precheck:
             return True
         else:
             for r in range(len(tif.series)):
-                if r != 0 and (
-                    tif.series[r].shape[self.axes_pos_dic.get("Y")]
-                    != tif.series[r - 1].shape[self.axes_pos_dic.get("Y")] // 2
-                    or tif.series[r].shape[self.axes_pos_dic.get("Y")]
-                    != tif.series[r - 1].shape[self.axes_pos_dic.get("Y")] // 2
-                ):
-                    return False
+                if r != 0:
+                    x_value_cur = tif.series[r].shape[self.axes_pos_dic.get("X")]
+                    x_value_pre = tif.series[r - 1].shape[self.axes_pos_dic.get("X")]
+                    y_value_cur = tif.series[r].shape[self.axes_pos_dic.get("Y")]
+                    y_value_pre = tif.series[r - 1].shape[self.axes_pos_dic.get("Y")]
+                    if (
+                        x_value_cur != x_value_pre // 2
+                        or y_value_cur != y_value_pre // 2
+                    ) and (
+                        x_value_cur != math.ceil(x_value_pre / 2)
+                        or y_value_cur != math.ceil(y_value_pre / 2)
+                    ):
+                        return False
                 if r == len(tif.series) - 1:
                     if (
                         tif.series[r].pages[0].imagelength > self.tile_size[0]
