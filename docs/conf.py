@@ -8,7 +8,7 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../BrAinPI'))
+sys.path.insert(0, os.path.abspath('..'))
 print(sys.path)
 project = 'BrainPi Document'
 copyright = '2024, Alan M Watson, Kelin He'
