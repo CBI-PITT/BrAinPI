@@ -6,10 +6,8 @@ import imaris_ims_file_reader as ims
 from zarr.storage import NestedDirectoryStore
 from zarr_stores.archived_nested_store import Archived_Nested_Store
 from zarr_stores.h5_nested_store import H5_Nested_Store
-# from watchdog.observers import Observer
 # import tiff_loader
 import hashlib
-import psutil
 def calculate_hash(input_string):
     # Calculate the SHA-256 hash of the input string
     hash_result = hashlib.sha256(input_string.encode()).hexdigest()
@@ -34,16 +32,16 @@ def get_pyramid_images_connection(settings):
                 connection[hash_value] = file_path
     return connection
 class config:
-    '''
+    """
     This class will be used to manage open datasets and persistant cache
-    '''
+    """
 
     def __init__(self):
-        '''
+        """
         evictionPolicy Options:
             "least-recently-stored" #R only
             "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
-        '''
+        """
         self.opendata = {}
         self.settings = get_config('settings.ini')
         self.pyramid_images_connection = get_pyramid_images_connection(self.settings)
@@ -56,16 +54,14 @@ class config:
                 self.cache.close()
 
     def loadDataset(self, key: str, dataPath: str ):
-
-        '''
+        """
         Given the filesystem path to a file, open that file with the appropriate
         reader and store it in the opendata attribute with the dataPath as
         the key
 
         If the key exists return
         Always return the name of the dataPath
-        '''
-
+        """
         # print(dataPath , file_ino , modification_time)
         from logger_tools import logger
         if key in self.opendata:
@@ -79,8 +75,7 @@ class config:
             if self.opendata[key].hf is None or self.opendata[key].dataset is None:
                 logger.info('opening ims object')
                 self.opendata[key].open()
-
-
+                
         elif dataPath.endswith('.ome.zarr'):
             from ome_zarr_loader import ome_zarr_loader
             self.opendata[key] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=NestedDirectoryStore, cache=self.cache)

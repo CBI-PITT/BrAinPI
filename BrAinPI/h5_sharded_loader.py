@@ -12,7 +12,7 @@ import dask
 from dask.delayed import delayed
 import dask.array as da
 import h5py
-import hdf5plugin
+# import hdf5plugin
 
 if os.name == 'nt':
     location = r"z:/testData/bil/h5_shard"

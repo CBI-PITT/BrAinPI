@@ -1,10 +1,10 @@
-.. BrainPi Doc documentation master file, created by
-   sphinx-quickstart on Tue Sep 17 11:34:12 2024.
+.. BrainPi Document documentation master file, created by
+   sphinx-quickstart on Wed Sep 18 16:43:54 2024.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-BrainPi Doc documentation
-=========================
+BrainPi Document documentation
+==============================
 
 Add your content using ``reStructuredText`` syntax. See the
 `reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
@@ -16,4 +16,3 @@ documentation for details.
    :caption: Contents:
 
    modules
-   

@@ -16,25 +16,27 @@ Path = Union[str, bytes, None]
 StoreLike = Union[BaseStore, MutableMapping]
 
 class disk_cache_store(Store):
-    """Storage class that implements a DiskCache layer over
-    some other store. Intended primarily for use with stores that may be on slow
-    spinning storage to be cached to fast flash storage.
+    """
+    Storage class that implements a DiskCache layer over some other store. 
+    Intended primarily for use with stores that may be on slow spinning 
+    storage to be cached to fast flash storage.
+
     Parameters
     ----------
     store : Store
         The store containing the actual data to be cached.
     max_size : int
-        The maximum size that the cache may grow to, in number of bytes. Provide `None`
-        if you would like the cache to have unlimited size.
+        The maximum size that the cache may grow to, in number of bytes. 
+        Provide `None` if you would like the cache to have unlimited size.
+
     Examples
     --------
-
     """
 
     def __init__(self, store: StoreLike, uuid: str=None, diskcache_object=None, persist=None, meta_data_expire_min=15):
-        '''
-        Designating a uuid will allow the cache to persist accross instances
-        '''
+        """
+        Designating an uuid will allow the cache to persist accross instances
+        """
         self._store: BaseStore = BaseStore._ensure_store(store)
         self._diskcache_object = diskcache_object
         # self._current_size = 0
@@ -180,7 +182,7 @@ class disk_cache_store(Store):
         self._invalidate()
     
     def __del__(self):
-        if self.persist == False:
+        if not self.persist:
             # print('Cleaning up cache for uuid: {}'.format(self.uuid))
             self._invalidate()
             self._diskcache_object.evict(self.uuid)

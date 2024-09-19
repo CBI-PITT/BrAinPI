@@ -12,14 +12,6 @@ Subpackages
 Submodules
 ----------
 
-BrAinPI.BrAinPI module
-----------------------
-
-.. automodule:: BrAinPI.BrAinPI
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 BrAinPI.GA4 module
 ------------------
 
@@ -32,6 +24,14 @@ BrAinPI.auth module
 -------------------
 
 .. automodule:: BrAinPI.auth
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+BrAinPI.brain\_api\_main module
+-------------------------------
+
+.. automodule:: BrAinPI.brain_api_main
    :members:
    :undoc-members:
    :show-inheritance:

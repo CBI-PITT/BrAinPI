@@ -5,4 +5,3 @@ BrAinPI
    :maxdepth: 4
 
    BrAinPI
-   setup

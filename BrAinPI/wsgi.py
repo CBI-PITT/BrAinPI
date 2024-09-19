@@ -10,7 +10,7 @@ from gevent.pywsgi import WSGIServer
 #gunicorn -b 0.0.0.0:5000 --chdir /CBI_FastStore/cbiPythonTools/bil_api/BrAinPI wsgi:app -w 24 --threads=2
 
 
-from BrAinPI import app
+from brain_api_main import app
 if __name__ == "__main__":
     app.run()
 

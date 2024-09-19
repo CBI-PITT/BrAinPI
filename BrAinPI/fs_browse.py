@@ -918,7 +918,7 @@ def get_path_data(base, request):
 
 
 def initiate_browseable(app,config):
-    from BrAinPI import login_manager
+    from brain_api_main import login_manager
     
     # base entrypoint must always begin and end with '/' --> /my_entry/
     base = '/browser/'

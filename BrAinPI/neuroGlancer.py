@@ -240,12 +240,12 @@ def ng_json(numpy_like_object,file=None, different_chunks=False):
 
 
 def ng_files(numpy_like_object):
-    '''
+    """
     Takes numpy_like_object representing a supported filetype
-    and produces a dict where keys are int == resolution level and objects are 
+    and produces a dict where keys are int == resolution level and objects are
     compreshensive lists of filenames representing each chunk of structure:
-        xstart-xstop_ystart-ystop_zstart-zstop
-    '''
+    xstart-xstop_ystart-ystop_zstart-zstop
+    """
     
     metadata = utils.metaDataExtraction(numpy_like_object,strKey=False)
     
