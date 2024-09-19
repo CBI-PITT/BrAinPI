@@ -6,10 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-# import os
-# import sys
+import os
+import sys
 # sys.path.insert(0, os.path.abspath('../BrAinPI'))
-# print(sys.path)
+print(sys.path)
 project = 'BrainPi Document'
 copyright = '2024, Alan M Watson, Kelin He'
 author = 'Alan M Watson, Kelin He'
