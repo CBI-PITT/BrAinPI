@@ -8,7 +8,7 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../BrAinPI'))
+# sys.path.insert(0, os.path.abspath('../BrAinPI'))
 print(sys.path)
 project = 'BrainPi Document'
 copyright = '2024, Alan M Watson, Kelin He'
@@ -20,7 +20,8 @@ release = '1.0.0'
 
 extensions = ["sphinx.ext.autodoc",
               "sphinx.ext.viewcode",
-              "sphinx.ext.napoleon"]
+              "sphinx.ext.napoleon",
+              "sphinx.ext.autosummary"]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
