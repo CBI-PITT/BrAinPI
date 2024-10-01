@@ -103,7 +103,9 @@ class config:
         elif dataPath.lower().endswith('.terafly'):
             import terafly_loader
             self.opendata[key] = terafly_loader.terafly_loader(dataPath, squeeze=False,cache=self.cache)
-
+        elif dataPath.lower().endswith('.nii.zarr'):
+            import nifit_loader
+            self.opendata[key] = nifit_loader.nifti_zarr_loader(dataPath, squeeze=False,cache=self.cache)
         ## Append extracted metadata as attribute to open dataset
         try:
             from utils import metaDataExtraction # Here to get around curcular import at BrAinPI init

@@ -85,8 +85,9 @@ def ng_shader(numpy_like_object):
                 windowMaxs.append(65535)
             elif numpy_like_object.dtype == 'uint8':
                 windowMaxs.append(255)
-            elif numpy_like_object.dtype == float:
-                windowMaxs.append(1)
+            elif str(numpy_like_object.dtype).startswith('float'):
+                windowMaxs.append(lowestResVolume.max())
+                # windowMaxs.append(1)
 
     labels = []
     colors = []
@@ -134,8 +135,8 @@ def ng_shader(numpy_like_object):
     
     for idx in range(metadata['Channels']):
         shaderStr = shaderStr + f'if ({labels[idx]}_visable == true)\n'
-        shaderStr = shaderStr + f'{labels[idx]} = {labels[idx]}_color * ((toNormalized(getDataValue({idx})) + {labels[idx]}_lut()));\n\n'
-    
+        # shaderStr = shaderStr + f'{labels[idx]} = {labels[idx]}_color * ((toNormalized(getDataValue({idx})) + {labels[idx]}_lut()));\n\n'
+        shaderStr = shaderStr + f'{labels[idx]} = {labels[idx]}_color *  {labels[idx]}_lut();\n\n'
     # shaderStr = shaderStr + '// Add RGB values of all channels\n'
     shaderStr = shaderStr + 'vec3 rgb = ('
     for idx in range(metadata['Channels']):
@@ -558,7 +559,7 @@ def setup_neuroglancer(app, config):
                 while img.ndim > 4:
                     img = np.squeeze(img,axis=0)
 
-                logger.info(img.shape)
+                # logger.info(img.shape)
 
                 img = encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
 
