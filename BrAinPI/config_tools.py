@@ -20,16 +20,36 @@ def get_config(file='settings.ini',allow_no_value=True):
     config.read(file)
     return config
 def get_pyramid_images_connection(settings):
-    os.makedirs(settings.get('tif_loader','pyramids_images_store'),exist_ok=True)
+    # os.makedirs(settings.get('tif_loader','pyramids_images_store'),exist_ok=True)
+    # connection = {}
+    # directory = settings.get('tif_loader', 'pyramids_images_store')
+    # extension_type = settings.get('tif_loader', 'extension_type')
+    # for root, dirs, files in os.walk(directory):
+    #     for file in files:
+    #         if file.endswith(extension_type):
+    #             extension_index = file.rfind(extension_type)
+    #             hash_value = file[:extension_index]
+    #             file_path = os.path.join(root, file)
+    #             connection[hash_value] = file_path
     connection = {}
-    directory = settings.get('tif_loader', 'pyramids_images_store')
+    directory = settings.get('pyramids_images_location', 'location')
+    tif_extension = settings.get('tif_loader', 'extension_type')
+    nifit_extension = settings.get('nifit_loader', 'extension_type')
     for root, dirs, files in os.walk(directory):
+        for dir in dirs:
+            if dir.endswith(nifit_extension):
+                extension_index = dir.rfind(nifit_extension)
+                hash_value = dir[:extension_index]
+                dir_path = os.path.join(root, dir)
+                connection[hash_value] = dir_path
         for file in files:
-            if file.endswith('.ome.tif'):
-                extension_index = file.rfind('.ome.tif')
+            if file.endswith(tif_extension):
+                extension_index = file.rfind(tif_extension)
                 hash_value = file[:extension_index]
                 file_path = os.path.join(root, file)
                 connection[hash_value] = file_path
+                break
+    # print(connection)
     return connection
 class config:
     """
@@ -103,9 +123,9 @@ class config:
         elif dataPath.lower().endswith('.terafly'):
             import terafly_loader
             self.opendata[key] = terafly_loader.terafly_loader(dataPath, squeeze=False,cache=self.cache)
-        elif dataPath.lower().endswith('.nii.zarr'):
+        elif dataPath.lower().endswith('.nii.zarr') or dataPath.lower().endswith('.nii.gz'):
             import nifit_loader
-            self.opendata[key] = nifit_loader.nifti_zarr_loader(dataPath, squeeze=False,cache=self.cache)
+            self.opendata[key] = nifit_loader.nifti_zarr_loader(dataPath, self.pyramid_images_connection,self.settings,squeeze=False,cache=self.cache)
         ## Append extracted metadata as attribute to open dataset
         try:
             from utils import metaDataExtraction # Here to get around curcular import at BrAinPI init

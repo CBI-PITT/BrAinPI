@@ -87,7 +87,7 @@ else:
     app = initiate_NOT_browseable(app, config)
 
 print('Initiating OME Zarr endpoints')
-from ome_zarr import setup_omezarr
+from ome_zarr_ep import setup_omezarr
 app = setup_omezarr(app,config)
 
 print('Importing Neuroglancer endpoints')

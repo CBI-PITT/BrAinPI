@@ -398,6 +398,7 @@ def neuroglancer_dtypes():
         '.omezans', #Archived_Nested_Store
         '.omehans', #H5_Nested_Store
         '.zarr', #Custom multiscale zarr implementation
+        '.nii.gz',
         # '.weave',
         # '.z_sharded'
         '.terafly'
@@ -564,6 +565,7 @@ def setup_neuroglancer(app, config):
                 img = encode_ng_file(img, config.opendata[datapath].ng_json['num_channels'])
 
                 if config.cache is not None:
+                    logger.info("ng chunked saved")
                     config.cache.set(key, img, expire=None, tag=datapath, retry=True)
 
             #Flask return of bytesIO as file
