@@ -323,7 +323,7 @@ class tiff_loader:
         pyramids_images_store_dir = (
             pyramids_images_store + hash_value[0:2] + "/" + hash_value[2:4] + "/"
         )
-        suffix = ".ome.tif"
+        suffix = self.settings.get("tif_loader", "extension_type")
         pyramid_image_location = pyramids_images_store_dir + hash_value + suffix
         if self.pyramid_dic.get(hash_value) and os.path.exists(pyramid_image_location):
             self.datapath = self.pyramid_dic.get(hash_value)

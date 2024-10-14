@@ -227,9 +227,10 @@ def is_file_type(file_type, path):
     if isinstance(file_type,str):
         file_type = [file_type]
     path = strip_trailing_slashs(path)
-    terminal_path_ext = os.path.splitext('a'+ path)[-1]
-    
-    return any( ( x.lower() == terminal_path_ext.lower() for x in file_type ) )
+    # terminal_path_ext = os.path.splitext('a'+ path)[-1]
+    # return any( ( x.lower() == terminal_path_ext.lower() for x in file_type ) )
+    # for fixing file with double dot like .nii.gz
+    return any( ( path.lower().endswith(x.lower()) for x in file_type ) )
 
 def from_html_to_path(req_path, path_map):
     html_path = split_html(req_path)
@@ -276,7 +277,8 @@ def strip_leading_slashs(string):
 
 def strip_trailing_slashs(string):
     assert isinstance(string,str), 'Must pass a string'
-    while string[-1] == '/' or string[0] == '\\':
+    # while string[-1] == '/' or string[0] == '\\':
+    while string[-1] == '/' or string[-1] == '\\':
         string = string[:-1]
     return string
 
