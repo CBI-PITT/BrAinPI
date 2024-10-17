@@ -154,8 +154,8 @@ class nifti_zarr_loader:
                 # Collect attribute info
                 self.metaData[r, t, c, "shape"] = array.shape
                 ## Need to extract resolution by some other means.  For now, default to 1,1,1 and divide by 2 for each series
-                self.metaData[r, t, c, "resolution"] = self.dataset_scales[r][-3:]
-
+                # self.metaData[r, t, c, "resolution"] = self.dataset_scales[r][-3:]
+                self.metaData[r, t, c, "resolution"] = [val * 1000 for val in self.dataset_scales[r][-3:]]
                 # Collect dataset info
                 self.metaData[r, t, c, "chunks"] = array.chunks[-3:]
                 dtype = array.dtype[0]
@@ -163,7 +163,7 @@ class nifti_zarr_loader:
                     dtype = "uint8"
                 elif dtype == "int16":
                     dtype = "uint16"
-                elif dtype == "float64":
+                elif dtype == "float64" or dtype == "float16":
                     dtype = "float32"
                 self.metaData[r, t, c, "dtype"] = dtype
                 self.metaData[r, t, c, "ndim"] = array.ndim
