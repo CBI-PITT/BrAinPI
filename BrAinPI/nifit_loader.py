@@ -111,11 +111,14 @@ class nifti_zarr_loader:
         if len(self.axes) < 3:
             raise Exception()
         self.dim_pos_dic = {"t": None, "c": None, "z": None, "y": None, "x": None}
+        self.space_unit = None
         for index, axe in enumerate(self.axes):
             self.dim_pos_dic[axe["name"]] = index
+            if axe["type"] == "space":
+                self.space_unit = axe["unit"]
         logger.info(self.dim_pos_dic)
         logger.info(self.multiscales)
-
+        logger.info(self.space_unit)
         del zgroup
         del store
 
@@ -153,9 +156,14 @@ class nifti_zarr_loader:
 
                 # Collect attribute info
                 self.metaData[r, t, c, "shape"] = array.shape
-                ## Need to extract resolution by some other means.  For now, default to 1,1,1 and divide by 2 for each series
-                # self.metaData[r, t, c, "resolution"] = self.dataset_scales[r][-3:]
-                self.metaData[r, t, c, "resolution"] = [val * 1000 for val in self.dataset_scales[r][-3:]]
+                
+
+                # change to um if mm
+                if self.space_unit == "mm" or self.space_unit == "millimeter":
+                    self.metaData[r, t, c, "resolution"] = [val * 1000 for val in self.dataset_scales[r][-3:]]
+                else:
+                    self.metaData[r, t, c, "resolution"] = self.dataset_scales[r][-3:]
+
                 # Collect dataset info
                 self.metaData[r, t, c, "chunks"] = array.chunks[-3:]
                 dtype = array.dtype[0]
