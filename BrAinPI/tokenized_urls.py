@@ -141,7 +141,7 @@ def setup_tokenized_endpoint(app, config):
 
 	SECRET_KEY = config.settings.get('auth' ,'secret_key') # Used for token signing
 	APP_URL = config.settings.get('app' ,'url')
-	if APP_URL[-1] is not '/':
+	if APP_URL[-1] != '/':
 		APP_URL += '/'
 
 	RSA_KEY_LOCATION = config.settings.get('rsa', 'key_location')  # Used for token signing
