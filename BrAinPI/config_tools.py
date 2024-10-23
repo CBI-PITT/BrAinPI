@@ -15,14 +15,14 @@ def calculate_hash(input_string):
 def get_config(file='settings.ini',allow_no_value=True):
     import configparser
     # file = os.path.join(os.path.split(os.path.abspath(__file__))[0],file)
-    file = os.path.join(sys.path[0], file)
+    file_path = os.path.join(sys.path[0], file)
 
     # This condition is used for documentation generation through sphinx and readTheDoc, plz always have settings.ini.
     if os.path.exists(file) is False:
-        file = os.path.join(sys.path[0], 'template_' + file)
-
+        file_path = os.path.join(sys.path[0], 'template_' + file)
+        print('sphinx generation',file)
     config = configparser.ConfigParser(allow_no_value=allow_no_value)
-    config.read(file)
+    config.read(file_path)
     return config
 def get_pyramid_images_connection(settings):
     # os.makedirs(settings.get('tif_loader','pyramids_images_store'),exist_ok=True)
