@@ -16,6 +16,11 @@ def get_config(file='settings.ini',allow_no_value=True):
     import configparser
     # file = os.path.join(os.path.split(os.path.abspath(__file__))[0],file)
     file = os.path.join(sys.path[0], file)
+
+    # This condition is used for documentation generation through sphinx and readTheDoc, plz always have settings.ini.
+    if os.path.exists(file) is False:
+        file = os.path.join(sys.path[0], 'template_' + file)
+
     config = configparser.ConfigParser(allow_no_value=allow_no_value)
     config.read(file)
     return config
