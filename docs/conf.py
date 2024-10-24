@@ -8,8 +8,21 @@
 
 import os
 import sys
+from sphinx.ext.apidoc import main as sphinx_apidoc_main
+
 sys.path.insert(0, os.path.abspath('../BrAinPI'))
 print(sys.path)
+
+def run_apidoc(_):
+    module_path = os.path.abspath('../BrAinPI')
+    output_path = os.path.abspath('.')
+    sphinx_apidoc_main([
+        '-o', output_path, module_path, '--force'
+    ])
+
+def setup(app):
+    app.connect('builder-inited', run_apidoc)
+
 project = 'BrainPi Document'
 copyright = '2024, Alan M Watson, Kelin He'
 author = 'Alan M Watson, Kelin He'
