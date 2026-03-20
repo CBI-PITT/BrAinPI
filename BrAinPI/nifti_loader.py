@@ -5,14 +5,16 @@ import shutil
 import time
 import nibabel as nib
 from filelock import FileLock
-from zarr.storage import NestedDirectoryStore
+from zarr.storage import LocalStore
 from collections.abc import MutableMapping
-from zarr._storage.store import Store, BaseStore
+from zarr.abc.store import (
+    Store
+)
 from typing import Union
 from niizarr import nii2zarr
 # Path = Union[str, bytes, None]
 from pathlib import Path
-StoreLike = Union[BaseStore, Store, MutableMapping]
+StoreLike = Union[ Store, MutableMapping]
 from logger_tools import logger
 import gc
 import multiprocessing
@@ -80,7 +82,7 @@ class nifti_zarr_loader:
         pyramids_images_store=None,
         extension_type=".nii.zarr",
         ResolutionLevelLock=None,
-        zarr_store_type: StoreLike = NestedDirectoryStore,
+        zarr_store_type: StoreLike = LocalStore,
         verbose=None,
         squeeze=True,
         cache=None,
@@ -96,7 +98,7 @@ class nifti_zarr_loader:
             pyramids_images_store (str, optional): Directory for storing pyramid images. Defaults to None.
             extension_type (str, optional): File extension for the generated pyramid images. Defaults to ".nii.zarr".
             ResolutionLevelLock (int, optional): Lock for accessing a specific resolution level. Defaults to None.
-            zarr_store_type (zarr.storage, optional): Zarr store type. Defaults to NestedDirectoryStore.
+            zarr_store_type (zarr.storage, optional): Zarr store type. Defaults to LocalStore.
             verbose (bool, optional): Verbose logging. Defaults to None.
             squeeze (bool, optional): Whether to remove singleton dimensions from arrays. Defaults to True.
             cache (object, optional): Cache object for storing slices. Defaults to None.
@@ -153,13 +155,14 @@ class nifti_zarr_loader:
         # self.axes = self.multiscales[0]['axes']
         if len(self.axes) < 3:
             raise Exception()
-        self.dim_pos_dic = {"t": None, "c": None, "z": None, "y": None, "x": None}
+        self.axes_pos_dic = {"t": None, "c": None, "z": None, "y": None, "x": None}
+        self._standard_axes = {"t":0, "c":1, "z":2, "y":3, "x":4}
         self.space_unit = None
         for index, axe in enumerate(self.axes):
-            self.dim_pos_dic[axe["name"]] = index
+            self.axes_pos_dic[axe["name"]] = index
             if axe["type"] == "space":
                 self.space_unit = axe["unit"]
-        logger.info(self.dim_pos_dic)
+        logger.info(self.axes_pos_dic)
         logger.info(self.multiscales)
         logger.info(self.space_unit)
         del zgroup
@@ -183,10 +186,10 @@ class nifti_zarr_loader:
             array = self.open_array(r)
             if r == 0:
                 self.TimePoints = (
-                    array.shape[self.dim_pos_dic["t"]] if self.dim_pos_dic["t"] else 1
+                    array.shape[self.axes_pos_dic["t"]] if self.axes_pos_dic["t"] else 1
                 )
                 self.Channels = (
-                    array.shape[self.dim_pos_dic["c"]] if self.dim_pos_dic["c"] else 1
+                    array.shape[self.axes_pos_dic["c"]] if self.axes_pos_dic["c"] else 1
                 )
             # shape_z = array.shape[self.dim_pos_dic['z']]
             # shape_y = array.shape[self.dim_pos_dic['y']]
@@ -206,19 +209,29 @@ class nifti_zarr_loader:
                 #     self.metaData[r, t, c, "shape"] = new_shape
                 # else:
                 #     self.metaData[r, t, c, "shape"] = shape
-                shape_z = array.shape[self.dim_pos_dic.get("z")] if self.dim_pos_dic.get("z") is not None else 1
-                shape_y = array.shape[self.dim_pos_dic.get("y")] if self.dim_pos_dic.get("y") is not None else 1
-                shape_x = array.shape[self.dim_pos_dic.get("x")] if self.dim_pos_dic.get("x") is not None else 1
+                shape_z = array.shape[self.axes_pos_dic.get("z")] if self.axes_pos_dic.get("z") is not None else 1
+                shape_y = array.shape[self.axes_pos_dic.get("y")] if self.axes_pos_dic.get("y") is not None else 1
+                shape_x = array.shape[self.axes_pos_dic.get("x")] if self.axes_pos_dic.get("x") is not None else 1
                 self.metaData[r, t, c, 'shape'] = (1, 1, shape_z, shape_y, shape_x)
 
                 # change to um if mm
                 if self.space_unit == "mm" or self.space_unit == "millimeter":
-                    self.metaData[r, t, c, "resolution"] = [val * 1000 for val in self.dataset_scales[r][-3:]]
+                    self.metaData[r, t, c, "resolution"] = (
+                        self.dataset_scales[r][self.axes_pos_dic['z']] * 1000 if self.axes_pos_dic['z'] is not None else 1000,
+                        self.dataset_scales[r][self.axes_pos_dic['y']] * 1000 if self.axes_pos_dic['y'] is not None else 1000,
+                        self.dataset_scales[r][self.axes_pos_dic['x']] * 1000 if self.axes_pos_dic['x'] is not None else 1000)
+                    # self.metaData[r, t, c, "resolution"] = [val * 1000 for val in self.dataset_scales[r][-3:]]
                 else:
-                    self.metaData[r, t, c, "resolution"] = self.dataset_scales[r][-3:]
+                    self.metaData[r, t, c, "resolution"] = (self.dataset_scales[r][self.axes_pos_dic['z']] if self.axes_pos_dic['z'] is not None else 1,
+                    self.dataset_scales[r][self.axes_pos_dic['y']] if self.axes_pos_dic['y'] is not None else 1,
+                    self.dataset_scales[r][self.axes_pos_dic['x']] if self.axes_pos_dic['x'] is not None else 1)
+                    # self.metaData[r, t, c, "resolution"] = self.dataset_scales[r][-3:]
 
                 # Collect dataset info
-                self.metaData[r, t, c, "chunks"] = (1, 1, *array.chunks[-3:])
+                self.metaData[r, t, c, "chunks"] = (1,1, array.chunks[self.axes_pos_dic['z'] if self.axes_pos_dic['z'] is not None else 1],
+                array.chunks[self.axes_pos_dic['y'] if self.axes_pos_dic['y'] is not None else 1],
+                array.chunks[self.axes_pos_dic['x'] if self.axes_pos_dic['x'] is not None else 1])
+                # self.metaData[r, t, c, "chunks"] = (1, 1, *array.chunks[-3:])
                 # dtype = array.dtype
                 # if dtype == "int8":
                 #     dtype = "uint8"
@@ -241,9 +254,9 @@ class nifti_zarr_loader:
             self.arrays[r] = array
 
             # may not need
-            shape_z = array.shape[self.dim_pos_dic["z"]]
-            shape_y = array.shape[self.dim_pos_dic["y"]]
-            shape_x = array.shape[self.dim_pos_dic["x"]]
+            shape_z = array.shape[self.axes_pos_dic["z"]]
+            shape_y = array.shape[self.axes_pos_dic["y"]]
+            shape_x = array.shape[self.axes_pos_dic["x"]]
             if shape_z <= 64 and shape_y <= 64 and shape_x <= 64:
                 self.ResolutionLevels = r + 1
                 break
@@ -473,8 +486,10 @@ class nifti_zarr_loader:
         if self.squeeze:
             return np.squeeze(array)
         else:
-            while len(array.shape) < 5:
-                    array = np.expand_dims(array, axis=0)
+            for key in self._standard_axes:
+                if self.axes_pos_dic.get(key) is None:
+                    array = np.expand_dims(array, axis=self._standard_axes[key])
+            logger.info(array.shape)
             return array
 
     def _get_memorize_cache(
@@ -517,16 +532,16 @@ class nifti_zarr_loader:
                 logger.info(f"loader cache found")
                 return result
         list_tp = [0] * len(self.axes)
-        if self.dim_pos_dic.get("t") != None:
-            list_tp[self.dim_pos_dic.get("t")] = t
-        if self.dim_pos_dic.get("c") != None:
-            list_tp[self.dim_pos_dic.get("c")] = c
-        if self.dim_pos_dic.get("z") != None:
-            list_tp[self.dim_pos_dic.get("z")] = z
-        if self.dim_pos_dic.get("y") != None:
-            list_tp[self.dim_pos_dic.get("y")] = y
-        if self.dim_pos_dic.get("x") != None:
-            list_tp[self.dim_pos_dic.get("x")] = x
+        if self.axes_pos_dic.get("t") != None:
+            list_tp[self.axes_pos_dic.get("t")] = t
+        if self.axes_pos_dic.get("c") != None:
+            list_tp[self.axes_pos_dic.get("c")] = c
+        if self.axes_pos_dic.get("z") != None:
+            list_tp[self.axes_pos_dic.get("z")] = z
+        if self.axes_pos_dic.get("y") != None:
+            list_tp[self.axes_pos_dic.get("y")] = y
+        if self.axes_pos_dic.get("x") != None:
+            list_tp[self.axes_pos_dic.get("x")] = x
         tp = tuple(list_tp)
         # logger.success(tp)
         result = self.arrays[r][tp]

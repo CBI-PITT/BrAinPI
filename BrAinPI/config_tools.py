@@ -2,7 +2,7 @@
 import os
 import imaris_ims_file_reader as ims
 # Import zarr stores
-from zarr.storage import NestedDirectoryStore
+from zarr.storage import LocalStore
 from zarr_stores.archived_nested_store import Archived_Nested_Store
 from zarr_stores.h5_nested_store import H5_Nested_Store
 import hashlib
@@ -153,7 +153,7 @@ class config:
             self.opendata[key] = ome_zarr_loader(
                 dataPath, 
                 squeeze=False, 
-                zarr_store_type=NestedDirectoryStore, 
+                zarr_store_type=LocalStore, 
                 cache=self.cache
                 )
             # self.opendata[dataPath].isomezarr = True
@@ -220,7 +220,7 @@ class config:
                 self.settings.get("nifti_loader", "pyramids_images_allowed_generation_size_gb"),
                 self.settings.get("nifti_loader", "pyramids_images_store"),
                 self.settings.get("nifti_loader", "extension_type"),
-                zarr_store_type=NestedDirectoryStore,
+                zarr_store_type=LocalStore,
                 squeeze=False,
                 cache=self.cache)
             self.opendata_set.add(dataPath)

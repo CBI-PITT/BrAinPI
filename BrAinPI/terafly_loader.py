@@ -58,9 +58,9 @@ class terafly_loader:
                 reverse_tuple = self.array[r].get_dim()[0:3][::-1]
                 self.metaData[r, t, c, "shape"] = (1, 1, *reverse_tuple)
                 self.metaData[r, t, c, "resolution"] = (
-                    self.array[r]._volume.VXL_D,
-                    self.array[r]._volume.VXL_V,
-                    self.array[r]._volume.VXL_H,
+                    self.array[r]._volume.VXL_D if hasattr(self.array[r]._volume, 'VXL_D') else 1 * (2 ** r),
+                    self.array[r]._volume.VXL_V if hasattr(self.array[r]._volume, 'VXL_V') else 1 * (2 ** r),
+                    self.array[r]._volume.VXL_H if hasattr(self.array[r]._volume, 'VXL_H') else 1 * (2 ** r),
                 )
                 top_left_bulk = self.array[r]._volume.BLOCKS[0][0]
                 d, h, w = int(top_left_bulk.DEPTH/top_left_bulk.N_BLOCKS), top_left_bulk.HEIGHT, top_left_bulk.WIDTH

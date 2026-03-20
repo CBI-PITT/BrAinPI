@@ -249,25 +249,44 @@ def get_zarray_file(numpy_like_dataset,resolution_level,combine_channels=False,f
     # zarray['dimension_separator'] = '.'
     zarray['dimension_separator'] = '/' #<-- required for compatibility with ome-zarr 4.0
     if force8Bit:
+        logger.info('dtype to uint8')
         zarray['dtype'] = encoding_values['uint8']
     else:
+        logger.info(f'metadata dtype: {metadata[(0, 0, 0, "dtype")]}')
+        if metadata[(0, 0, 0, 'dtype')].endswith('u2'):
+            logger.info('correcting dtype to uint16 - zarray')
+            metadata[(0, 0, 0, 'dtype')] = 'uint16'
         zarray['dtype'] = encoding_values[metadata[(0, 0, 0, 'dtype')]]#'<u2' if numpy_like_dataset.dtype == np.uint16 else '<u2'  ## Need to figure out other dtype opts for uint8, float et al
     zarray['fill_value'] = 0
     zarray['filters'] = None
     zarray['order'] = 'C'
     zarray['shape'] = metadata['TimePoints'],metadata['Channels'],*metadata[(resolution_level,0,0,'shape')][-3:]
     zarray['zarr_format'] = 2
-
     return zarray
 
 
 colors = [
-    '00FF00', #green
-    'FF0000', #red
-    'FF00FF', #purple
-    '0000FF', #blue
-    'FFFF00'  #yellow
-    ]
+                "#00FF00",  # 0 green
+                "#FF0000",  # 1 red
+                "#0000FF",  # 2 blue
+                "#800080",  # 3 purple
+                "#FFFF00",  # 4 yellow
+                "#FFA500",  # 5 orange
+                "#00FFFF",  # 6 cyan
+                "#FF00FF",  # 7 magenta
+                "#32CD32",  # 8 lime green
+                "#FF1493",  # 9 deep pink
+                "#00BFFF",  # 10 deep sky blue
+                "#FFD700",  # 11 gold
+                "#7FFF00",  # 12 chartreuse
+                "#1E90FF",  # 13 dodger blue
+                "#D2691E",  # 14 chocolate
+                "#20B2AA",  # 15 light sea green
+                "#BA55D3",  # 16 medium orchid
+                "#6A5ACD",  # 17 slate blue
+                "#FF6347",  # 18 tomato
+                "#008080",  # 19 teal
+            ]
 
 values = {
     np.dtype('uint8'):(0,255),
@@ -451,8 +470,8 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
         }
         ]
 
-    colors * math.ceil(metadata['Channels']/len(colors))
-
+    # colors * math.ceil(metadata['Channels']/len(colors))
+    channel_colors = colors * math.ceil(metadata['Channels']/len(colors))
 
     # lowest_res_level = numpy_like_dataset[metadata['ResolutionLevels']-1,0,0,:,:,:]
 
@@ -464,6 +483,10 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
     for ch in range(metadata['Channels']):
         current_channel_data = numpy_like_dataset[metadata['ResolutionLevels']-1,0,ch,:,:,:]
         dtype = current_channel_data.dtype
+        logger.info(f'type data: {type(dtype)}')
+        if str(dtype).endswith('u2'):
+            logger.info('correcting dtype to uint16')
+            dtype = np.dtype('uint16')
 
         end = int(current_channel_data.max()) if not value_types[dtype] == float else float(current_channel_data.max())
         start = int(current_channel_data.min()) if not value_types[dtype] == float else float(current_channel_data.min())
@@ -496,7 +519,7 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
         channel = {
             'active':True,
             'coefficient': 1.0,
-            'color':colors[ch],
+            'color':channel_colors[ch],
             'family':'linear',
             'inverted':False,
             'label': 'Channel_{}'.format(ch),
@@ -613,7 +636,7 @@ def setup_omezarr(app, config):
         path_split, datapath = get_html_split_and_associated_file_path(config,request)
 
         # logger.info(path_split)
-        # logger.info(datapath)
+        logger.info(f'requested path: {req_path}')
         ##  HAck if ignores '.' as dimension_sperator
         try:
             new_path = path_split[-5:]
@@ -632,17 +655,30 @@ def setup_omezarr(app, config):
 
         # Flag to deliver 8bit data to NG
         force8Bit = False
-        if '.8.' in datapath or '.8bit.' in datapath:
+        # if '.8.' in datapath or '.8bit.' in datapath:
+        #     logger.warning('Forcing 8bit data delivery')
+        #     force8Bit = True
+        #     datapath = datapath.replace('.8.', '.')
+        #     datapath = datapath.replace('.8bit.', '.')
+        if '.8bit.' in datapath:
             force8Bit = True
-            datapath = datapath.replace('.8.', '.')
+            # datapath = datapath.replace('.8.', '.')
             datapath = datapath.replace('.8bit.', '.')
 
         # Attempt to enable ome.zarr ext for compatibility with omezarr utils
         isNeuroGlancer = False
+        # for ext in exts:
+        #     if len(datapath.split(ext)) > 1:
+        #         datapath = datapath.replace(ext,'',1)
+        #         if ext == '.ng.ome.zarr': isNeuroGlancer = True
+        #         # logger.info(f'DATAPATH MINUS EXT: {datapath}')
+        #         break
         for ext in exts:
             if len(datapath.split(ext)) > 1:
-                datapath = datapath.replace(ext,'')
-                if ext == '.ng.ome.zarr': isNeuroGlancer = True
+                idx = datapath.rfind(ext)
+                datapath = datapath[:idx] + datapath[idx + len(ext):]
+                if ext == '.ng.ome.zarr':
+                    isNeuroGlancer = True
                 # logger.info(f'DATAPATH MINUS EXT: {datapath}')
                 break
 
@@ -687,9 +723,10 @@ def setup_omezarr(app, config):
                     # Only use the first match
                     break
 
-            logger.info(path_split)
 
-        logger.info(path_split)
+
+        logger.info(f'path_split: {path_split}')
+        logger.info(f'datapath: {datapath}')
         # Find the file system path to the dataset
         # Assumptions are neuroglancer only requests 'info' file or chunkfiles
         # If only the file name is requested this will redirect to a

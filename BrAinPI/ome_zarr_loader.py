@@ -10,15 +10,18 @@ import zarr, os, itertools
 import numpy as np
 
 # # Import zarr stores
-from zarr.storage import NestedDirectoryStore
+from zarr.storage import LocalStore
 # from zarr_stores.archived_nested_store import Archived_Nested_Store
 # from zarr_stores.h5_nested_store import H5_Nested_Store
 
 from collections.abc import MutableMapping
-from zarr._storage.store import Store, BaseStore
+# from zarr._storage.store import Store, BaseStore
+from zarr.abc.store import (
+    Store
+)
 from typing import Union
 Path = Union[str, bytes, None]
-StoreLike = Union[BaseStore, Store, MutableMapping]
+StoreLike = Union[ Store, MutableMapping]
 from logger_tools import logger
 # import s3fs
 
@@ -26,7 +29,7 @@ class ome_zarr_loader:
     """
     A loader class for handling OME-Zarr datasets with multi-resolution access and metadata extraction.
     """
-    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type: StoreLike=NestedDirectoryStore, verbose=None, squeeze=True, cache=None):
+    def __init__(self, location, ResolutionLevelLock=None, zarr_store_type: StoreLike=LocalStore, verbose=None, squeeze=True, cache=None):
         """
         Initialize the ome_zarr_loader object.
 
@@ -60,12 +63,25 @@ class ome_zarr_loader:
         zgroup = zarr.open(store)
         self.zattrs = zgroup.attrs
         
-        if 'omero' in self.zattrs:
-            self.omero = zgroup.attrs['omero']
+        # if 'omero' in self.zattrs:
+        #     self.omero = zgroup.attrs['omero']
+        try:
+            self.omero = zgroup.attrs['omero'] if 'omero' in zgroup.attrs else zgroup.attrs['ome']['omero']
+        except:
+            pass
+        # if 'omero' in zgroup.attrs or 'omero' in zgroup.attrs['ome']:
+        #     self.omero = zgroup.attrs['omero'] if 'omero' in zgroup.attrs else zgroup.attrs['ome']['omero']
         # assert 'omero' in self.zattrs
         # self.omero = zgroup.attrs['omero']
-        assert 'multiscales' in self.zattrs
-        self.multiscales = zgroup.attrs['multiscales']
+        # assert 'multiscales' in self.zattrs
+        try:
+            self.multiscales = zgroup.attrs['multiscales'] if 'multiscales' in zgroup.attrs else zgroup.attrs['ome']['multiscales']
+        except:
+            raise ValueError("OME-Zarr multiscales attribute missing")
+        # self.multiscales = zgroup.attrs['multiscales']
+        self.axes_pos_dic = self.axes_pos_extract(self.multiscales[0])
+        # logger.info(f"Axes positions: {self.axes_pos_dic}")
+        self._standard_axes = {"t":0, "c":1, "z":2, "y":3, "x":4}
         logger.info(self.multiscales)
         del zgroup
         del store
@@ -82,22 +98,36 @@ class ome_zarr_loader:
             self.dataset_paths.append(self.multiscale_datasets[res]['path'])
             self.dataset_scales.append(self.multiscale_datasets[res]['coordinateTransformations'][0]['scale'])
         
-        
+        self.arrays = {}
         for r in range(self.ResolutionLevels):
             array = self.open_array(r)
             if r == 0:
-                self.TimePoints = array.shape[0]
-                self.Channels = array.shape[1]
+                if self.axes_pos_dic['t'] is not None:
+                    self.TimePoints = array.shape[self.axes_pos_dic['t']]
+                else:
+                    self.TimePoints = 1
+                if self.axes_pos_dic['c'] is not None:
+                    self.Channels = array.shape[self.axes_pos_dic['c']]
+                else:
+                    self.Channels = 1
                 
             for t,c in itertools.product(range(self.TimePoints),range(self.Channels)):
                 
                 # Collect attribute info
-                self.metaData[r,t,c,'shape'] = (1,1,*array.shape[2:])
+
+                self.metaData[r,t,c,'shape'] = (1,1,array.shape[self.axes_pos_dic['z']] if self.axes_pos_dic['z'] is not None else 1,
+                                                         array.shape[self.axes_pos_dic['y']] if self.axes_pos_dic['y'] is not None else 1,
+                                                         array.shape[self.axes_pos_dic['x']] if self.axes_pos_dic['x'] is not None else 1)
                 ## Need to extract resolution by some other means.  For now, default to 1,1,1 and divide by 2 for each series
-                self.metaData[r,t,c,'resolution'] = self.dataset_scales[r][2:]
-                         
+
+                self.metaData[r,t,c,'resolution'] = [self.dataset_scales[r][self.axes_pos_dic['z']] if self.axes_pos_dic['z'] is not None else 1 * (2**r),
+                                                         self.dataset_scales[r][self.axes_pos_dic['y']] if self.axes_pos_dic['y'] is not None else 1 * (2**r),
+                                                         self.dataset_scales[r][self.axes_pos_dic['x']] if self.axes_pos_dic['x'] is not None else 1 * (2**r)]
+
                 # Collect dataset info
-                self.metaData[r,t,c,'chunks'] = array.chunks
+                self.metaData[r,t,c,'chunks'] = (1,1,array.chunks[self.axes_pos_dic['z']] if self.axes_pos_dic['z'] is not None else 1,
+                                                         array.chunks[self.axes_pos_dic['y']] if self.axes_pos_dic['y'] is not None else 1,
+                                                         array.chunks[self.axes_pos_dic['x']] if self.axes_pos_dic['x'] is not None else 1)
                 self.metaData[r,t,c,'dtype'] = array.dtype
                 self.metaData[r,t,c,'ndim'] = array.ndim
                 
@@ -106,12 +136,38 @@ class ome_zarr_loader:
                     self.metaData[r,t,c,'min'] = self.omero['channels'][c]['window']['start']
                 except:
                     pass
+            
+            self.arrays[r] = array
         
         self.change_resolution_lock(self.ResolutionLevelLock)
         
-        self.arrays = {}
-        for res in range(self.ResolutionLevels):
-            self.arrays[res] = self.open_array(res)
+        # self.arrays = {}
+        # for res in range(self.ResolutionLevels):
+        #     self.arrays[res] = self.open_array(res)
+
+    def axes_pos_extract(self,multiscale0: dict):
+        axes = multiscale0.get("axes")
+        if axes is None:
+            raise ValueError("multiscales[0].axes missing")
+        # axes can be ["t","c","z","y","x"] or [{"name":"t","type":"time"}, ...]
+        
+        dic = {
+            "t": None,
+            "c": None,
+            "z": None,
+            "y": None,
+            "x": None,
+        }
+        for index, a in enumerate(axes):
+            if isinstance(a, str):
+                if a in dic:
+                    dic[a] = index
+                
+            else:
+                if a["name"] in dic:
+                    dic[a["name"]] = index
+        return dic  # mapping from axis name to array dimension index
+
 
     def zarr_store_type(self, path):
         """
@@ -209,6 +265,10 @@ class ome_zarr_loader:
         if self.squeeze:
             return np.squeeze(array)
         else:
+            for key in self._standard_axes:
+                if self.axes_pos_dic.get(key) is None:
+                    array = np.expand_dims(array, axis=self._standard_axes[key])
+            logger.info(array.shape)
             return array
         
     
@@ -246,8 +306,21 @@ class ome_zarr_loader:
             if result is not None:
                 logger.info(f'loader cache found')
                 return result
-        
-        result = self.arrays[r][t,c,z,y,x]
+        list_tp = [0] * len(self.multiscales[0]['axes'])
+        if self.axes_pos_dic['t'] is not None:
+            list_tp[self.axes_pos_dic['t']] = t
+        if self.axes_pos_dic['c'] is not None:
+            list_tp[self.axes_pos_dic['c']] = c
+        if self.axes_pos_dic['z'] is not None:
+            list_tp[self.axes_pos_dic['z']] = z
+        if self.axes_pos_dic['y'] is not None:
+            list_tp[self.axes_pos_dic['y']] = y
+        if self.axes_pos_dic['x'] is not None:
+            list_tp[self.axes_pos_dic['x']] = x
+        tp = tuple(list_tp)
+        logger.info(tp)
+        result = self.arrays[r][tp]
+        # result = self.arrays[r][t,c,z,y,x]
 
         if self.cache is not None:
             # print("Cache Status:")
@@ -487,111 +560,111 @@ class ome_zarr_loader:
 A Zarr store that uses boto3 (and not s3fs) to access zarr stores in s3://
 '''
 
-import os
-import errno
-import shutil
-import time
-import numpy as np
-import uuid
-import glob
-import re
+# import os
+# import errno
+# import shutil
+# import time
+# import numpy as np
+# import uuid
+# import glob
+# import re
 
-from zarr.errors import (
-    MetadataError,
-    BadCompressorError,
-    ContainsArrayError,
-    ContainsGroupError,
-    FSPathExistNotDir,
-    ReadOnlyError,
-)
+# from zarr.errors import (
+#     MetadataError,
+#     BadCompressorError,
+#     ContainsArrayError,
+#     ContainsGroupError,
+#     FSPathExistNotDir,
+#     ReadOnlyError,
+# )
 
-from numcodecs.abc import Codec
-from numcodecs.compat import (
-    ensure_bytes,
-    ensure_text,
-    ensure_contiguous_ndarray,
-    ensure_contiguous_ndarray_like
-)
+# from numcodecs.abc import Codec
+# from numcodecs.compat import (
+#     ensure_bytes,
+#     ensure_text,
+#     ensure_contiguous_ndarray,
+#     ensure_contiguous_ndarray_like
+# )
 
 # from numcodecs.registry import codec_registry
 
 # from threading import Lock, RLock
 # from filelock import Timeout, FileLock, SoftFileLock
 
-from zarr.util import (buffer_size, json_loads, nolock, normalize_chunks,
-                       normalize_dimension_separator,
-                       normalize_dtype, normalize_fill_value, normalize_order,
-                       normalize_shape, normalize_storage_path, retry_call)
+# from zarr.util import (buffer_size, json_loads, nolock, normalize_chunks,
+#                        normalize_dimension_separator,
+#                        normalize_dtype, normalize_fill_value, normalize_order,
+#                        normalize_shape, normalize_storage_path, retry_call)
 
-from zarr._storage.absstore import ABSStore  # noqa: F401
+# from zarr._storage.absstore import ABSStore  # noqa: F401
 
-from zarr._storage.store import Store, array_meta_key
-from s3_utils import s3_get_dir_contents, s3_isdir, s3_isfile
-_prog_number = re.compile(r'^\d+$')
+# from zarr._storage.store import Store, array_meta_key
+# from s3_utils import s3_get_dir_contents, s3_isdir, s3_isfile
+# _prog_number = re.compile(r'^\d+$')
 
-## BOTO3 Way to do dir and files from s3
-import boto3
-from botocore import UNSIGNED, exceptions
-from botocore.client import Config
-import functools
+# ## BOTO3 Way to do dir and files from s3
+# import boto3
+# from botocore import UNSIGNED, exceptions
+# from botocore.client import Config
+# import functools
 
-####################################
-# HELPER FUNCTIONS
-# Duplicated from utils
-# may integrate into store class
-####################################
-
-
-def s3_get_bucket_and_path_parts(path):
-    path = s3_clean_path(path)
-    path_split = path.split('/')
-    # logger.info(path_split)
-    if isinstance(path_split, str):
-        path_split = [path_split]
-    bucket = path_split[0]
-    return bucket, path_split
-def s3_clean_path(path):
-    if 's3://' in path.lower():
-        path = path[5:]
-    elif path.startswith('/'):
-        path = path[1:]
-    if path.endswith('/'):
-        path = path[:-1]
-    return path
+# ####################################
+# # HELPER FUNCTIONS
+# # Duplicated from utils
+# # may integrate into store class
+# ####################################
 
 
-def list_all_contents(path):
-    parent, dirs, files = get_dir_contents(path)
-    dirs = [os.path.join(parent,x) for x in dirs]
-    files = [os.path.join(parent, x) for x in files]
-    return dirs + files
+# def s3_get_bucket_and_path_parts(path):
+#     path = s3_clean_path(path)
+#     path_split = path.split('/')
+#     # logger.info(path_split)
+#     if isinstance(path_split, str):
+#         path_split = [path_split]
+#     bucket = path_split[0]
+#     return bucket, path_split
+# def s3_clean_path(path):
+#     if 's3://' in path.lower():
+#         path = path[5:]
+#     elif path.startswith('/'):
+#         path = path[1:]
+#     if path.endswith('/'):
+#         path = path[:-1]
+#     return path
 
-    # if 's3://' in path:
-    #     return s3.glob(os.path.join(path,'*'))
-    # else:
-    #     return glob.glob(os.path.join(path,'*'))
 
-def isdir(path):
-    # if 's3://' in path:
-    #     return s3.isdir(path)
-    if 's3://' in path:
-        return s3_isdir(path)
-    else:
-        return os.path.isdir(path)
+# def list_all_contents(path):
+#     parent, dirs, files = get_dir_contents(path)
+#     dirs = [os.path.join(parent,x) for x in dirs]
+#     files = [os.path.join(parent, x) for x in files]
+#     return dirs + files
 
-def isfile(path):
-    if 's3://' in path:
-        return s3_isfile(path)
-    else:
-        return os.path.isfile(path)
+#     # if 's3://' in path:
+#     #     return s3.glob(os.path.join(path,'*'))
+#     # else:
+#     #     return glob.glob(os.path.join(path,'*'))
 
-def get_dir_contents(path,skip_s3=False):
-    if 's3://' in path:
-        if skip_s3:
-            return path, [], []
-        parent, dirs, files, _, _ = s3_get_dir_contents(path)
-        return f's3://{parent}', dirs, files
-    else:
-        for parent, dirs, files in os.walk(path):
-            return parent, dirs, files
+# def isdir(path):
+#     # if 's3://' in path:
+#     #     return s3.isdir(path)
+#     if 's3://' in path:
+#         return s3_isdir(path)
+#     else:
+#         return os.path.isdir(path)
+
+# def isfile(path):
+#     if 's3://' in path:
+#         return s3_isfile(path)
+#     else:
+#         return os.path.isfile(path)
+
+# def get_dir_contents(path,skip_s3=False):
+#     if 's3://' in path:
+#         if skip_s3:
+#             return path, [], []
+#         parent, dirs, files, _, _ = s3_get_dir_contents(path)
+#         return f's3://{parent}', dirs, files
+#     else:
+#         for parent, dirs, files in os.walk(path):
+#             return parent, dirs, files
 

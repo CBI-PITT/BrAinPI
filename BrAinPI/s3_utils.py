@@ -9,8 +9,10 @@ from botocore import UNSIGNED, exceptions
 from botocore.client import Config
 from io import BytesIO
 
-from zarr._storage.store import Store
-
+# from zarr._storage.store import Store
+from zarr.abc.store import (
+    Store,
+)
 from cache_tools import get_cache
 cache_disk = get_cache()
 # # cache_ram = cache_head_space(10)

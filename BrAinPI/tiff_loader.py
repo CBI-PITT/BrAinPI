@@ -98,9 +98,9 @@ class tiff_loader:
 
         self.type = self.image.series[0].axes
         if self.type.endswith("S"):
-            self.standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4, "S":5}
+            self._standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4, "S":5}
         else:
-            self.standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4}
+            self._standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4}
         self.axes_pos_dic = self.axes_pos_extract(self.type)
         self.axes_value_dic = self.axes_value_extract(
             self.type, self.image.series[0].shape
@@ -170,7 +170,9 @@ class tiff_loader:
                 sz = 1
                 self.metaData[r, t, c, 'resolution'] = (sz, sy*2**r, sx*2**r)
                 # self.metaData[r, t, c, 'chunks'] = (1, 1, 1, *self.tile_size)
-                self.metaData[r, t, c, 'chunks'] = (1, 1, array.pages[0].tiledepth, self.tile_size[0], self.tile_size[1])
+                self.metaData[r, t, c, 'chunks'] = (1, 1, array.pages[0].tiledepth if array.pages[0].tiledepth is not None else 1,
+                                                    self.tile_size[0] if self.tile_size[0] is not None else 1, 
+                                                    self.tile_size[1] if self.tile_size[1] is not None else 1)
                 self.metaData[r, t, c, 'dtype'] = array.dtype
                 self.metaData[r, t, c, 'ndim'] = array.ndim
 
@@ -289,9 +291,9 @@ class tiff_loader:
         if self.squeeze:
             return np.squeeze(array)
         else:
-            for key in self.standard_axes:
+            for key in self._standard_axes:
                 if self.axes_pos_dic.get(key) is None:
-                    array = np.expand_dims(array, axis=self.standard_axes[key])
+                    array = np.expand_dims(array, axis=self._standard_axes[key])
             return array
     def getSlice(self,r,t,c,z,y,x):
         """
@@ -353,7 +355,7 @@ class tiff_loader:
         zarr_store = zarr.open(zarr_array)
         tp = tuple(list_tp)
         zarr_result = zarr_store[tp]
-        result = self._sort_axes(zarr_result,self.type,self.standard_axes)
+        result = self._sort_axes(zarr_result,self.type,self._standard_axes)
         # Here for python > 3.11, to use the unpack operator *
         # result = zarr_store[
         #     *(tp),
