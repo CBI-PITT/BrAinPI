@@ -17,6 +17,58 @@ import cv2
 import re
 import json
 
+def _build_time_index_map(img_obj):
+    """
+    Build mapping for multidimensional time axes (t/m) to linear time index.
+    """
+    time_keys = getattr(img_obj, "time_keys", None)
+    time_key_names = getattr(img_obj, "time_key_names", None)
+    if not time_keys or not time_key_names:
+        return None, None, None
+    names = [str(n).lower() for n in time_key_names]
+    if any(name not in ("t", "m") for name in names):
+        return None, None, None
+
+    name_index = {name: idx for idx, name in enumerate(names)}
+    t_values = (
+        sorted({int(key[name_index["t"]]) for key in time_keys})
+        if "t" in name_index
+        else [0]
+    )
+    m_values = (
+        sorted({int(key[name_index["m"]]) for key in time_keys})
+        if "m" in name_index
+        else [0]
+    )
+
+    time_index_map = {}
+    for idx, key in enumerate(time_keys):
+        t_val = int(key[name_index["t"]]) if "t" in name_index else 0
+        m_val = int(key[name_index["m"]]) if "m" in name_index else 0
+        time_index_map[f"{t_val}:{m_val}"] = idx
+
+    return t_values, m_values, time_index_map
+
+
+def _map_z_index_to_resolution(img_obj, res, z_index):
+    """
+    Map a full-resolution z index to the closest valid z index for a
+    requested resolution level.
+    """
+    try:
+        full_shape = img_obj.metadata.get((0, 0, 0, "shape")) or img_obj.metadata.get("shape")
+        level_shape = img_obj.metadata.get((res, 0, 0, "shape")) or img_obj.metadata.get("shape")
+        full_z = int(full_shape[-3])
+        level_z = int(level_shape[-3])
+        if level_z <= 1 or full_z <= 1:
+            return max(0, min(int(z_index), level_z - 1))
+
+        scaled_z = int((int(z_index) / max(full_z - 1, 1)) * (level_z - 1))
+        return max(0, min(scaled_z, level_z - 1))
+    except Exception:
+        return max(0, int(z_index))
+
+
 def openseadragon_dtypes():
     """
     Returns a list of supported file extensions for OpenSeadragon.
@@ -24,7 +76,8 @@ def openseadragon_dtypes():
     Returns:
         list: A list of supported file extensions.
     """
-    return [".tif", ".tiff", ".ome.tif", ".ome.tiff", ".ome-tif", ".ome-tiff", ".jp2"]
+    return [".tif", ".tiff", ".ome.tif", ".ome.tiff", ".ome-tif", ".ome-tiff", ".jp2", ".nd2",
+            '.terafly','.ims','.ome.zarr',".omehans",".omezans",".nii",".nii.gz",".nii.zarr",".zarr"]
 
 
 # def calculate_hash(input_string):
@@ -107,14 +160,53 @@ def setup_openseadragon(app, config):
                 img_obj = config.opendata[datapath_key]
                 #   further check if the file has been deleted during server runing
                 #   mainly used for the generated pyramid images
-                if not os.path.exists(img_obj.metadata.get('datapath')):
-                    logger.info("may delete")
-                    del config.opendata[file_ino + modification_time]
-                    datapath_key = config.loadDataset(
-                        file_ino + modification_time, datapath
-                    )
-                    img_obj = config.opendata[datapath_key]
+                # if not os.path.exists(img_obj.metadata.get('datapath')):
+                #     logger.info("may delete")
+                #     del config.opendata[file_ino + modification_time]
+                #     datapath_key = config.loadDataset(
+                #         file_ino + modification_time, datapath
+                #     )
+                #     img_obj = config.opendata[datapath_key]
                 # logger.info(img_obj.metadata.get('datapath'))
+                if img_obj.metadata.get('datapath'):
+                    if not os.path.exists(img_obj.metadata.get('datapath')):
+                        logger.info("files may be deleted, doing regeneration...")
+                        del config.opendata[file_ino + modification_time]
+                        datapath_key = config.loadDataset(
+                            file_ino + modification_time, datapath
+                        )
+                        img_obj = config.opendata[datapath_key]
+                t_values, m_values, time_index_map = _build_time_index_map(img_obj)
+                if t_values:
+                    t_point = len(t_values)
+                else:
+                    t_point = int(img_obj.metadata.get('TimePoints'))
+                if m_values:
+                    m_point = len(m_values)
+                else:
+                    m_point = 1
+                level_shapes = []
+                level_chunks = []
+                for res in range(int(img_obj.metadata.get('ResolutionLevels'))):
+                    shape = img_obj.metadata.get((res, 0, 0, 'shape'))
+                    chunks = img_obj.metadata.get((res, 0, 0, 'chunks'))
+                    if shape is None:
+                        shape = img_obj.metadata.get('shape')
+                    if chunks is None:
+                        chunks = img_obj.metadata.get('chunks')
+                    level_shapes.append(
+                        {
+                            "z": int(shape[-3]),
+                            "y": int(shape[-2]),
+                            "x": int(shape[-1]),
+                        }
+                    )
+                    level_chunks.append(
+                        {
+                            "y": int(chunks[-2]),
+                            "x": int(chunks[-1]),
+                        }
+                    )
                 return render_template(
                     "openseadragon_temp.html",
                     height=int(img_obj.metadata.get('shape')[-2]),
@@ -126,10 +218,17 @@ def setup_openseadragon(app, config):
                     tileWidth=img_obj.metadata.get('chunks')[-1],
                     host=config.settings.get("app", "url"),
                     parent_url="/".join(path_split),
-                    t_point=img_obj.metadata.get('TimePoints'),
+                    # t_point=img_obj.metadata.get('TimePoints'),
+                    t_point=t_point,
+                    t_point_values=t_values,
+                    m_point=m_point,
+                    m_point_values=m_values,
+                    time_index_map=time_index_map,
                     channel=img_obj.metadata.get('Channels'),
                     z_stack=img_obj.metadata.get('shape')[-3],
                     resolutionlevels=img_obj.metadata.get('ResolutionLevels') - 1,
+                    level_shapes=level_shapes,
+                    level_chunks=level_chunks,
                 )
             except Exception as e:
                 logger.error(f'{datapath}: {e}')
@@ -159,7 +258,7 @@ def setup_openseadragon(app, config):
             t = int(key[1])
             c = int(key[2])
             z, y, x = key[3].split("_")
-            z = int(z)
+            z = _map_z_index_to_resolution(img_obj, r, int(z))
             y = y.split("-")
             x = x.split("-")
             y = [int(x) for x in y]
@@ -182,6 +281,8 @@ def setup_openseadragon(app, config):
                                 ]
                 logger.info(chunk.shape)
                 chunk = np.squeeze(chunk)
+                # if chunk.dtype != np.uint8:
+                #     chunk = utils.conv_np_dtypes(chunk, "uint8")
                 if len(chunk.shape) == 3 and chunk.shape[2] == 3:  # Color image
                     chunk = cv2.cvtColor(chunk, cv2.COLOR_RGB2BGR)
 

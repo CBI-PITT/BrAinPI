@@ -704,6 +704,13 @@ def metaDataExtraction(numpy_like_object,strKey=False):
         'TimePoints':numpy_like_object.TimePoints,
         'Channels':numpy_like_object.Channels
         }
+
+    if hasattr(numpy_like_object, "TPoints"):
+        metadata["TPoints"] = numpy_like_object.TPoints
+    if hasattr(numpy_like_object, "MPoints"):
+        metadata["MPoints"] = numpy_like_object.MPoints
+    if hasattr(numpy_like_object, "time_key_names"):
+        metadata["time_key_names"] = list(numpy_like_object.time_key_names)
     
     try:
         newMetaDict = {}

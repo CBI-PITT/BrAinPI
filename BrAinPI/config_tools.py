@@ -177,18 +177,6 @@ class config:
                 cache=self.cache
                 )
             self.opendata_set.add(dataPath)
-        elif 's3://' in dataPath and dataPath.endswith('.zarr'):
-            # import s3fs
-            # self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3fs.S3Map,
-            #                                           cache=self.cache)
-            from s3_utils import s3_boto_store
-            self.opendata[key] = ome_zarr_loader(
-                dataPath, 
-                squeeze=False, 
-                zarr_store_type=s3_boto_store,
-                cache=self.cache
-                )
-            self.opendata_set.add(dataPath)
         elif dataPath.lower().endswith('tif') or dataPath.lower().endswith('tiff'):
             import tiff_loader
             self.opendata[key] = tiff_loader.tiff_loader(
@@ -238,6 +226,27 @@ class config:
                 cache=self.cache
                 )
             self.opendata_set.add(dataPath)
+        elif dataPath.lower().endswith('.nd2'):
+            import nd2_loader
+            logger.info('Creating nd2 object')
+            self.opendata[key] = nd2_loader.nd2_loader(dataPath, squeeze_output=False, cache=self.cache)
+            self.opendata[key].open()
+            self.opendata_set.add(dataPath)
+        elif dataPath.endswith('.zarr'):
+            # import s3fs
+            # self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3fs.S3Map,
+            #                                           cache=self.cache)
+            if dataPath.startswith('s3://'):
+                from s3_utils import s3_boto_store
+                self.opendata[key] = ome_zarr_loader(
+                    dataPath, 
+                    squeeze=False, 
+                    zarr_store_type=s3_boto_store,
+                    cache=self.cache
+                    )
+                self.opendata_set.add(dataPath)
+            else:
+                raise ValueError('Only s3 zarr loading is currently supported')
         ## Append extracted metadata as attribute to open dataset
         try:
             from utils import metaDataExtraction # Here to get around curcular import at BrAinPI init

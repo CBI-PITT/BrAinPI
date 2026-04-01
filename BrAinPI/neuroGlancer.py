@@ -568,9 +568,14 @@ def neuroglancer_dtypes():
         # '.weave',
         # '.z_sharded'
         ".terafly",
+        ".ome.tif", 
+        ".ome.tiff",
         ".tif",
         ".tiff",
-        ".jp2"
+        ".ome-tif",
+        ".ome-tiff",
+        ".jp2",
+        ".nd2"
     ]
 
 

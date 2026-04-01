@@ -757,10 +757,12 @@ def get_path_data(base, request):
         ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)
         remove_dirs_idx = []
         for idx,_ in enumerate(current_path['dirs']):
-            supported = fts.ng_links(current_path['dirs'][idx])
+            supported = fts.ng_links(current_path['dirs'][idx]) or fts.opsd_links(current_path['dirs'][idx])
             if supported:
                 remove_dirs_idx.append(idx)
-                current_path['files'].append(supported)
+                # Preserve the original browser path so each downstream link
+                # type can be derived independently (NG, OSD, download, etc.).
+                current_path['files'].append(current_path['dirs'][idx])
                 current_path['files_stat'].append(current_path['dirs_stat'][idx])
                 current_path['files_size'].append((0,'B',0))
                 current_path['files_modtime'].append(current_path['dirs_modtime'][idx])
@@ -880,10 +882,12 @@ def get_path_data(base, request):
                 ## Special case, some directories should be treated like files (ie. .zarr, .weave, .z_sharded)
                 remove_dirs_idx = []
                 for idx,_ in enumerate(current_path['dirs']):
-                    supported = fts.ng_links(current_path['dirs'][idx])
+                    supported = fts.ng_links(current_path['dirs'][idx]) or fts.opsd_links(current_path['dirs'][idx])
                     if supported:
-                        remove_dirs_idx.append(idx)
-                        current_path['files'].append(supported)
+                        remove_dirs_idx.append(idx) 
+                        # Preserve the original browser path so each downstream link
+                        # type can be derived independently (NG, OSD, download, etc.).
+                        current_path['files'].append(current_path['dirs'][idx])
                         current_path['files_real_path'].append(current_path['dirs_real_path'][idx])
                         # current_path['files_stat'].append(current_path['dirs_stat'][idx])
                         current_path['files_size'].append((0,'B',0))
