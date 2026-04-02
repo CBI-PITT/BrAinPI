@@ -17,6 +17,176 @@ import cv2
 import re
 import json
 
+DEFAULT_CHANNEL_COLORS = [
+    "#00ff00",
+    "#ff0000",
+    "#0000ff",
+    "#ffff00",
+    "#ff00ff",
+    "#00ffff",
+    "#ffa500",
+    "#ffffff",
+]
+
+
+def _is_rgb_volume(img_obj):
+    """
+    Detect packed RGB-style datasets that should bypass single-channel controls.
+    """
+    try:
+        return int(img_obj.metadata.get("ndim", 0)) == 6
+    except Exception:
+        return False
+
+
+def _normalize_hex_color(color, fallback):
+    """
+    Normalize a color string to #rrggbb.
+    """
+    try:
+        color = str(color).strip()
+    except Exception:
+        return fallback
+    if color.startswith("#"):
+        color = color[1:]
+    if len(color) == 3:
+        color = "".join(ch * 2 for ch in color)
+    if len(color) != 6:
+        return fallback
+    try:
+        int(color, 16)
+    except ValueError:
+        return fallback
+    return f"#{color.lower()}"
+
+
+def _sample_channel_range(img_obj, channel_index):
+    """
+    Estimate a stable display range from the lowest resolution for a channel.
+    """
+    cache = getattr(img_obj, "_osd_channel_range_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(img_obj, "_osd_channel_range_cache", cache)
+    if channel_index in cache:
+        return cache[channel_index]
+
+    lowest_res = int(img_obj.metadata.get("ResolutionLevels", img_obj.ResolutionLevels)) - 1
+    sample = img_obj[
+        lowest_res,
+        slice(0, 1),
+        slice(channel_index, channel_index + 1),
+        slice(None),
+        slice(None),
+        slice(None),
+    ]
+    sample = np.asarray(sample, dtype=np.float32)
+    finite = sample[np.isfinite(sample)]
+    if finite.size == 0:
+        cache[channel_index] = (0.0, 1.0)
+        return cache[channel_index]
+
+    positive = finite[finite > 0]
+    working = positive if positive.size else finite
+    low = float(np.min(working))
+    high = float(np.max(working))
+    if high <= low:
+        high = low + 1.0
+    cache[channel_index] = (low, high)
+    return cache[channel_index]
+
+
+def _get_channel_info(img_obj, channel_index):
+    """
+    Build client-side defaults for a single display channel.
+    """
+    fallback_color = DEFAULT_CHANNEL_COLORS[channel_index % len(DEFAULT_CHANNEL_COLORS)]
+    label = f"Channel {channel_index}"
+    color = fallback_color
+    range_min = None
+    range_max = None
+    window_start = None
+    window_end = None
+
+    try:
+        omero = getattr(img_obj, "omero", None)
+        if omero:
+            channels = omero.get("channels", [])
+            if 0 <= channel_index < len(channels):
+                channel_meta = channels[channel_index]
+                label = str(channel_meta.get("label") or label)
+                color = _normalize_hex_color(channel_meta.get("color"), fallback_color)
+                window = channel_meta.get("window", {})
+                range_min = window.get("min")
+                range_max = window.get("max")
+                window_start = window.get("start")
+                window_end = window.get("end")
+    except Exception:
+        pass
+
+    metadata = getattr(img_obj, "metadata", {})
+    if range_min is None:
+        range_min = metadata.get((0, 0, channel_index, "min"))
+    if range_max is None:
+        range_max = metadata.get((0, 0, channel_index, "max"))
+
+    if range_min is None or range_max is None:
+        range_min, range_max = _sample_channel_range(img_obj, channel_index)
+
+    range_min = float(range_min)
+    range_max = float(range_max)
+    if range_max <= range_min:
+        range_max = range_min + 1.0
+
+    if window_start is None:
+        window_start = range_min
+    if window_end is None:
+        window_end = range_max
+
+    window_start = max(range_min, min(float(window_start), range_max))
+    window_end = max(window_start, min(float(window_end), range_max))
+    span = range_max - range_min
+
+    return {
+        "index": channel_index,
+        "label": label,
+        "color": color,
+        "range_min": range_min,
+        "range_max": range_max,
+        "window_min_default": 0.0 if span <= 0 else (window_start - range_min) / span,
+        "window_max_default": 1.0 if span <= 0 else (window_end - range_min) / span,
+        "gamma_default": 1.0,
+    }
+
+
+def _build_channel_infos(img_obj):
+    """
+    Build and cache display defaults for all channels.
+    """
+    cache = getattr(img_obj, "_osd_channel_infos", None)
+    if cache is not None:
+        return cache
+    infos = [
+        _get_channel_info(img_obj, channel_idx)
+        for channel_idx in range(int(img_obj.metadata.get("Channels")))
+    ]
+    setattr(img_obj, "_osd_channel_infos", infos)
+    return infos
+
+
+def _scale_to_uint8(chunk, low, high):
+    """
+    Scale a single channel to uint8 using a stable display range.
+    """
+    chunk = np.asarray(chunk, dtype=np.float32)
+    chunk = np.nan_to_num(chunk, nan=low, posinf=high, neginf=low)
+    if high <= low:
+        return np.zeros(chunk.shape, dtype=np.uint8)
+    chunk = np.clip(chunk, low, high)
+    chunk = (chunk - low) / (high - low)
+    chunk = np.clip(chunk, 0.0, 1.0)
+    return (chunk * 255.0).astype(np.uint8)
+
 def _build_time_index_map(img_obj):
     """
     Build mapping for multidimensional time axes (t/m) to linear time index.
@@ -185,6 +355,7 @@ def setup_openseadragon(app, config):
                     m_point = len(m_values)
                 else:
                     m_point = 1
+                is_rgb_volume = _is_rgb_volume(img_obj)
                 level_shapes = []
                 level_chunks = []
                 for res in range(int(img_obj.metadata.get('ResolutionLevels'))):
@@ -207,6 +378,7 @@ def setup_openseadragon(app, config):
                             "x": int(chunks[-1]),
                         }
                     )
+                channel_infos = [] if is_rgb_volume else _build_channel_infos(img_obj)
                 return render_template(
                     "openseadragon_temp.html",
                     height=int(img_obj.metadata.get('shape')[-2]),
@@ -229,6 +401,8 @@ def setup_openseadragon(app, config):
                     resolutionlevels=img_obj.metadata.get('ResolutionLevels') - 1,
                     level_shapes=level_shapes,
                     level_chunks=level_chunks,
+                    channel_infos=channel_infos,
+                    is_rgb_volume=is_rgb_volume,
                 )
             except Exception as e:
                 logger.error(f'{datapath}: {e}')
@@ -281,10 +455,19 @@ def setup_openseadragon(app, config):
                                 ]
                 logger.info(chunk.shape)
                 chunk = np.squeeze(chunk)
-                # if chunk.dtype != np.uint8:
-                #     chunk = utils.conv_np_dtypes(chunk, "uint8")
                 if len(chunk.shape) == 3 and chunk.shape[2] == 3:  # Color image
+                    if chunk.dtype != np.uint8:
+                        chunk = utils.conv_np_dtypes(chunk, "uint8")
                     chunk = cv2.cvtColor(chunk, cv2.COLOR_RGB2BGR)
+                elif not _is_rgb_volume(img_obj):
+                    channel_info = _build_channel_infos(img_obj)[c]
+                    chunk = _scale_to_uint8(
+                        chunk,
+                        channel_info["range_min"],
+                        channel_info["range_max"],
+                    )
+                elif chunk.dtype != np.uint8:
+                    chunk = utils.conv_np_dtypes(chunk, "uint8")
 
                 image_stream = io.BytesIO()
 

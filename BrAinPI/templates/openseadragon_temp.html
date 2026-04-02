@@ -16,98 +16,322 @@
     }
 
     body {
-      font-family: Arial, sans-serif;
-      background-color: #f4f4f4;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 32%),
+        linear-gradient(180deg, #f7f3ec 0%, #ece4d9 100%);
+      color: #3f342a;
+    }
+
+    #control_panel {
+      background: linear-gradient(180deg, rgba(255, 253, 249, 0.96) 0%, rgba(244, 238, 229, 0.96) 100%);
+      border-bottom: 1px solid rgba(164, 141, 113, 0.18);
+      box-shadow: 0 14px 34px rgba(77, 58, 38, 0.08);
+      backdrop-filter: blur(10px);
     }
 
     #select_wrapper {
-      background-color: #f0f0f0;
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: end;
+      padding: 14px 16px;
     }
 
-    #select_wrapper label {
-      margin-right: 8px;
-      font-size: 14px;
+    .control_group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 92px;
+      font-size: 12px;
+      color: #66584a;
     }
 
-    #select_wrapper select {
-      margin-right: 14px;
-      padding: 4px 8px;
+    .control_group label {
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .control_group select,
+    .control_group button,
+    .control_group input[type="color"] {
+      padding: 9px 11px;
+      border: 1px solid #d8c7b3;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #fffdfa 0%, #f9f2e8 100%);
       font-size: 14px;
+      color: #3d3227;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+
+    .control_group button {
+      cursor: pointer;
+    }
+
+    .control_group select:hover,
+    .control_group button:hover,
+    .control_group input[type="color"]:hover {
+      border-color: #bf9465;
+    }
+
+    .control_group button:hover {
+      background: linear-gradient(180deg, #fff6ea 0%, #f2dfc7 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(168, 111, 56, 0.14);
+    }
+
+    .control_group button:active {
+      transform: translateY(1px) scale(0.99);
+      box-shadow: inset 0 2px 6px rgba(120, 80, 36, 0.16);
+      background: linear-gradient(180deg, #f0dcc3 0%, #fff1df 100%);
+    }
+
+    .control_group select:focus,
+    .control_group button:focus,
+    .control_group input[type="color"]:focus,
+    .control_group input[type="range"]:focus {
+      outline: none;
+      border-color: #a86f38;
+      box-shadow: 0 0 0 3px rgba(168, 111, 56, 0.14);
+    }
+
+    .window_group {
+      min-width: 230px;
+    }
+
+    .dual_range {
+      --min-stop: 0%;
+      --max-stop: 100%;
+      position: relative;
+      width: 220px;
+      height: 28px;
+    }
+
+    .dual_range_track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 6px;
+      border-radius: 999px;
+      transform: translateY(-50%);
+      background: linear-gradient(to right, #ddd2c3 var(--min-stop), #a86f38 var(--min-stop), #a86f38 var(--max-stop), #ddd2c3 var(--max-stop));
+    }
+
+    .dual_range input[type="range"] {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 220px;
+      margin: 0;
+      transform: translateY(-50%);
+      pointer-events: none;
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+    }
+
+    .dual_range input[type="range"]::-webkit-slider-thumb {
+      pointer-events: auto;
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #a86f38;
+      cursor: pointer;
+    }
+
+    .dual_range input[type="range"]::-moz-range-thumb {
+      pointer-events: auto;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #a86f38;
+      cursor: pointer;
+    }
+
+    .window_readout {
+      display: flex;
+      justify-content: space-between;
+      width: 220px;
+      font-size: 12px;
+      color: #7a6b5c;
+    }
+
+    #gamma_slider {
+      width: 150px;
+      accent-color: #a86f38;
+    }
+
+    #channel_color {
+      width: 60px;
+      height: 40px;
+      padding: 4px;
+      cursor: pointer;
     }
 
     #viewer {
       width: 100%;
-      height: calc(100% - 52px);
-      background-color: #e9c5c5;
+      height: calc(100% - 74px);
+      background:
+        radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.16), transparent 32%),
+        linear-gradient(180deg, #dec9c0 0%, #d1b5ad 100%);
       overflow: hidden;
       position: relative;
     }
 
+    #viewer::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+      background-size: 30px 30px;
+      opacity: 0.28;
+    }
+
+    #viewer .openseadragon-container {
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
     .info_badge {
       display: inline-block;
-      font-size: 14px;
-      color: #31708f;
-      background-color: #d9edf7;
-      padding: 5px 10px;
-      border: 1px solid #bce8f1;
-      border-radius: 4px;
+      font-size: 13px;
+      color: #8c6032;
+      background-color: #f5e8d7;
+      padding: 8px 12px;
+      border: 1px solid #e6cfb2;
+      border-radius: 999px;
       vertical-align: middle;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+
+    @media (max-width: 900px) {
+      #select_wrapper {
+        gap: 10px;
+        padding: 12px;
+      }
+
+      #viewer {
+        height: calc(100% - 142px);
+      }
     }
   </style>
 </head>
 
 <body>
-  <div id="select_wrapper">
-    <label for="t_point_select">Time Point</label>
-    <select id="t_point_select">
-      {% if t_point_values %}
-      {% for t in t_point_values %}
-      <option value="{{ t }}" {% if loop.index0==0 %} selected {% endif %}>{{ t }}</option>
-      {% endfor %}
-      {% else %}
-      {% for t in range(t_point) %}
-      <option value="{{ t }}" {% if t==0 %} selected {% endif %}>{{ t }}</option>
-      {% endfor %}
-      {% endif %}
-    </select>
+  <svg width="0" height="0" style="position:absolute">
+    <filter id="osd-lut-filter" color-interpolation-filters="sRGB">
+      <feComponentTransfer>
+        <feFuncR id="lut-r" type="table" tableValues="0 1"></feFuncR>
+        <feFuncG id="lut-g" type="table" tableValues="0 1"></feFuncG>
+        <feFuncB id="lut-b" type="table" tableValues="0 1"></feFuncB>
+      </feComponentTransfer>
+    </filter>
+  </svg>
 
-    {% if m_point and m_point|int > 1 %}
-    <label for="m_point_select">M Point</label>
-    <select id="m_point_select">
-      {% if m_point_values %}
-      {% for m in m_point_values %}
-      <option value="{{ m }}" {% if loop.index0==0 %} selected {% endif %}>{{ m }}</option>
-      {% endfor %}
-      {% else %}
-      {% for m in range(m_point) %}
-      <option value="{{ m }}" {% if m==0 %} selected {% endif %}>{{ m }}</option>
-      {% endfor %}
-      {% endif %}
-    </select>
-    {% endif %}
+  <div id="control_panel">
+    <div id="select_wrapper">
+      <div class="control_group">
+        <label for="t_point_select">Time Point</label>
+        <select id="t_point_select">
+          {% if t_point_values %}
+          {% for t in t_point_values %}
+          <option value="{{ t }}" {% if loop.index0==0 %} selected {% endif %}>{{ t }}</option>
+          {% endfor %}
+          {% else %}
+          {% for t in range(t_point) %}
+          <option value="{{ t }}" {% if t==0 %} selected {% endif %}>{{ t }}</option>
+          {% endfor %}
+          {% endif %}
+        </select>
+      </div>
 
-    <label for="channelSelect">Channel</label>
-    <select id="channelSelect">
-      {% for channel_idx in range(channel) %}
-      <option value="{{ channel_idx }}" {% if channel_idx == 0 %}selected{% endif %}>{{ channel_idx }}</option>
-      {% endfor %}
-    </select>
-
-    <label for="z_stack_select">Z Stack</label>
-    <select id="z_stack_select">
-      {% for z in range(z_stack) %}
-      <option value="{{ z }}" {% if z==0 %} selected {% endif %}>{{ z }}</option>
-      {% endfor %}
-    </select>
-
-    <div class="info_badge">
       {% if m_point and m_point|int > 1 %}
-      Support axes TCZYXM
-      {% else %}
-      Support standard axes TCZYX
+      <div class="control_group">
+        <label for="m_point_select">M Point</label>
+        <select id="m_point_select">
+          {% if m_point_values %}
+          {% for m in m_point_values %}
+          <option value="{{ m }}" {% if loop.index0==0 %} selected {% endif %}>{{ m }}</option>
+          {% endfor %}
+          {% else %}
+          {% for m in range(m_point) %}
+          <option value="{{ m }}" {% if m==0 %} selected {% endif %}>{{ m }}</option>
+          {% endfor %}
+          {% endif %}
+        </select>
+      </div>
       {% endif %}
+
+      <div class="control_group">
+        <label for="channelSelect">Channel</label>
+        <select id="channelSelect">
+          {% if channel_infos %}
+          {% for channel_info in channel_infos %}
+          <option value="{{ channel_info['index'] }}" {% if channel_info['index'] == 0 %}selected{% endif %}>{{ channel_info['label'] }}</option>
+          {% endfor %}
+          {% else %}
+          {% for channel_idx in range(channel) %}
+          <option value="{{ channel_idx }}" {% if channel_idx == 0 %}selected{% endif %}>{{ channel_idx }}</option>
+          {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+
+      <div class="control_group">
+        <label for="z_stack_select">Z Stack</label>
+        <select id="z_stack_select">
+          {% for z in range(z_stack) %}
+          <option value="{{ z }}" {% if z==0 %} selected {% endif %}>{{ z }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if not is_rgb_volume and channel_infos %}
+      <div class="control_group">
+        <label for="channel_color">Color</label>
+        <input id="channel_color" type="color" value="{{ channel_infos[0]['color'] }}">
+      </div>
+
+      <div class="control_group window_group">
+        <label>Window</label>
+        <div class="dual_range" id="window_dual_range">
+          <div class="dual_range_track"></div>
+          <input id="window_min" type="range" min="0" max="0.95" step="0.01" value="{{ '%.2f'|format(channel_infos[0]['window_min_default']) }}">
+          <input id="window_max" type="range" min="0.05" max="1" step="0.01" value="{{ '%.2f'|format(channel_infos[0]['window_max_default']) }}">
+        </div>
+        <div class="window_readout">
+          <span id="window_min_value">{{ '%.2f'|format(channel_infos[0]['window_min_default']) }}</span>
+          <span id="window_max_value">{{ '%.2f'|format(channel_infos[0]['window_max_default']) }}</span>
+        </div>
+      </div>
+
+      <div class="control_group">
+        <label for="gamma_slider">Gamma</label>
+        <input id="gamma_slider" type="range" min="0.2" max="3" step="0.05" value="{{ '%.2f'|format(channel_infos[0]['gamma_default']) }}">
+        <span id="gamma_value">{{ '%.2f'|format(channel_infos[0]['gamma_default']) }}</span>
+      </div>
+
+      <div class="control_group">
+        <label>&nbsp;</label>
+        <button id="reset_display" type="button">Reset Display</button>
+      </div>
+      {% endif %}
+
+      <div class="info_badge">
+        {% if m_point and m_point|int > 1 %}
+        Support axes TCZYXM
+        {% else %}
+        Support standard axes TCZYX
+        {% endif %}
+      </div>
     </div>
   </div>
 
@@ -119,6 +343,117 @@
     var timeIndexMap = {{ time_index_map | tojson }};
     var levelShapes = {{ level_shapes | tojson }};
     var levelChunks = {{ level_chunks | tojson }};
+    var channelInfos = {{ channel_infos | tojson }};
+    var isRgbVolume = {{ is_rgb_volume | tojson }};
+
+    function buildLutTable(channelWeight, windowMin, windowMax, gamma) {
+      var values = [];
+      var safeMax = Math.max(windowMax, windowMin + 0.001);
+      for (var idx = 0; idx < 256; idx += 1) {
+        var normalized = idx / 255;
+        var windowed = (normalized - windowMin) / (safeMax - windowMin);
+        windowed = Math.max(0, Math.min(1, windowed));
+        windowed = Math.pow(windowed, gamma);
+        values.push((windowed * channelWeight).toFixed(4));
+      }
+      return values.join(" ");
+    }
+
+    function hexToRgb(color) {
+      var hex = color.replace("#", "");
+      return [
+        parseInt(hex.slice(0, 2), 16) / 255,
+        parseInt(hex.slice(2, 4), 16) / 255,
+        parseInt(hex.slice(4, 6), 16) / 255
+      ];
+    }
+
+    function getChannelInfo(channelIndex) {
+      for (var idx = 0; idx < channelInfos.length; idx += 1) {
+        if (channelInfos[idx].index === channelIndex) {
+          return channelInfos[idx];
+        }
+      }
+      return null;
+    }
+
+    function updateWindowTrack() {
+      var track = document.getElementById("window_dual_range");
+      if (!track) {
+        return;
+      }
+      var windowMin = parseFloat(document.getElementById("window_min").value);
+      var windowMax = parseFloat(document.getElementById("window_max").value);
+      track.style.setProperty("--min-stop", (windowMin * 100).toFixed(1) + "%");
+      track.style.setProperty("--max-stop", (windowMax * 100).toFixed(1) + "%");
+      document.getElementById("window_min_value").textContent = windowMin.toFixed(2);
+      document.getElementById("window_max_value").textContent = windowMax.toFixed(2);
+    }
+
+    function applyDisplayAdjustments() {
+      if (isRgbVolume || !channelInfos.length) {
+        return;
+      }
+
+      var windowMinInput = document.getElementById("window_min");
+      var windowMaxInput = document.getElementById("window_max");
+      var gammaInput = document.getElementById("gamma_slider");
+      var colorInput = document.getElementById("channel_color");
+
+      var windowMin = parseFloat(windowMinInput.value);
+      var windowMax = parseFloat(windowMaxInput.value);
+      if (windowMin > windowMax - 0.01) {
+        windowMin = windowMax - 0.01;
+        windowMinInput.value = windowMin.toFixed(2);
+      }
+      if (windowMax < windowMin + 0.01) {
+        windowMax = windowMin + 0.01;
+        windowMaxInput.value = windowMax.toFixed(2);
+      }
+
+      var gamma = parseFloat(gammaInput.value);
+      var color = hexToRgb(colorInput.value);
+
+      document.getElementById("lut-r").setAttribute("tableValues", buildLutTable(color[0], windowMin, windowMax, gamma));
+      document.getElementById("lut-g").setAttribute("tableValues", buildLutTable(color[1], windowMin, windowMax, gamma));
+      document.getElementById("lut-b").setAttribute("tableValues", buildLutTable(color[2], windowMin, windowMax, gamma));
+
+      document.getElementById("gamma_value").textContent = gamma.toFixed(2);
+      updateWindowTrack();
+
+      var mainCanvas = document.querySelector("#viewer .openseadragon-canvas");
+      if (mainCanvas) {
+        mainCanvas.style.filter = "url(#osd-lut-filter)";
+      }
+      var navigator = document.querySelector("#viewer .navigator");
+      if (navigator) {
+        navigator.style.filter = "url(#osd-lut-filter)";
+      }
+    }
+
+    function applyChannelDefaults(channelIndex) {
+      if (isRgbVolume || !channelInfos.length) {
+        return;
+      }
+      var channelInfo = getChannelInfo(channelIndex);
+      if (!channelInfo) {
+        return;
+      }
+      document.getElementById("channel_color").value = channelInfo.color;
+      document.getElementById("window_min").value = channelInfo.window_min_default.toFixed(2);
+      document.getElementById("window_max").value = channelInfo.window_max_default.toFixed(2);
+      document.getElementById("gamma_slider").value = channelInfo.gamma_default.toFixed(2);
+      applyDisplayAdjustments();
+    }
+
+    function applyWindowPreset(minValue, maxValue) {
+      if (isRgbVolume || !channelInfos.length) {
+        return;
+      }
+      document.getElementById("window_min").value = minValue.toFixed(2);
+      document.getElementById("window_max").value = maxValue.toFixed(2);
+      applyDisplayAdjustments();
+    }
 
     function getTimeIndex(t_point, m_point) {
       if (timeIndexMap) {
@@ -141,6 +476,9 @@
         navigatorSizeRatio: 0.2,
         tileSources: generateTileSource(t_point, m_point, channel, z_stack)
       });
+      if (!isRgbVolume && channelInfos.length) {
+        viewer.addHandler("open", applyDisplayAdjustments);
+      }
     }
 
     function generateTileSource(t_point, m_point, channel, z_stack) {
@@ -227,6 +565,21 @@
         return parseInt(mSelect.value);
       }
 
+      if (!isRgbVolume && channelInfos.length) {
+        ["window_min", "window_max", "gamma_slider", "channel_color"].forEach(function (id) {
+          var element = document.getElementById(id);
+          if (element) {
+            element.addEventListener("input", applyDisplayAdjustments);
+            element.addEventListener("change", applyDisplayAdjustments);
+          }
+        });
+        document.getElementById("reset_display").addEventListener("click", function () {
+          var selectedChannel = parseInt(document.getElementById("channelSelect").value);
+          applyChannelDefaults(selectedChannel);
+        });
+        applyChannelDefaults(0);
+      }
+
       var channelSelect = document.getElementById("channelSelect");
       if (channelSelect) {
         channelSelect.addEventListener("change", function (event) {
@@ -234,6 +587,9 @@
           var selectedZStack = parseInt(document.getElementById("z_stack_select").value);
           var selectedTpoint = parseInt(document.getElementById("t_point_select").value);
           var selectedMpoint = getSelectedMPoint();
+          if (!isRgbVolume && channelInfos.length) {
+            applyChannelDefaults(selectedChannel);
+          }
           updateViewer(selectedTpoint, selectedMpoint, selectedChannel, selectedZStack);
         });
       }
