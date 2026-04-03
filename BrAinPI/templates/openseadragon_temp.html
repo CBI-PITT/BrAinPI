@@ -184,18 +184,6 @@
       position: relative;
     }
 
-    #viewer::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
-      background-size: 30px 30px;
-      opacity: 0.28;
-    }
-
     #viewer .openseadragon-container {
       border-top: 1px solid rgba(255, 255, 255, 0.2);
     }
@@ -443,15 +431,6 @@
       document.getElementById("window_min").value = channelInfo.window_min_default.toFixed(2);
       document.getElementById("window_max").value = channelInfo.window_max_default.toFixed(2);
       document.getElementById("gamma_slider").value = channelInfo.gamma_default.toFixed(2);
-      applyDisplayAdjustments();
-    }
-
-    function applyWindowPreset(minValue, maxValue) {
-      if (isRgbVolume || !channelInfos.length) {
-        return;
-      }
-      document.getElementById("window_min").value = minValue.toFixed(2);
-      document.getElementById("window_max").value = maxValue.toFixed(2);
       applyDisplayAdjustments();
     }
 
