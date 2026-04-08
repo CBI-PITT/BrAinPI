@@ -333,6 +333,8 @@
     var levelChunks = {{ level_chunks | tojson }};
     var channelInfos = {{ channel_infos | tojson }};
     var isRgbVolume = {{ is_rgb_volume | tojson }};
+    var tileBaseUrl = String({{ host | tojson }}).replace(/\/+$/, "") + "/" +
+      String({{ parent_url | tojson }}).replace(/^\/+|\/+$/g, "");
 
     function buildLutTable(channelWeight, windowMin, windowMax, gamma) {
       var values = [];
@@ -519,7 +521,7 @@
           var xStart = x * levelChunk.x;
           var yEnd = Math.min(yStart + levelChunk.y, levelShape.y);
           var xEnd = Math.min(xStart + levelChunk.x, levelShape.x);
-          return "{{host}}/{{parent_url}}/" +
+          return tileBaseUrl + "/" +
             reversedLevel + "/" + timeIndex + "/" + channel + "/" + z_stack +
             "_" + yStart + "-" + yEnd +
             "_" + xStart + "-" + xEnd;
