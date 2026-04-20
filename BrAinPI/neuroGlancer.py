@@ -119,7 +119,7 @@ def ng_shader(numpy_like_object):
             except:
                 lowestResVolume = numpy_like_object[res - 1, 0, ii, :, :, :]
                 # print(f"resol {res - 1}, channel {ii}, dtype {numpy_like_object.dtype},shape {lowestResVolume.shape}")
-                lowestResVolume = lowestResVolume[lowestResVolume > 0]
+                lowestResVolume = lowestResVolume[lowestResVolume >= 0]
                 # print(f"resol {res - 1}, channel {ii}, dtype {numpy_like_object.dtype},shape {lowestResVolume.shape}")
                 channelMins.append(lowestResVolume.min())
                 channelMaxs.append(lowestResVolume.max())
