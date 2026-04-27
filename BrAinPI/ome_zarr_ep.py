@@ -586,6 +586,25 @@ def open_omezarr_dataset(config,datapath):
     return datapath
 
 
+def get_dataset_cache_identity(dataset, fallback):
+    """
+    Build a dataset-specific cache identity that survives identical chunk coordinates
+    across different files.
+
+    Parameters:
+        dataset: The loaded dataset object.
+        fallback (str): Fallback identifier, typically the dataset path/key.
+
+    Returns:
+        str: Stable cache identity for the dataset.
+    """
+    file_ino = getattr(dataset, "file_ino", None)
+    modification_time = getattr(dataset, "modification_time", None)
+    if file_ino is not None and modification_time is not None:
+        return f"{file_ino}{modification_time}"
+    return fallback
+
+
 file_name_template = '{}.{}.{}.{}.{}'
 file_pattern = file_name_template.format('[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+','[0-9]+')
 
@@ -740,15 +759,16 @@ def setup_omezarr(app, config):
             datapath = os.path.split(datapath)[0]
             # datapath = '/' + os.path.join(*datapath.split('/')[:-2])
             datapath = open_omezarr_dataset(config,datapath)
-            config.opendata[datapath].metadata
+            dataset = config.opendata[datapath]
+            dataset_cache_identity = get_dataset_cache_identity(dataset, datapath)
 
             if isNeuroGlancer:
                 # logger.info(451)
-                chunk_size = chunks_combine_channels(config.opendata[datapath].metadata,resolution)
+                chunk_size = chunks_combine_channels(dataset.metadata,resolution)
                 # logger.info(453)
                 # logger.info(chunk_size)
             else:
-                chunk_size = config.opendata[datapath].metadata[(resolution,0,0,'chunks')]
+                chunk_size = dataset.metadata[(resolution,0,0,'chunks')]
                 # logger.info(456)
 
             # Determine where the chunk is in the actual dataset
@@ -757,18 +777,22 @@ def setup_omezarr(app, config):
             # logger.info(f"dataset_shape, {dataset_shape}")
             # logger.info(f"chunk_size, {chunk_size}")
             # dataset_shape = config.opendata[datapath].metadata['shape']
-            dataset_shape = (config.opendata[datapath].metadata['TimePoints'],config.opendata[datapath].metadata['Channels'],*config.opendata[datapath].metadata[(resolution, 0, 0, 'shape')][-3:])
+            dataset_shape = (dataset.metadata['TimePoints'],dataset.metadata['Channels'],*dataset.metadata[(resolution, 0, 0, 'shape')][-3:])
             locationDict = where_is_that_chunk(chunk_name=chunk_name, dataset_shape=dataset_shape, chunk_size=chunk_size)
             logger.info('Chunk is here:')
             logger.info(locationDict)
 
             chunk = None
             if config.cache is not None:
-                key = f'omezarr_{locationDict}-{resolution}-{chunk_size}-{isNeuroGlancer}-{force8Bit}'
+                key = (
+                    f'omezarr_{dataset_cache_identity}-'
+                    f'{resolution}-{chunk_name}-{chunk_size}-'
+                    f'{isNeuroGlancer}-{force8Bit}'
+                )
                 chunk = config.cache.get(key, default=None, retry=True)
 
             if chunk is None:
-                chunk = get_chunk(locationDict,resolution,config.opendata[datapath],chunk_size)
+                chunk = get_chunk(locationDict,resolution,dataset,chunk_size)
                 # logger.info(chunk.shape)
                 chunk = pad_chunk(chunk, chunk_size)
                 if force8Bit:
@@ -782,7 +806,7 @@ def setup_omezarr(app, config):
                 if config.cache is not None:
                     # a = dask.delayed(config.cache.set)(key, chunk, expire=None, tag=datapath, retry=True)
 
-                    config.cache.set(key, chunk, expire=None, tag=datapath, retry=True)
+                    config.cache.set(key, chunk, expire=None, tag=dataset_cache_identity, retry=True)
 
                 # Flask return of bytesIO as file
 
@@ -945,8 +969,4 @@ Single channel, multiscale, EM:
 #     logger.info(tmp)
 #     chunks_list.append(tmp)
     
-
-
-
-
 
