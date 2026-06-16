@@ -49,6 +49,49 @@ def encode_ng_file(numpy_array, channels):
     return img_ram
 
 
+def _sample_rgb_channel_ranges(numpy_like_object):
+    """
+    Estimate stable display ranges for packed RGB datasets from the lowest resolution.
+    """
+    cache = getattr(numpy_like_object, "_ng_rgb_channel_range_cache", None)
+    if cache is not None:
+        return cache
+
+    lowest_res = int(numpy_like_object.ResolutionLevels) - 1
+    sample = numpy_like_object[
+        lowest_res,
+        slice(0, 1),
+        slice(0, 1),
+        slice(None),
+        slice(None),
+        slice(None),
+    ]
+    sample = np.squeeze(np.asarray(sample, dtype=np.float32))
+
+    if sample.ndim != 3 or sample.shape[-1] != 3:
+        cache = [(0.0, 255.0)] * 3
+        setattr(numpy_like_object, "_ng_rgb_channel_range_cache", cache)
+        return cache
+
+    ranges = []
+    for idx in range(sample.shape[-1]):
+        channel = sample[..., idx]
+        finite = channel[np.isfinite(channel)]
+        if finite.size == 0:
+            ranges.append((0.0, 1.0))
+            continue
+        positive = finite[finite > 0]
+        working = positive if positive.size else finite
+        low = float(np.min(working))
+        high = float(np.max(working))
+        if high <= low:
+            high = low + 1.0
+        ranges.append((low, high))
+
+    setattr(numpy_like_object, "_ng_rgb_channel_range_cache", ranges)
+    return ranges
+
+
 def ng_shader(numpy_like_object):
     """
     Generate a dynamic Neuroglancer shader string based on dataset metadata.
@@ -73,24 +116,21 @@ def ng_shader(numpy_like_object):
     # User omero values if they exist otherwise determine from lowest resolution multiscale
     if metadata["ndim"] == 6:
         print("RGB dataset detected, using RGB shader")
+        rgb_ranges = _sample_rgb_channel_ranges(numpy_like_object)
+        rgb_labels = ("red", "green", "blue")
         shaderStr = ""
-        # shaderStr = shaderStr + '// Init for each channel:\n\n'
-        # shaderStr = shaderStr + '// Channel visability check boxes\n'
-
-        
-        shaderStr = (
+        for idx, label in enumerate(rgb_labels):
+            shaderStr = (
                 shaderStr
-                + f"#uicontrol bool red   checkbox(default=true)\n"
-                + f"#uicontrol bool green checkbox(default=true)\n"
-                + f"#uicontrol bool blue  checkbox(default=true)\n"
+                + f"#uicontrol bool {label} checkbox(default=true)\n"
             )
         shaderStr = shaderStr + "\n\nvoid main() {\n\n"
-        # shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
-
-
-        shaderStr = shaderStr + f"  float R = red   ? toNormalized(getDataValue(0)) : 0.0;\n"
-        shaderStr = shaderStr + f"  float G = green ? toNormalized(getDataValue(1)) : 0.0;\n"
-        shaderStr = shaderStr + f"  float B = blue  ? toNormalized(getDataValue(2)) : 0.0;\n"
+        for idx, (label, channel_name) in enumerate(zip(rgb_labels, ("R", "G", "B"))):
+            low, high = rgb_ranges[idx]
+            shaderStr = shaderStr + (
+                f"  float {channel_name} = {label} ? "
+                f"clamp((float(toRaw(getDataValue({idx}))) - {low}) / {high - low}, 0.0, 1.0) : 0.0;\n"
+            )
         shaderStr = shaderStr + f"  vec3 rgb = vec3(R,G,B);\n\n"
         shaderStr = shaderStr + "emitRGB(rgb);\n"
 

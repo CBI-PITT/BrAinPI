@@ -96,6 +96,49 @@ def _sample_channel_range(img_obj, channel_index):
     return cache[channel_index]
 
 
+def _sample_rgb_channel_ranges(img_obj):
+    """
+    Estimate stable display ranges for packed RGB images from the lowest resolution.
+    """
+    cache = getattr(img_obj, "_osd_rgb_channel_range_cache", None)
+    if cache is not None:
+        return cache
+
+    lowest_res = int(img_obj.metadata.get("ResolutionLevels", img_obj.ResolutionLevels)) - 1
+    sample = img_obj[
+        lowest_res,
+        slice(0, 1),
+        slice(0, 1),
+        slice(None),
+        slice(None),
+        slice(None),
+    ]
+    sample = np.squeeze(np.asarray(sample, dtype=np.float32))
+
+    if sample.ndim != 3 or sample.shape[-1] != 3:
+        cache = [(0.0, 255.0)] * 3
+        setattr(img_obj, "_osd_rgb_channel_range_cache", cache)
+        return cache
+
+    ranges = []
+    for idx in range(sample.shape[-1]):
+        channel = sample[..., idx]
+        finite = channel[np.isfinite(channel)]
+        if finite.size == 0:
+            ranges.append((0.0, 1.0))
+            continue
+        positive = finite[finite > 0]
+        working = positive if positive.size else finite
+        low = float(np.min(working))
+        high = float(np.max(working))
+        if high <= low:
+            high = low + 1.0
+        ranges.append((low, high))
+
+    setattr(img_obj, "_osd_rgb_channel_range_cache", ranges)
+    return ranges
+
+
 def _get_channel_info(img_obj, channel_index):
     """
     Build client-side defaults for a single display channel.
@@ -157,6 +200,18 @@ def _get_channel_info(img_obj, channel_index):
         "window_max_default": 1.0 if span <= 0 else (window_end - range_min) / span,
         "gamma_default": 1.0,
     }
+
+
+def _scale_rgb_to_uint8(chunk, img_obj):
+    """
+    Scale packed RGB data to uint8 using stable per-channel ranges.
+    """
+    ranges = _sample_rgb_channel_ranges(img_obj)
+    scaled = np.zeros(chunk.shape, dtype=np.uint8)
+    for idx in range(min(chunk.shape[-1], len(ranges))):
+        low, high = ranges[idx]
+        scaled[..., idx] = _scale_to_uint8(chunk[..., idx], low, high)
+    return scaled
 
 
 def _build_channel_infos(img_obj):
@@ -457,7 +512,7 @@ def setup_openseadragon(app, config):
                 chunk = np.squeeze(chunk)
                 if len(chunk.shape) == 3 and chunk.shape[2] == 3:  # Color image
                     if chunk.dtype != np.uint8:
-                        chunk = utils.conv_np_dtypes(chunk, "uint8")
+                        chunk = _scale_rgb_to_uint8(chunk, img_obj)
                     chunk = cv2.cvtColor(chunk, cv2.COLOR_RGB2BGR)
                 elif not _is_rgb_volume(img_obj):
                     channel_info = _build_channel_infos(img_obj)[c]
