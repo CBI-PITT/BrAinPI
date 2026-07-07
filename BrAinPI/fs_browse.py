@@ -10,7 +10,6 @@ Make a browseable filesystem that limits paths to those configured in
 settings.ini and according to authentication / groups.ini
 '''
 
-import traceback
 from flask_login import (
                          current_user,
                          login_required,
@@ -835,6 +834,11 @@ def get_path_data(base, request):
                 current_path['dirs'] = [os.path.join(root,x) for x in current_path['dirs']]
                 current_path['files'] = [os.path.join(root,x) for x in current_path['files']]
 
+                # Ignore transient or broken child entries so one stale path
+                # does not prevent the whole directory page from rendering.
+                current_path['dirs'] = [x for x in current_path['dirs'] if utils.exists(x)]
+                current_path['files'] = [x for x in current_path['files'] if utils.exists(x)]
+
                 #keep only directories that have the correct user/group names
                 if not html_path_split[1].lower() in [x.lower() for x in settings['dir_anon']] and \
                     current_user.is_authenticated and \
@@ -912,9 +916,9 @@ def get_path_data(base, request):
                 # If a non-file / dir is passed, move backward to the nearest file/dir
                 return redirect(current_path['parent_path'])
 
-        except Exception:
-            flash('You must not be authorized to browse to path {}'.format(request.path))
-            logger.info(traceback.format_exc())
+        except Exception as exc:
+            flash('Unable to browse path {}'.format(request.path))
+            logger.exception(f'Browse failure for path {request.path}: {exc}')
             return redirect(url_for('login'))
 
     '''

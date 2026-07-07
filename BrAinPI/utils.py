@@ -290,8 +290,14 @@ def get_dir_contents(path,skip_s3=False):
         parent, dirs, files, _, _ = s3_utils.s3_get_dir_contents(path)
         return f's3://{parent}', dirs, files
     else:
+        if os.path.isdir(path) is False:
+            if os.path.isfile(path):
+                parent, name = os.path.split(path)
+                return parent, [], [name]
+            return path, [], []
         for parent, dirs, files in os.walk(path):
             return parent, dirs, files
+        return path, [], []
 
 url_template = 'https://{}.s3.amazonaws.com/{}'
 def send_file(path):
@@ -1018,6 +1024,5 @@ url_special_char_dict = {
 #
 #
 #
-
 
 
