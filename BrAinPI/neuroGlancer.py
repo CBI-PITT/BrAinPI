@@ -154,10 +154,14 @@ def ng_shader(numpy_like_object):
             ]
     channel_count = min(int(metadata["Channels"]), 7)
     omero_channels = omero.get("channels", []) if isinstance(omero, dict) else []
-    channelMins = []
-    channelMaxs = []
-    windowMins = []
-    windowMaxs = []
+    # Neuroglancer invlerp ``range`` is the interval mapped to [0, 1] and
+    # therefore controls rendered brightness. ``window`` only controls the
+    # interval shown by the ECDF UI. Keep the names explicit to avoid swapping
+    # these two distinct concepts.
+    mappingMins = []
+    mappingMaxs = []
+    ecdfWindowMins = []
+    ecdfWindowMaxs = []
     isVisable = []
     labels = []
     colors = []
@@ -168,15 +172,22 @@ def ng_shader(numpy_like_object):
         window = channel.get("window", {}) if isinstance(channel, dict) else {}
         required_window_fields = ("min", "max", "start", "end")
         if all(window.get(field) is not None for field in required_window_fields):
-            # Neuroglancer range is the full control extent; window is the
-            # initial display selection within that range.
-            channelMins.append(window["min"])
-            channelMaxs.append(window["max"])
-            windowMins.append(window["start"])
-            windowMaxs.append(window["end"])
+            # OMERO start/end define the initial intensity mapping, while
+            # min/max provide the wider domain displayed by the ECDF control.
+            mappingMins.append(window["start"])
+            mappingMaxs.append(window["end"])
+            ecdfWindowMins.append(window["min"])
+            ecdfWindowMaxs.append(window["max"])
         else:
             lowestResVolume = numpy_like_object[res - 1, 0, idx, :, :, :]
             display_min, display_max = _percentile_display_range(lowestResVolume)
+            print(
+                "Neuroglancer channel "
+                f"{idx}: OMERO window unavailable; using "
+                f"percentiles {DEFAULT_LUT_PERCENTILES[0]}/"
+                f"{DEFAULT_LUT_PERCENTILES[1]} as invlerp mapping range "
+                f"[{display_min}, {display_max}]"
+            )
             dtype = np.dtype(numpy_like_object.dtype)
             if np.issubdtype(dtype, np.integer):
                 dtype_info = np.iinfo(dtype)
@@ -187,10 +198,10 @@ def ng_shader(numpy_like_object):
                 ]
                 range_min = float(finite.min()) if finite.size else display_min
                 range_max = float(finite.max()) if finite.size else display_max
-            channelMins.append(range_min)
-            channelMaxs.append(range_max)
-            windowMins.append(display_min)
-            windowMaxs.append(display_max)
+            mappingMins.append(display_min)
+            mappingMaxs.append(display_max)
+            ecdfWindowMins.append(range_min)
+            ecdfWindowMaxs.append(range_max)
 
         isVisable.append(bool(channel.get("active", True)))
 
@@ -228,7 +239,7 @@ def ng_shader(numpy_like_object):
     for idx in range(channel_count):
         shaderStr = (
             shaderStr
-            + f"#uicontrol invlerp {labels[idx]}_lut (range=[{channelMins[idx]},{channelMaxs[idx]}],window=[{windowMins[idx]},{windowMaxs[idx]}]"
+            + f"#uicontrol invlerp {labels[idx]}_lut (range=[{mappingMins[idx]},{mappingMaxs[idx]}],window=[{ecdfWindowMins[idx]},{ecdfWindowMaxs[idx]}]"
         )
         if channel_count > 1:
             shaderStr = shaderStr + f",channel=[{idx}]);\n"
