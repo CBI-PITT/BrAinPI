@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Nov  3 11:06:07 2021
+"""Construct and configure the BrAinPI Flask application.
 
-@author: alpha
-
-https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-i-hello-world
-To run w/ gunicorn:  gunicorn --worker-class gevent -b 0.0.0.0:5001 --chdir /CBI_FastStore/cbiPythonTools/BrAinPI/BrAinPI wsgi:app -w 24 --threads=2 --worker-connections=2
-To run development (1 worker, 1 thread):  python -i /CBI_FastStore/cbiPythonTools/BrAinPI/BrAinPI/BrAinPI.py
+Importing this module initializes shared RAM caching, reads ``settings.ini``,
+registers authentication, browsing, extraction, NG, OSD, and OME-Zarr routes,
+and exposes the application as :data:`app` for WSGI servers.
 """
 
 # Place some critical caching tool into the builtins space to enable access across modules
@@ -142,7 +139,7 @@ def add_header(response):
     # then = datetime.now(timezone.utc) + timedelta(seconds=seconds)
     # response.headers.add('Expires', then.strftime("%a, %d %b %Y %H:%M:%S GMT"))
     content_type = response.headers.get('Content-Type')
-    if 'octet_stream' in content_type:
+    if 'octet-stream' in content_type or 'octet_stream' in content_type:
         '''
         Cache but don't gzip
         Gzip can be handled by the specific process sending these data
@@ -196,7 +193,3 @@ if __name__ == '__main__':
 # base_url         http://www.example.com/myapplication/foo/page.html
 # url              http://www.example.com/myapplication/foo/page.html?x=y
 # url_root         http://www.example.com/myapplication/
-    
-    
-    
-    

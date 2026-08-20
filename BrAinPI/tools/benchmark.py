@@ -61,6 +61,7 @@ chunkMap = (
 allChunks = [x for x in itertools.product(*chunkMap)]
 
 def getIt(choice):
+    """Read the data chunk beginning at a selected benchmark coordinate."""
     a = data[
         slice(choice[0],choice[0]+data_dask.chunksize[0]),
         slice(choice[1],choice[1]+data_dask.chunksize[1]),

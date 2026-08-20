@@ -1,15 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Mar  22 11:12:07 2023
+"""Cross-application discovery endpoints and viewer-link generation.
 
-@author: alpha
-
-Endpoints/functions placed here are to help coordinate applications both internally/externally to interacting
-with the BrAinPI interface.
-
-For example, the path_to_html_options function allows a dictionary of links to be returned for any file on disk.
-This function may be used internally to generate links for other services; however,
-the /path_to_html_options/ endpoint allows user to query a 'path' and return a json of the output from path_to_html_options
+``/path_to_html_options/`` maps a configured physical dataset path to every NG,
+OSD, and virtual OME-Zarr URL supported for its type. The module also exposes
+the source-extension lists used by viewer clients.
 """
 import os, glob
 from flask import (
@@ -58,16 +52,19 @@ def inititate(app,config):
     @app.route('/ng_supported_filetypes/', methods=['GET'])
     @cross_origin(allow_headers=['Content-Type'])
     def neuroglancer_support():
+        """Return source extensions accepted by the Neuroglancer endpoint."""
         return jsonify(neuroglancer_dtypes())
     
     @app.route('/opsd_supported_filetypes/', methods=['GET'])
     @cross_origin(allow_headers=['Content-Type'])
     def opsd_support():
+        """Return source extensions accepted by the OpenSeadragon endpoint."""
         return jsonify(openseadragon_dtypes())
 
     @app.route('/path_to_html_options/', methods=['GET'])
     @cross_origin(allow_headers=['Content-Type'])
     def html_options():
+        """Return all viewer links available for the requested physical path."""
         logger.info(f"{request.remote_addr=}")
         assert(isinstance(request.args, dict)), 'Expects a dictionary'
         assert 'path' in request.args, 'Expects a path key'
@@ -133,7 +130,6 @@ def inititate(app,config):
         paths['omezarr_neuroglancer_optimized'] = None
         paths['omezarr_8bit_neuroglancer_optimized_validator'] = None
         paths['openseadragon'] = None
-        paths['openseadragon_metadata'] = None
 
         logger.info(f"{paths['path']=}")
         if verify_file_exists:
@@ -186,7 +182,6 @@ def inititate(app,config):
                 opsd_link = html_base + '/' + strip_leading_trailing_slash(opsd_link)
 
                 paths['openseadragon'] = opsd_link
-                paths['openseadragon_metadata'] = paths['openseadragon'] + '/info'
             for key,value in paths.items():
                 # Replace space with %20 (' ')
                 if value is not None and value.startswith('http'):

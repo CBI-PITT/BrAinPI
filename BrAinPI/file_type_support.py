@@ -1,16 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Mar 30 15:49:10 2022
+"""File-type predicates and browser-to-viewer URL transformations.
 
-@author: awatson
-"""
-
-"""
-Attempt at creating file type hooks to produce links for opening files in other
-applications like neuroglancer or napari
-
-Can be used as a filter to determine if the file has the ability to be used by
-another process
+The helpers determine whether a browser path can be opened by Neuroglancer,
+OpenSeadragon, or the virtual OME-Zarr endpoint and construct the corresponding
+Flask route path.
 """
 
 import utils
@@ -18,10 +11,13 @@ from flask import url_for
 import neuroGlancer
 import openSeadragon
 def ng_links(req_path):
-    """
-    req_path is a string from the 'browse_fs' endpoint to a file.
-    If the file type is supported for neuroglancer
-    return the ng file entrypoint else return None
+    """Convert a supported browser path to its Neuroglancer route.
+
+    Args:
+        req_path: Path beginning at the Flask filesystem-browser endpoint.
+
+    Returns:
+        str or None: Neuroglancer route, or ``None`` for an unsupported type.
     """
     
     file_types = neuroGlancer.neuroglancer_dtypes()
@@ -38,10 +34,13 @@ def ng_links(req_path):
         return None
 
 def opsd_links(req_path):
-    """
-    req_path is a string from the 'browse_fs' endpoint to a file.
-    If the file type is supported for Openseadragon
-    return the osd file entrypoint else return None
+    """Convert a supported browser path to its OpenSeadragon route.
+
+    Args:
+        req_path: Path beginning at the Flask filesystem-browser endpoint.
+
+    Returns:
+        str or None: OpenSeadragon route, or ``None`` when unsupported.
     """
     file_types = openSeadragon.openseadragon_dtypes()
     file_type_supported = utils.is_file_type(file_types, req_path)
@@ -53,10 +52,16 @@ def opsd_links(req_path):
         return None
     
 def omezarr_links(req_path):
-    """
-    req_path is a string from the 'browse_fs' endpoint to a file.
-    If the file type is supported for omezarr
-    return the omezarr file entrypoint else return None
+    """Convert a supported browser or NG path to virtual OME-Zarr.
+
+    Args:
+        req_path: Browser or Neuroglancer endpoint path.
+
+    Returns:
+        str or None: Virtual ``.ome.zarr`` route, or ``None`` when unsupported.
+
+    Raises:
+        ValueError: If a supported file path has no recognized endpoint prefix.
     """
     file_types = openSeadragon.openseadragon_dtypes() + neuroGlancer.neuroglancer_dtypes()
     file_type_supported = utils.is_file_type(file_types, req_path)

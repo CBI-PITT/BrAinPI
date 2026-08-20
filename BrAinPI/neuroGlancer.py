@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Mar 17 16:39:55 2022
+"""Generate Neuroglancer state, metadata, shaders, and precomputed chunks.
 
-@author: awatson
+Image loaders are exposed as Neuroglancer precomputed volumes. Native
+annotation and segmentation ``.pcd`` datasets are detected and passed through.
+Float16 and float64 source chunks are encoded as float32 to match the advertised
+precomputed data type.
 """
 # bil_api imports
 from itertools import product
+from contextlib import nullcontext
 import io
 import json
 import re
+from urllib.parse import quote
 from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
 import numpy as np
 import os
@@ -31,6 +35,37 @@ from flask import (
 from flask_cors import cross_origin
 
 
+DEFAULT_LUT_PERCENTILES = (1, 99)
+
+
+def _percentile_display_range(values, percentiles=DEFAULT_LUT_PERCENTILES):
+    """
+    Estimate a stable display range from sampled data for Neuroglancer LUTs.
+    """
+    values = np.asarray(values)
+    if values.dtype.fields:
+        if len(values.dtype.fields) != 1:
+            raise TypeError(
+                "Display range calculation requires a numeric array or a "
+                "single-field structured array."
+            )
+        values = values[next(iter(values.dtype.fields))]
+    if not np.issubdtype(values.dtype, np.number):
+        raise TypeError(f"Display range calculation does not support dtype {values.dtype}")
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return 0.0, 1.0
+
+    positive = finite[finite > 0]
+    working = positive if positive.size else finite
+    low, high = np.percentile(working, percentiles)
+    low = float(low)
+    high = float(high)
+    if high <= low:
+        high = low + 1.0
+    return low, high
+
+
 def encode_ng_file(numpy_array, channels):
     """
     Encode a numpy array into a Neuroglancer-compatible chunk format.
@@ -42,54 +77,14 @@ def encode_ng_file(numpy_array, channels):
     Returns:
         io.BytesIO: The encoded chunk as a memory buffer.
     """
+    if numpy_array.dtype == np.float16 or numpy_array.dtype == np.float64:
+        numpy_array = numpy_array.astype(np.float32, copy=False)
+
     encoder = RawChunkEncoder(numpy_array.dtype, channels)
     img_ram = io.BytesIO()
     img_ram.write(encoder.encode(numpy_array))
     img_ram.seek(0)
     return img_ram
-
-
-def _sample_rgb_channel_ranges(numpy_like_object):
-    """
-    Estimate stable display ranges for packed RGB datasets from the lowest resolution.
-    """
-    cache = getattr(numpy_like_object, "_ng_rgb_channel_range_cache", None)
-    if cache is not None:
-        return cache
-
-    lowest_res = int(numpy_like_object.ResolutionLevels) - 1
-    sample = numpy_like_object[
-        lowest_res,
-        slice(0, 1),
-        slice(0, 1),
-        slice(None),
-        slice(None),
-        slice(None),
-    ]
-    sample = np.squeeze(np.asarray(sample, dtype=np.float32))
-
-    if sample.ndim != 3 or sample.shape[-1] != 3:
-        cache = [(0.0, 255.0)] * 3
-        setattr(numpy_like_object, "_ng_rgb_channel_range_cache", cache)
-        return cache
-
-    ranges = []
-    for idx in range(sample.shape[-1]):
-        channel = sample[..., idx]
-        finite = channel[np.isfinite(channel)]
-        if finite.size == 0:
-            ranges.append((0.0, 1.0))
-            continue
-        positive = finite[finite > 0]
-        working = positive if positive.size else finite
-        low = float(np.min(working))
-        high = float(np.max(working))
-        if high <= low:
-            high = low + 1.0
-        ranges.append((low, high))
-
-    setattr(numpy_like_object, "_ng_rgb_channel_range_cache", ranges)
-    return ranges
 
 
 def ng_shader(numpy_like_object):
@@ -114,9 +109,8 @@ def ng_shader(numpy_like_object):
 
     # Extract values for setting LUTs in proper range
     # User omero values if they exist otherwise determine from lowest resolution multiscale
-    if metadata["ndim"] == 6:
-        print("RGB dataset detected, using RGB shader")
-        rgb_ranges = _sample_rgb_channel_ranges(numpy_like_object)
+    if metadata["ndim"] == 6 or metadata.get("packed_rgb", False):
+        logger.info("RGB dataset detected, using RGB shader")
         rgb_labels = ("red", "green", "blue")
         shaderStr = ""
         for idx, label in enumerate(rgb_labels):
@@ -126,10 +120,9 @@ def ng_shader(numpy_like_object):
             )
         shaderStr = shaderStr + "\n\nvoid main() {\n\n"
         for idx, (label, channel_name) in enumerate(zip(rgb_labels, ("R", "G", "B"))):
-            low, high = rgb_ranges[idx]
             shaderStr = shaderStr + (
                 f"  float {channel_name} = {label} ? "
-                f"clamp((float(toRaw(getDataValue({idx}))) - {low}) / {high - low}, 0.0, 1.0) : 0.0;\n"
+                f"toNormalized(getDataValue({idx})) :0.0;\n"
             )
         shaderStr = shaderStr + f"  vec3 rgb = vec3(R,G,B);\n\n"
         shaderStr = shaderStr + "emitRGB(rgb);\n"
@@ -137,74 +130,7 @@ def ng_shader(numpy_like_object):
         shaderStr = shaderStr + "}"
         return shaderStr
     
-    channelMins = []
-    channelMaxs = []
-    windowMins = []
-    windowMaxs = []
-    isVisable = []
-    for ii in range(metadata["Channels"]):
-        if omero:
-            logger.info(omero)
-            channelMins.append(omero["channels"][ii]["window"]["start"])
-            channelMaxs.append(omero["channels"][ii]["window"]["end"])
-            windowMins.append(omero["channels"][ii]["window"]["min"])
-            windowMaxs.append(omero["channels"][ii]["window"]["max"])
-            isVisable.append(bool(omero["channels"][ii]["active"]))
-        else:
-            try:
-                # FORCE DEFAULT TO CALCULATING VALUE FROM LOWEST RESOLUTION
-                raise Exception
-                # channelMins.append(numpy_like_object.metadata[0,0,ii,'min'])
-                # channelMaxs.append(numpy_like_object.metadata[0,0,ii,'max'])
-            except:
-                lowestResVolume = numpy_like_object[res - 1, 0, ii, :, :, :]
-                # print(f"resol {res - 1}, channel {ii}, dtype {numpy_like_object.dtype},shape {lowestResVolume.shape}")
-                lowestResVolume = lowestResVolume[lowestResVolume >= 0]
-                # print(f"resol {res - 1}, channel {ii}, dtype {numpy_like_object.dtype},shape {lowestResVolume.shape}")
-                channelMins.append(lowestResVolume.min())
-                channelMaxs.append(lowestResVolume.max())
-                isVisable.append(True)
-            windowMins.append(0)
-            dtype = str(numpy_like_object.dtype)
-            if dtype == "uint16" or dtype.endswith("u2"):
-                windowMaxs.append(65535)
-            elif dtype == "uint8" or dtype.endswith("u1"):
-                windowMaxs.append(255)
-            elif dtype == "int16" or dtype.endswith("i2"):
-                windowMaxs.append(32767)
-            elif dtype == "int8" or dtype.endswith("i1"):
-                windowMaxs.append(127)
-            elif dtype == "int32" or dtype.endswith("i4"):
-                windowMaxs.append(2147483647)
-            elif dtype == "uint32" or dtype.endswith("u4"):
-                windowMaxs.append(4294967295)
-            # elif dtype == "uint64" or dtype.endswith("u8"): 
-            #     windowMaxs.append(18446744073709551615)
-            # elif dtype == "int64" or dtype.endswith("i8"):
-            #     windowMaxs.append(9223372036854775807)
-            elif dtype.startswith("float"):
-                windowMaxs.append(lowestResVolume.max())
-                # windowMaxs.append(1)
-        # if metadata["Channels"] > 7:
-        #     break
-        if ii == 6:
-            break   
-    labels = []
-    colors = []
-    if omero:
-        for idx in range(metadata["Channels"]):
-            labels.append(
-                omero["channels"][idx]["label"]
-                .replace(" ", "_")
-                .replace("-", "_")
-                .replace(".", "_")
-                .replace(":", "_")
-                .lower()
-            )
-            # Expect HEX RGB
-            colors.append("#" + omero["channels"][idx]["color"].upper())
-    else:
-        defaultColors = [
+    defaultColors = [
                 "#00FF00",  # 0 green
                 "#FF0000",  # 1 red
                 "#0000FF",  # 2 blue
@@ -226,35 +152,85 @@ def ng_shader(numpy_like_object):
                 "#FF6347",  # 18 tomato
                 "#008080",  # 19 teal
             ]
-        for idx in range(metadata["Channels"]):
-            labels.append(f"channel{idx}")
+    channel_count = min(int(metadata["Channels"]), 7)
+    omero_channels = omero.get("channels", []) if isinstance(omero, dict) else []
+    channelMins = []
+    channelMaxs = []
+    windowMins = []
+    windowMaxs = []
+    isVisable = []
+    labels = []
+    colors = []
+    used_labels = set()
+
+    for idx in range(channel_count):
+        channel = omero_channels[idx] if idx < len(omero_channels) else {}
+        window = channel.get("window", {}) if isinstance(channel, dict) else {}
+        required_window_fields = ("min", "max", "start", "end")
+        if all(window.get(field) is not None for field in required_window_fields):
+            # Neuroglancer range is the full control extent; window is the
+            # initial display selection within that range.
+            channelMins.append(window["min"])
+            channelMaxs.append(window["max"])
+            windowMins.append(window["start"])
+            windowMaxs.append(window["end"])
+        else:
+            lowestResVolume = numpy_like_object[res - 1, 0, idx, :, :, :]
+            display_min, display_max = _percentile_display_range(lowestResVolume)
+            dtype = np.dtype(numpy_like_object.dtype)
+            if np.issubdtype(dtype, np.integer):
+                dtype_info = np.iinfo(dtype)
+                range_min, range_max = dtype_info.min, dtype_info.max
+            else:
+                finite = np.asarray(lowestResVolume)[
+                    np.isfinite(lowestResVolume)
+                ]
+                range_min = float(finite.min()) if finite.size else display_min
+                range_max = float(finite.max()) if finite.size else display_max
+            channelMins.append(range_min)
+            channelMaxs.append(range_max)
+            windowMins.append(display_min)
+            windowMaxs.append(display_max)
+
+        isVisable.append(bool(channel.get("active", True)))
+
+        raw_label = str(channel.get("label") or f"channel{idx}").lower()
+        label = re.sub(r"[^a-z0-9_]", "_", raw_label).strip("_")
+        if not label or label[0].isdigit():
+            label = f"channel{idx}_{label}".rstrip("_")
+        base_label = label
+        suffix = 1
+        while label in used_labels:
+            label = f"{base_label}_{suffix}"
+            suffix += 1
+        used_labels.add(label)
+        labels.append(label)
+
+        color = str(channel.get("color") or "").strip().lstrip("#")
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", color):
             colors.append(defaultColors[idx % len(defaultColors)])
-            # if metadata["Channels"] > 7:
-            #     break
-            if idx == 6:
-                break
+        else:
+            colors.append("#" + color.upper())
     shaderStr = ""
     # shaderStr = shaderStr + '// Init for each channel:\n\n'
     # shaderStr = shaderStr + '// Channel visability check boxes\n'
 
-    for idx in range(metadata["Channels"]):
+    for idx in range(channel_count):
         shaderStr = (
             shaderStr
             + f"#uicontrol bool {labels[idx]}_visable checkbox(default={str(isVisable[idx]).lower()});\n"
         )
         # if metadata["Channels"] > 7:
         #     break
-        if idx == 6:
-            break
     shaderStr = shaderStr + "\n"
 
     # shaderStr = shaderStr + '\n// Lookup tables\n'
-    for idx in range(metadata["Channels"]):
+    for idx in range(channel_count):
         shaderStr = (
             shaderStr
             + f"#uicontrol invlerp {labels[idx]}_lut (range=[{channelMins[idx]},{channelMaxs[idx]}],window=[{windowMins[idx]},{windowMaxs[idx]}]"
         )
-        if metadata["Channels"] > 1:
+        if channel_count > 1:
             shaderStr = shaderStr + f",channel=[{idx}]);\n"
         else:
             shaderStr = shaderStr + ");\n"
@@ -265,36 +241,30 @@ def ng_shader(numpy_like_object):
         shaderStr = shaderStr + ";\n"
         # if metadata["Channels"] > 7:
         #     break
-        if idx == 6:
-            break
 
     shaderStr = shaderStr + "\n"
     # shaderStr = shaderStr + '\n// Colors\n'
 
-    for idx in range(metadata["Channels"]):
+    for idx in range(channel_count):
         shaderStr = (
             shaderStr
             + f'#uicontrol vec3 {labels[idx]}_color color(default="{colors[idx]}");\n'
         )
         # if metadata["Channels"] > 7:
         #     break
-        if idx == 6:
-            break
 
     shaderStr = shaderStr + "\n"
     # shaderStr = shaderStr + '\n//RGB vector at 0 (ie channel off)\n'
 
-    for idx in range(metadata["Channels"]):
+    for idx in range(channel_count):
         shaderStr = shaderStr + f"vec3 {labels[idx]} = vec3(0);\n"
         # if metadata["Channels"] > 7:
         #     break
-        if idx == 6:
-            break
 
     shaderStr = shaderStr + "\n\nvoid main() {\n\n"
     # shaderStr = shaderStr + '// For each color, if visable, get data, adjust with lut, then apply to color\n'
 
-    for idx in range(metadata["Channels"]):
+    for idx in range(channel_count):
         shaderStr = shaderStr + f"if ({labels[idx]}_visable == true)\n"
         # shaderStr = shaderStr + f'{labels[idx]} = {labels[idx]}_color * ((toNormalized(getDataValue({idx})) + {labels[idx]}_lut()));\n\n'
         shaderStr = (
@@ -303,17 +273,13 @@ def ng_shader(numpy_like_object):
         )
         # if metadata["Channels"] > 7:
         #     break
-        if idx == 6:
-            break
     # shaderStr = shaderStr + '// Add RGB values of all channels\n'
     shaderStr = shaderStr + "vec3 rgb = ("
-    for idx in range(metadata["Channels"]):
+    for idx in range(channel_count):
         shaderStr = shaderStr + f"{labels[idx]}"
         # if metadata["Channels"] > 7:
         #     break
-        if idx == 6:
-            break
-        if idx < metadata["Channels"] - 1:
+        if idx < channel_count - 1:
             shaderStr = shaderStr + " + "
     shaderStr = shaderStr + ");\n\n"
 
@@ -482,6 +448,15 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
     Returns:
         str: The Neuroglancer link.
     """
+    native_info = getattr(open_dataset_with_ng_json, "info", None)
+    native_kind = _native_ng_dataset_kind(native_info) if native_info else None
+    if native_kind in ("annotation", "segmentation"):
+        return _make_native_ng_link(
+            native_info,
+            compatible_file_link,
+            config=config,
+        )
+
     import neuroglancer
 
     brainpi_url = config.settings.get("app", "url")
@@ -539,6 +514,164 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
     del viewer
     del neuroglancer
 
+    return outURL
+
+
+def _native_ng_dataset_kind(info):
+    """
+    Classify a native Neuroglancer precomputed dataset from its info payload.
+    """
+    if not isinstance(info, dict):
+        return None
+
+    if info.get("type") == "image":
+        return "image"
+    if info.get("type") == "segmentation":
+        return "segmentation"
+
+    atype = str(info.get("@type", ""))
+    if atype.startswith("neuroglancer_annotations_"):
+        return "annotation"
+    if info.get("annotation_type") is not None:
+        return "annotation"
+    return None
+
+
+def _find_native_ng_dataset(fs_path):
+    """
+    Walk up from a filesystem path to find a native Neuroglancer precomputed root.
+    """
+    if not fs_path:
+        return None, None, None
+
+    current = fs_path
+    if os.path.isfile(current):
+        current = os.path.dirname(current)
+
+    while True:
+        info_path = os.path.join(current, "info")
+        if current.lower().endswith(".pcd") and os.path.isfile(info_path):
+            try:
+                with open(info_path, "r", encoding="utf-8") as handle:
+                    info = json.load(handle)
+            except Exception:
+                return None, None, None
+            return current, info, _native_ng_dataset_kind(info)
+
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+
+    return None, None, None
+
+
+def _make_native_ng_dimensions(info):
+    """
+    Build a Neuroglancer state dimensions object from a native precomputed info.
+    """
+    kind = _native_ng_dataset_kind(info)
+    if kind == "annotation":
+        dims = info.get("dimensions")
+        if isinstance(dims, dict):
+            return dims
+        return None
+
+    scales = info.get("scales") or []
+    if not scales:
+        return None
+
+    resolution = scales[0].get("resolution")
+    if resolution is None or len(resolution) < 3:
+        return None
+
+    return {
+        "x": [float(resolution[0]) / 1000.0, "um"],
+        "y": [float(resolution[1]) / 1000.0, "um"],
+        "z": [float(resolution[2]) / 1000.0, "um"],
+    }
+
+
+def _make_native_ng_position(info):
+    """
+    Estimate a useful starting position from native precomputed metadata.
+    """
+    kind = _native_ng_dataset_kind(info)
+    if kind == "annotation":
+        lower = info.get("lower_bound")
+        upper = info.get("upper_bound")
+        if (
+            isinstance(lower, (list, tuple))
+            and isinstance(upper, (list, tuple))
+            and len(lower) >= 3
+            and len(upper) >= 3
+        ):
+            return [
+                (float(lower[idx]) + float(upper[idx])) / 2.0 for idx in range(3)
+            ]
+        return None
+
+    scales = info.get("scales") or []
+    if not scales:
+        return None
+
+    size = scales[0].get("size")
+    if not isinstance(size, (list, tuple)) or len(size) < 3:
+        return None
+
+    return [float(size[0]) / 2.0, float(size[1]) / 2.0, float(size[2]) / 2.0]
+
+
+def _make_native_ng_link(info, compatible_file_link, config=None):
+    """
+    Build a Neuroglancer link for native annotation or segmentation datasets.
+    """
+    brainpi_url = config.settings.get("app", "url")
+    ngURL = config.settings.get("neuroglancer", "url")
+    source = "precomputed://" + brainpi_url + compatible_file_link
+    name = os.path.split(compatible_file_link)[-1]
+    kind = _native_ng_dataset_kind(info)
+
+    layer = {
+        "source": source,
+        "name": name,
+    }
+    if kind == "annotation":
+        layer["type"] = "annotation"
+        layer["tab"] = "annotations"
+    elif kind == "segmentation":
+        layer["type"] = "segmentation"
+        layer["tab"] = "segments"
+    else:
+        raise ValueError("Unsupported native Neuroglancer dataset type")
+
+    state_dict = {
+        "layers": [layer],
+        "selectedLayer": {
+            "layer": name,
+            "visible": True,
+        },
+        "layout": "4panel",
+    }
+
+    dimensions = _make_native_ng_dimensions(info)
+    if dimensions is not None:
+        state_dict["dimensions"] = dimensions
+
+    position = _make_native_ng_position(info)
+    if position is not None:
+        state_dict["position"] = position
+
+    if kind == "annotation":
+        state_dict["crossSectionScale"] = 50
+        state_dict["projectionScale"] = 32000
+
+    if "https://" not in source:
+        ngURL = ngURL.replace("https://", "http://")
+
+    encoded_state = quote(json.dumps(state_dict, separators=(",", ":")), safe="")
+    outURL = ngURL + "#!" + encoded_state
+    logger.info(outURL)
     return outURL
 
 
@@ -615,7 +748,8 @@ def neuroglancer_dtypes():
         ".ome-tif",
         ".ome-tiff",
         ".jp2",
-        ".nd2"
+        ".nd2",
+        ".pcd",
     ]
 
 
@@ -668,14 +802,17 @@ def open_ng_dataset(config, datapath):
     #         )
 
     # return datapath
-    stat = os.stat(datapath)
-    file_ino = str(stat.st_ino)
-    modification_time = str(stat.st_mtime)
-    datapath_key = config.loadDataset(file_ino + modification_time, datapath)
+    datapath_key = utils.load_dataset(config, datapath)
 
     logger.info("IN OPEN NG DATASET 411")
 
-    if not hasattr(config.opendata[datapath_key], "ng_json"):
+    dataset_lock = getattr(config, "dataset_lock", None)
+    lock_context = dataset_lock(datapath_key) if dataset_lock else nullcontext()
+    with lock_context:
+        dataset = config.opendata[datapath_key]
+        if hasattr(dataset, "ng_json"):
+            return datapath_key
+
         logger.info("IN NO ATTR DATASET 414")
         # or not hasattr(config.opendata[datapath],'ng_files'):
 
@@ -693,20 +830,18 @@ def open_ng_dataset(config, datapath):
 
         if chunk_type.lower() == "isotropic":
             chunk_depth = settings.getint("neuroglancer", "chunk_depth")
-            config.opendata[datapath_key].ng_json = ng_json(
-                config.opendata[datapath_key],
+            dataset.ng_json = ng_json(
+                dataset,
                 file="dict",
                 different_chunks=(chunk_depth, chunk_depth, chunk_depth),
             )
         elif chunk_type.lower() == "anisotropic":
             chunk_depth = settings.getint("neuroglancer", "chunk_depth")
-            config.opendata[datapath_key].ng_json = ng_json(
-                config.opendata[datapath_key], file="dict", different_chunks=chunk_depth
+            dataset.ng_json = ng_json(
+                dataset, file="dict", different_chunks=chunk_depth
             )
         else:
-            config.opendata[datapath_key].ng_json = ng_json(
-                config.opendata[datapath_key], file="dict"
-            )
+            dataset.ng_json = ng_json(dataset, file="dict")
 
     return datapath_key
 
@@ -747,10 +882,21 @@ def setup_neuroglancer(app, config):
 
     @logger.catch
     def neuro_glancer_entry(req_path, request=request):
+        """Handle a Neuroglancer view, ``info`` document, or raw chunk request.
+
+        Args:
+            req_path: Route path below the ``/ng/`` prefix.
+            request: Flask request object; injectable for tokenized URL helpers.
+
+        Returns:
+            flask.Response: Redirect page, JSON metadata, native resource, or
+            encoded precomputed chunk depending on the requested suffix.
+        """
         # Request is an option for using this function separate from traditional flask response
         # See usage in tokenized_urls module
         logger.trace(request.path)
         path_split, datapath = get_html_split_and_associated_file_path(config, request)
+        requested_fs_path = datapath
         # logger.info(f'{path_split},{datapath}')
 
         # Test for different patterns
@@ -798,6 +944,20 @@ def setup_neuroglancer(app, config):
                 path_split = tuple(part for part in path_split if part != "ng_view")
                 datapath = datapath.replace("/ng_view", "")
                 request.path = request.path.replace("/ng_view", "")
+                native_root, native_info, native_kind = _find_native_ng_dataset(datapath)
+                if native_root == datapath and native_kind in ("annotation", "segmentation"):
+                    link_to_ng = _make_native_ng_link(
+                        native_info,
+                        request.path,
+                        config=config,
+                    )
+                    return render_template(
+                        "redirect.html",
+                        gtag=config.settings.get("GA4", "gtag"),
+                        redirect_url=link_to_ng,
+                        redirect_name="Neuroglancer",
+                        description=datapath,
+                    )
                 datapath_key = open_ng_dataset(
                     config, datapath
                 )  # Ensures that dataset is open AND info_json is formed
@@ -857,6 +1017,21 @@ def setup_neuroglancer(app, config):
                     exception=e,
                 )
         else:
+            native_root, native_info, native_kind = _find_native_ng_dataset(
+                requested_fs_path
+            )
+            if (
+                native_kind in ("annotation", "segmentation")
+                and os.path.isfile(requested_fs_path)
+                and os.path.commonpath([native_root, requested_fs_path]) == native_root
+            ):
+                if os.path.basename(requested_fs_path) == "info":
+                    return jsonify(native_info)
+                return send_file(
+                    requested_fs_path,
+                    as_attachment=False,
+                    download_name=os.path.basename(requested_fs_path),
+                )
             return "No path to neuroglancer supported dataset"
 
         # datapath = open_ng_dataset(config,datapath) # Ensures that dataset is open AND info_json is formed
@@ -867,6 +1042,11 @@ def setup_neuroglancer(app, config):
             # file_ino = str(stat.st_ino)
             # modification_time = str(stat.st_mtime)
             try:
+                native_root, native_info, native_kind = _find_native_ng_dataset(
+                    requested_fs_path
+                )
+                if native_root == datapath and native_kind in ("annotation", "segmentation"):
+                    return jsonify(native_info)
                 datapath_key = open_ng_dataset(config, datapath)
                 b = io.BytesIO()
                 b.write(
@@ -900,7 +1080,21 @@ def setup_neuroglancer(app, config):
 
         ## Serve neuroglancer raw-format files
         elif isinstance(match(file_pattern, path_split[-1]), Match_class):
+            native_root, native_info, native_kind = _find_native_ng_dataset(
+                requested_fs_path
+            )
+            if (
+                native_kind in ("annotation", "segmentation")
+                and os.path.isfile(requested_fs_path)
+                and os.path.commonpath([native_root, requested_fs_path]) == native_root
+            ):
+                return send_file(
+                    requested_fs_path,
+                    as_attachment=False,
+                    download_name=os.path.basename(requested_fs_path),
+                )
             datapath_key = open_ng_dataset(config, datapath)
+            dataset = config.opendata[datapath_key]
             # logger.info(request.path + '\n')
 
             x, y, z = path_split[-1].split("_")
@@ -910,6 +1104,12 @@ def setup_neuroglancer(app, config):
             x = [int(x) for x in x]
             y = [int(x) for x in y]
             z = [int(x) for x in z]
+
+            if x[1] <= x[0] or y[1] <= y[0] or z[1] <= z[0]:
+                logger.warning(
+                    f"Ignoring empty Neuroglancer chunk request: {path_split[-1]}"
+                )
+                return Response(status=404)
 
             res = int(path_split[-2])
 
@@ -922,28 +1122,39 @@ def setup_neuroglancer(app, config):
                     logger.info("ng cache found")
 
             if img is None:
-                img = config.opendata[datapath_key][
-                    res,
-                    slice(0, 1),
-                    slice(None),
-                    slice(z[0], z[1]),
-                    slice(y[0], y[1]),
-                    slice(x[0], x[1]),
-                ]
-                # this is only for tif RGB files
-                # logger.info(f"img shape before: {img.shape}")
-                # logger.info(f"img ndim before: {img.ndim}")
-                if img.ndim == 6:
-                    # drop first two axes, keep RGB, move channels first
-                    img = np.moveaxis(img[0, 0, ..., :3], -1, 0)
-                # logger.info(f"img ndim: {img.ndim}")
-                while img.ndim > 4:
-                    img = np.squeeze(img, axis=0)
-                while img.ndim < 4:
-                    img = np.expand_dims(img, axis=0)
-                img = encode_ng_file(
-                    img, config.opendata[datapath_key].ng_json["num_channels"]
-                )
+                try:
+                    img = dataset[
+                        res,
+                        slice(0, 1),
+                        slice(None),
+                        slice(z[0], z[1]),
+                        slice(y[0], y[1]),
+                        slice(x[0], x[1]),
+                    ]
+                    # this is only for tif RGB files
+                    if img.ndim == 6:
+                        # drop first two axes, keep RGB, move channels first
+                        img = np.moveaxis(img[0, 0, ..., :3], -1, 0)
+                    while img.ndim > 4:
+                        img = np.squeeze(img, axis=0)
+                    while img.ndim < 4:
+                        img = np.expand_dims(img, axis=0)
+                    img = encode_ng_file(
+                        img, dataset.ng_json["num_channels"]
+                    )
+                except Exception as exc:
+                    logger.exception(
+                        f"Failed to read source chunk {path_split[-1]} "
+                        f"at resolution {res} from {datapath}"
+                    )
+                    return jsonify(
+                        {
+                            "error": "Failed to read source dataset chunk",
+                            "resolution": res,
+                            "chunk": path_split[-1],
+                            "detail": str(exc),
+                        }
+                    ), 502
 
                 if config.cache is not None:
                     config.cache.set(key, img, expire=None, tag=datapath_key, retry=True)
@@ -952,7 +1163,7 @@ def setup_neuroglancer(app, config):
             # return Response(response=img, status=200,
             #                 mimetype="application/octet_stream")
             response = Response(
-                response=img, status=200, mimetype="application/octet_stream"
+                response=img, status=200, mimetype="application/octet-stream"
             )
 
             response = compress_flask_response(response, request, 9)

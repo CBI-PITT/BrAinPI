@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Apr 18 15:47:35 2022
-
-@author: alpha
-"""
+"""Legacy loader for image pyramids stored as HDF5 virtual datasets."""
 import os
 import glob
 from natsort.natsort import natsorted
@@ -22,6 +18,12 @@ else:
 
 # os.environ["HDF5_VDS_PREFIX"] = location
 class h5_sharded:
+    """Read a multiresolution image assembled from HDF5 virtual datasets.
+
+    Each resolution is stored in a ``VDS_<level>.hf`` file containing a
+    ``vdata`` dataset. The loader exposes the selected level's array metadata
+    and delegates indexing to h5py.
+    """
     
     def __init__(self, location, ResolutionLevelLock=None, squeeze=True, compute=True):
         
@@ -51,6 +53,7 @@ class h5_sharded:
         self.change_resolution_lock(self.ResolutionLevelLock)
         
     def collect_metadata(self):
+        """Populate per-resolution, time, and channel metadata from VDS files."""
         for res, t, c in itertools.product(range(self.ResolutionLevels), range(self.TimePoints),
                                          range(self.Channels)):
             
@@ -63,6 +66,7 @@ class h5_sharded:
             self.metaData[res,t,c,'resolution'] = tuple([x*(2**res) for x in (50,1,1)])#(1,1,1)(z,y,x)
             
     def change_resolution_lock(self,ResolutionLevelLock):
+        """Select a default VDS resolution and refresh array-like attributes."""
         self.ResolutionLevelLock = ResolutionLevelLock
         self.shape = self.metaData[(self.ResolutionLevelLock,0,0,'shape')]
         self.size = self.metaData[(self.ResolutionLevelLock,0,0,'size')]
@@ -84,16 +88,23 @@ class h5_sharded:
     #     print('Creating VDS')
         
     def VDS_file_namer(self,res):
+        """Return the conventional virtual-dataset filename for a resolution."""
         name = os.path.join(self.location,'VDS_{}.hf'.format(res))
         print(name)
         return name
                             
     def get_from_vds(self,res,key):
+        """Read ``key`` from the requested VDS resolution."""
         with h5py.File(self.VDS_file_namer(res), 'r') as f:
             print('opened dataset')
             return f['vdata'][key]
     
     def get_attr_from_vds(self,res,key):
+        """Return a supported h5py dataset attribute for one resolution.
+
+        Supported keys are ``shape``, ``dtype``, ``chunks``, ``ndim``,
+        ``nbytes``, and ``size``.
+        """
         with h5py.File(self.VDS_file_namer(res), 'r') as f:
             if key == 'shape':
                 return f['vdata'].shape

@@ -1,9 +1,13 @@
+"""Single-channel TeraFly multiresolution loader with TCZYX slicing."""
+
 import itertools
 import numpy as np
 import os
 import re
 from v3dpy.terafly import TeraflyInterface
 from logger_tools import logger
+from loader_indexing import normalize_data_key
+from utils import loader_cache_key
 
 
 class terafly_loader:
@@ -51,6 +55,8 @@ class terafly_loader:
                 self.dtype = str(self.array[res].get_sub_volume(0, 1, 0, 1, 0, 1).dtype)
                 dim_x_y_z_c = self.array[res].get_dim()
                 self.Channels = dim_x_y_z_c[-1]
+                if self.Channels > 1:
+                    raise ValueError("Terafly loader currently only supports single channel data.")
 
         for r in list(self.array.keys()):
             for t, c in itertools.product(range(self.TimePoints), range(self.Channels)):
@@ -150,11 +156,7 @@ class terafly_loader:
         """
         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
         # print(key)
-        if (
-            isinstance(key, slice) == False
-            and isinstance(key, int) == False
-            and len(key) == 6
-        ):
+        if isinstance(key, tuple) and len(key) == 6:
             res = key[0]
             if res >= self.ResolutionLevels:
                 raise ValueError("Layer is larger than the number of ResolutionLevels")
@@ -162,27 +164,7 @@ class terafly_loader:
         # print(res)
         # print(key)
 
-        if isinstance(key, int):
-            key = [slice(key, key + 1)]
-            for _ in range(self.ndim - 1):
-                key.append(slice(None))
-            key = tuple(key)
-
-        if isinstance(key, tuple):
-            key = [slice(x, x + 1) if isinstance(x, int) else x for x in key]
-            while len(key) < self.ndim:
-                key.append(slice(None))
-            key = tuple(key)
-
-        # print(key)
-        newKey = []
-        for ss in key:
-            if ss.start is None and isinstance(ss.stop, int):
-                newKey.append(slice(ss.stop, ss.stop + 1, ss.step))
-            else:
-                newKey.append(ss)
-
-        key = tuple(newKey)
+        key = normalize_data_key(key, self.ndim)
         # print(key)
 
         array = self.getSlice(r=res, t=key[0], c=key[1], z=key[2], y=key[3], x=key[4])
@@ -214,7 +196,7 @@ class terafly_loader:
         # key = f"{self.location}_getSlice_{str(incomingSlices)}"
         if self.cache is not None:
             # key = self.location + '_getSlice_' + str(incomingSlices)
-            key = f'{self.file_ino + self.modification_time + str(incomingSlices)}'
+            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
                 logger.info(f"loader cache found")

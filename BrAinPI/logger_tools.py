@@ -1,3 +1,5 @@
+"""Configure the process-wide Loguru logger from ``settings.ini``."""
+
 import sys
 from config_tools import get_config
 from loguru import logger
@@ -22,4 +24,3 @@ def setup_logger():
 
 # Ensure the logger is set up once during import
 setup_logger()
-

@@ -1,3 +1,4 @@
+"""RSA/JWT helpers and Flask routes for time-limited BrAinPI URLs."""
 
 # pip install pyjwt
 import base64
@@ -277,7 +278,9 @@ def setup_tokenized_endpoint(app, config):
         config: A configuration object with settings including:
                 - 'auth' settings with a 'secret_key' for signing tokens.
                 - 'app' settings with a base URL under 'url'.
-                - 'rsa' settings with 'key_location' and 'bit' length.
+                - Optional 'rsa' settings with a non-empty 'key_location' and
+                  a 'bit' length. RSA initialization is skipped when the
+                  section, option, or location value is absent.
     
     Returns:
         The Flask application instance with the new routes registered.
@@ -290,14 +293,20 @@ def setup_tokenized_endpoint(app, config):
 	if APP_URL[-1] != '/':
 		APP_URL += '/'
 
-	RSA_KEY_LOCATION = config.settings.get('rsa', 'key_location')  # Used for token signing
-	RSA_KEY_BITS = config.settings.getint('rsa', 'bit')  # Used for token signing
-
-	if RSA_KEY_LOCATION is None:
-		RSA_KEY_LOCATION = os.curdir
-
-	print('MAKING KEYS')
-	RSA_PUBLIC, RSA_PRIVATE = get_rsa_key_pairs(RSA_KEY_LOCATION, bit=RSA_KEY_BITS)
+	# RSA is an optional, currently inactive encryption layer around the signed
+	# JWT. Keep the key support available, but do not create/read key files unless
+	# an explicit, non-empty key directory is configured.
+	RSA_PUBLIC = None
+	RSA_PRIVATE = None
+	RSA_KEY_LOCATION = config.settings.get('rsa', 'key_location', fallback=None)
+	if RSA_KEY_LOCATION:
+		RSA_KEY_LOCATION = RSA_KEY_LOCATION.strip()
+	if RSA_KEY_LOCATION:
+		RSA_KEY_BITS = config.settings.getint('rsa', 'bit', fallback=2048)
+		RSA_PUBLIC, RSA_PRIVATE = get_rsa_key_pairs(
+			RSA_KEY_LOCATION,
+			bit=RSA_KEY_BITS,
+		)
 
 	@app.route('/token/<token>/' + '<path:req_path>')
 	@app.route('/token/<token>/', defaults={'req_path': ''})
@@ -348,8 +357,9 @@ def setup_tokenized_endpoint(app, config):
 		# 	return neuro_glancer_entry(req_path)
 
 		# Rewrite request obj to pass to appropriate endpoint
-		class fake_request_obj:
-			url = new_req_url
+			class fake_request_obj:
+				"""Request-like object used to dispatch a decoded token internally."""
+				url = new_req_url
 			path = new_req_path
 			headers = old_headers
 

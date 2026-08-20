@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Nov  4 10:05:34 2021
+"""Shared path, cache-key, dtype, compression, and metadata utilities.
 
-@author: alpha
+The helpers in this module bridge Flask routes, local files, public S3 paths,
+and the common TCZYX loader interface. Dataset identity and uint8 conversion
+rules are centralized here so the NG, OSD, and OME-Zarr endpoints behave
+consistently.
 """
 
 
@@ -15,7 +17,7 @@ import json
 import sys
 import gzip
 import requests
-from skimage import img_as_float32, img_as_float64, img_as_uint, img_as_ubyte
+from skimage import img_as_float32, img_as_float64, img_as_uint
 import difflib
 import datetime
 
@@ -54,6 +56,29 @@ def calculate_hash(input_string):
     """
     hash_result = hashlib.sha256(input_string.encode()).hexdigest()
     return hash_result       
+
+
+def is_s3_path(path):
+    """Return whether *path* is an S3 URL rather than a local filesystem path."""
+    return isinstance(path, str) and path.startswith("s3://")
+
+
+def dataset_cache_key(path):
+    """Build a stable open-dataset key without calling ``os.stat`` on S3 URLs."""
+    if is_s3_path(path):
+        return path
+    stat = os.stat(path)
+    return str(stat.st_ino) + str(stat.st_mtime)
+
+
+def loader_cache_key(file_ino, modification_time, incoming_slices):
+    """Return the shared cache key used by every dataset loader slice."""
+    return file_ino + modification_time + str(incoming_slices)
+
+
+def load_dataset(config, path):
+    """Load or reuse a dataset with the appropriate local or S3 cache key."""
+    return config.loadDataset(dataset_cache_key(path), path)
 
 def get_directory_size(directory):
     """
@@ -320,6 +345,15 @@ def send_file(path):
 
 
 def get(location,baseURL):
+    """Fetch a JSON object from ``baseURL + location``.
+
+    Args:
+        location: Relative resource path.
+        baseURL: Base HTTP URL.
+
+    Returns:
+        dict: Decoded JSON response.
+    """
     with urllib.request.urlopen(baseURL + location, timeout=5) as url:
         data = dict(json.loads(url.read().decode()))
     return data
@@ -338,13 +372,78 @@ def conv_np_dtypes(array,tdtype):
     if array.dtype == tdtype:
         return array
     if tdtype == 'uint8' or tdtype == np.dtype('uint8'):
-        return img_as_ubyte(array)
+        return dtype_to_uint8(array)
     if tdtype == 'uint16' or tdtype == np.dtype('uint16'):
         return img_as_uint(array)
     if tdtype == 'float32' or tdtype == np.dtype('float32'):
         return img_as_float32(array)
     if tdtype == float or tdtype == 'float64' or tdtype == np.dtype('float64'):
         return img_as_float64(array)
+
+
+def uint8_source_range(dtype):
+    """Return the source range represented by direct dtype-to-uint8 conversion."""
+    dtype = np.dtype(dtype)
+    if dtype == np.dtype("uint8"):
+        return 0.0, 255.0
+    if np.issubdtype(dtype, np.bool_):
+        return 0.0, 1.0
+    if np.issubdtype(dtype, np.unsignedinteger):
+        return 0.0, float(np.iinfo(dtype).max)
+    if np.issubdtype(dtype, np.signedinteger):
+        # This matches skimage: negative signed values are clipped to black,
+        # while the non-negative half of the dtype maps to 0..255.
+        return 0.0, float(np.iinfo(dtype).max)
+    if np.issubdtype(dtype, np.floating):
+        return 0.0, 1.0
+    raise TypeError(f"Cannot convert dtype {dtype} to uint8")
+
+
+def dtype_to_uint8(array):
+    """Convert to uint8 solely from the source dtype, never chunk extrema.
+
+    This deliberately avoids ``skimage.img_as_ubyte``'s content-dependent
+    shortcut, which casts a uint16 chunk unchanged when all values happen to
+    fit in uint8. Integer down-conversion follows skimage's normal bit-depth
+    conversion; floats use the conventional [0, 1] range.
+    """
+    array = np.asarray(array)
+    if array.dtype == np.dtype("uint8"):
+        return array
+    if np.issubdtype(array.dtype, np.bool_):
+        return array.astype(np.uint8) * np.uint8(255)
+
+    if np.issubdtype(array.dtype, np.unsignedinteger):
+        source_bits = array.dtype.itemsize * 8
+        if source_bits > 8:
+            return np.right_shift(array, source_bits - 8).astype(np.uint8)
+        return array.astype(np.uint8)
+
+    if np.issubdtype(array.dtype, np.signedinteger):
+        source_bits = array.dtype.itemsize * 8
+        positive = np.maximum(array, 0)
+        shift = source_bits - 1 - 8
+        if shift >= 0:
+            return np.right_shift(positive, shift).astype(np.uint8)
+        source_max = np.iinfo(array.dtype).max
+        working = positive.astype(np.float32)
+        return np.rint(working * (255.0 / source_max)).astype(np.uint8)
+
+    if np.issubdtype(array.dtype, np.floating):
+        working_dtype = np.float64 if array.dtype.itemsize > 4 else np.float32
+        working = np.array(array, dtype=working_dtype, copy=True)
+        np.nan_to_num(working, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
+        np.clip(working, 0.0, 1.0, out=working)
+        np.multiply(working, 255.0, out=working)
+        np.rint(working, out=working)
+        return working.astype(np.uint8)
+
+    raise TypeError(f"Cannot convert dtype {array.dtype} to uint8")
+
+
+def dtype_value_to_uint8(value, source_dtype):
+    """Convert a metadata scalar with the same dtype rule used for pixels."""
+    return int(dtype_to_uint8(np.asarray([value], dtype=source_dtype))[0])
 
 def compress_np(nparr):
     """
@@ -823,6 +922,15 @@ def getFromDataset(dataset,res,t,c,z,y,x):
     return config.opendata[dataset][res,t,c,z,y,x]
 
 def mountDataset(name,storeType):
+    """Mount a legacy named dataset from the module's static registry.
+
+    Args:
+        name: Registry key.
+        storeType: Retained legacy argument; the registry controls store type.
+
+    Returns:
+        zarr.Array or zarr.Group: Opened legacy dataset.
+    """
     
     dataSets = {
         'fmost':(r'H:\globus\pitt\bil\c01_0.zarr','zarrNested'),
@@ -835,7 +943,10 @@ def mountDataset(name,storeType):
     
 
 def profile(func):
+    """Decorate a function to log cumulative cProfile statistics."""
+
     def wrapper(*args, **kwargs):
+        """Profile one invocation and return the wrapped result."""
         pr = cProfile.Profile()
         pr.enable()
         retval = func(*args, **kwargs)
@@ -1024,5 +1135,3 @@ url_special_char_dict = {
 #
 #
 #
-
-

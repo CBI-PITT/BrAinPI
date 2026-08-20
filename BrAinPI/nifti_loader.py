@@ -1,3 +1,10 @@
+"""NIfTI and NIfTI-Zarr loading with optional multiscale cache generation.
+
+The loader normalizes OME-style array axes to TCZYX. Single-field structured
+dtypes are exposed through their numeric field; ambiguous multi-field dtypes
+are rejected.
+"""
+
 import zarr, os, itertools
 import numpy as np
 import hashlib
@@ -16,9 +23,11 @@ from niizarr import nii2zarr
 from pathlib import Path
 StoreLike = Union[ Store, MutableMapping]
 from logger_tools import logger
+from loader_indexing import normalize_data_key
 import gc
 import multiprocessing
-from utils import calculate_hash, get_directory_size, delete_oldest_files
+from utils import calculate_hash, get_directory_size, delete_oldest_files, loader_cache_key
+
 
 def separate_process_generation(inp, out, time_axe):
     """
@@ -178,18 +187,36 @@ class nifti_zarr_loader:
         self.dataset_paths = []
         self.dataset_scales = []
         self.arrays = {}
+        self._structured_fields = {}
         for r in range(self.ResolutionLevels):
             self.dataset_paths.append(self.multiscale_datasets[r]["path"])
             self.dataset_scales.append(
                 self.multiscale_datasets[r]["coordinateTransformations"][0]["scale"]
             )
             array = self.open_array(r)
+            dtype_fields = array.dtype.fields
+            if dtype_fields is None:
+                self._structured_fields[r] = None
+                logical_dtype = array.dtype
+            elif len(dtype_fields) == 1:
+                field_name = next(iter(dtype_fields))
+                self._structured_fields[r] = field_name
+                logical_dtype = np.dtype(dtype_fields[field_name][0])
+            else:
+                raise TypeError(
+                    "NIfTI-Zarr arrays with multiple structured dtype fields "
+                    f"are not supported: {tuple(dtype_fields)}"
+                )
             if r == 0:
                 self.TimePoints = (
-                    array.shape[self.axes_pos_dic["t"]] if self.axes_pos_dic["t"] else 1
+                    array.shape[self.axes_pos_dic["t"]]
+                    if self.axes_pos_dic["t"] is not None
+                    else 1
                 )
                 self.Channels = (
-                    array.shape[self.axes_pos_dic["c"]] if self.axes_pos_dic["c"] else 1
+                    array.shape[self.axes_pos_dic["c"]]
+                    if self.axes_pos_dic["c"] is not None
+                    else 1
                 )
             # shape_z = array.shape[self.dim_pos_dic['z']]
             # shape_y = array.shape[self.dim_pos_dic['y']]
@@ -239,8 +266,11 @@ class nifti_zarr_loader:
                 #     dtype = "uint16"
                 # elif dtype == "float64" or dtype == "float16":
                 #     dtype = "float32"
-                self.metaData[r, t, c, "dtype"] = array.dtype
+                self.metaData[r, t, c, "dtype"] = logical_dtype
                 self.metaData[r, t, c, "ndim"] = array.ndim
+                if self._structured_fields[r] is not None:
+                    self.metaData[r, t, c, "source_dtype"] = array.dtype
+                    self.metaData[r, t, c, "source_field"] = self._structured_fields[r]
 
                 try:
                     self.metaData[r, t, c, "max"] = self.omero["channels"][c]["window"][
@@ -446,11 +476,7 @@ class nifti_zarr_loader:
         """
         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
         logger.info(key)
-        if (
-            isinstance(key, slice) == False
-            and isinstance(key, int) == False
-            and len(key) == 6
-        ):
+        if isinstance(key, tuple) and len(key) == 6:
             res = key[0]
             if res >= self.ResolutionLevels:
                 raise ValueError("Layer is larger than the number of ResolutionLevels")
@@ -458,27 +484,7 @@ class nifti_zarr_loader:
         logger.info(res)
         logger.info(key)
 
-        if isinstance(key, int):
-            key = [slice(key, key + 1)]
-            for _ in range(self.ndim - 1):
-                key.append(slice(None))
-            key = tuple(key)
-
-        if isinstance(key, tuple):
-            key = [slice(x, x + 1) if isinstance(x, int) else x for x in key]
-            while len(key) < self.ndim:
-                key.append(slice(None))
-            key = tuple(key)
-
-        logger.info(key)
-        newKey = []
-        for ss in key:
-            if ss.start is None and isinstance(ss.stop, int):
-                newKey.append(slice(ss.stop, ss.stop + 1, ss.step))
-            else:
-                newKey.append(ss)
-
-        key = tuple(newKey)
+        key = normalize_data_key(key, self.ndim)
         logger.info(key)
 
         array = self.getSlice(r=res, t=key[0], c=key[1], z=key[2], y=key[3], x=key[4])
@@ -526,7 +532,7 @@ class nifti_zarr_loader:
         if self.cache is not None:
             # key = f"{self.datapath}_getSlice_{str(incomingSlices)}"
             # key = self.datapath + '_getSlice_' + str(incomingSlices)
-            key = f'{self.file_ino + self.modification_time + str(incomingSlices)}'
+            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
                 logger.info(f"loader cache found")
@@ -545,6 +551,9 @@ class nifti_zarr_loader:
         tp = tuple(list_tp)
         # logger.success(tp)
         result = self.arrays[r][tp]
+        structured_field = self._structured_fields[r]
+        if structured_field is not None:
+            result = result[structured_field]
         # if len(result.shape) < 4:
         #     result = np.expand_dims(result, axis=0)
         # result = result.astype('uint16')

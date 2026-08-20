@@ -1,3 +1,4 @@
+"""Minimal Google Analytics Measurement Protocol integration."""
 
 
 #https://cloud.google.com/appengine/docs/flexible/integrating-with-analytics?tab=python
@@ -80,4 +81,3 @@ def track_event(category, action, label=None, value=0):
 # &pr1br=Google                         // Product 1 brand.
 # &pr1va=Black                          // Product 1 variant.
 # &pr1ps=1                              // Product 1 position.
-

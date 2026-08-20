@@ -1,3 +1,4 @@
+"""Flask endpoints for extracting and downloading bounded image volumes."""
 
 from skimage import io, img_as_float32, img_as_uint, img_as_ubyte
 from skimage.transform import rescale
@@ -269,5 +270,4 @@ def setup_extractor_endpoint(app, config):
         )
 
     return app
-
 

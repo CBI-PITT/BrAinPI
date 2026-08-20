@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Jul 19 10:29:42 2022
-
-@author: awatson
-"""
+"""Diskcache-backed wrapper for Zarr stores and metadata listings."""
 
 from collections.abc import MutableMapping
 from threading import Lock
@@ -94,6 +90,7 @@ class disk_cache_store(Store):
     #     self.invalidate()
 
     def keys(self):
+        """Return an iterator over underlying store keys using cached listings."""
         # print('keys')
         with self._mutex:
             return iter(self._keys())
@@ -116,6 +113,7 @@ class disk_cache_store(Store):
     #             return listing
 
     def cache_key(self,key):
+        """Prefix an underlying store key with this cache namespace."""
         # print('cache_key')
         return self._cache_key_prefix+key
 

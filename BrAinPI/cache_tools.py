@@ -1,3 +1,4 @@
+"""Persistent disk-cache construction and memory-headroom cache support."""
 
 
 from diskcache import FanoutCache
@@ -76,6 +77,7 @@ class cache_head_space:
         kwd_mark = object()
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            """Return a cached call result or compute and retain a new value."""
 
             key = args + (kwd_mark,) + tuple(sorted(kwargs.items()))
             # print(key)
@@ -85,8 +87,8 @@ class cache_head_space:
             else:
                 out = func(*args, **kwargs)
                 self.__setitem__(key, out)
-                print('SETITEM 66')
-                print(out)
+                # print('SETITEM 66')
+                # print(out)
             return out
         return wrapper
 
@@ -121,13 +123,13 @@ class cache_head_space:
         Returns:
             object: The cached item, or None if the key is not found.
         """
-        print('GETITEM 80')
+        # print('GETITEM 80')
         result = self.cache.get(key)
         if result is not None:
             self.cache.move_to_end(key)
-            print('Got from RAM CACHE')
+            # ('Got from RAM CACHE')
         self.trim_cache()
-        print('GETITEM 86')
+        # print('GETITEM 86')
         return result
 
     def __setitem__(self, key, value):
@@ -153,10 +155,10 @@ class cache_head_space:
             space_available = self.trim_cache(extra_space=new_obj_size)
             if space_available:
                 self.cache[key] = value
-                print('SET TO RAM CACHE')
+                # print('SET TO RAM CACHE')
         finally:
             if self.cache.get('lock') == self.uuid:
-                print('IM HERE IN FINALLY NOW')
+                # print('IM HERE IN FINALLY NOW')
                 self.cache.pop('lock')
 
     def trim_cache(self, extra_space=0):

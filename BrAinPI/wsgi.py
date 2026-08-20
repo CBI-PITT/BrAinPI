@@ -1,3 +1,5 @@
+"""WSGI entry point exposing :data:`brain_api_main.app`."""
+
 # from gevent import monkey
 # monkey.patch_all()
 from gevent.pywsgi import WSGIServer

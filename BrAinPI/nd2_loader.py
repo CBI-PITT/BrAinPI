@@ -1,4 +1,11 @@
 
+"""Nikon ND2 loader implementing the common TCZYX dataset contract.
+
+The loader opens the ND2 file during construction, derives time/channel/Z
+indices from sequence metadata, and caches slices using the shared
+inode/mtime/slice identity.
+"""
+
 import logging
 import os
 import time
@@ -8,6 +15,8 @@ import numpy as np
 import limnd2
 
 from logger_tools import logger
+from loader_indexing import normalize_data_key
+from utils import loader_cache_key
 
 ND2_LOADER_LOGGING = True
 
@@ -332,6 +341,7 @@ class nd2_loader:
             }
 
     def close(self) -> None:
+        """Close the underlying ND2 handle and clear the active image object."""
         if self.image is not None:
             self.image.finalize()
             self.image = None
@@ -364,7 +374,7 @@ class nd2_loader:
         Access a slice of the ND2 image.
         """
         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
-        if not isinstance(key, (slice, int)) and len(key) == 6:
+        if isinstance(key, tuple) and len(key) == 6:
             res = key[0]
             if res >= self.ResolutionLevels:
                 raise ValueError(
@@ -372,26 +382,7 @@ class nd2_loader:
                 )
             key = tuple([x for x in key[1::]])
 
-        if isinstance(key, int):
-            key = [slice(key, key + 1)]
-            for _ in range(self.ndim - 1):
-                key.append(slice(None))
-            key = tuple(key)
-
-        if isinstance(key, tuple):
-            key = [slice(x, x + 1) if isinstance(x, int) else x for x in key]
-            while len(key) < self.ndim:
-                key.append(slice(None))
-            key = tuple(key)
-
-        newKey = []
-        for ss in key:
-            if ss.start is None and isinstance(ss.stop, int):
-                newKey.append(slice(ss.stop, ss.stop + 1, ss.step))
-            else:
-                newKey.append(ss)
-
-        key = tuple(newKey)
+        key = normalize_data_key(key, self.ndim)
         array = self.getSlice(
             r=res,
             t=key[0],
@@ -416,7 +407,9 @@ class nd2_loader:
         image_call_count = 0
         cache_hit = False
         if self.cache is not None:
-            cache_key = f"{self.file_ino + self.modification_time + str(incomingSlices)}"
+            cache_key = loader_cache_key(
+                self.file_ino, self.modification_time, incomingSlices
+            )
             result = self.cache.get(cache_key, default=None, retry=True)
             if result is not None:
                 cache_hit = True

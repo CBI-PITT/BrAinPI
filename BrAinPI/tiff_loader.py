@@ -1,3 +1,10 @@
+"""TIFF/OME-TIFF loader with pyramid generation and TCZYX axis mapping.
+
+Source sample axes are folded into logical channels. Packed RGB is identified
+from samples-per-pixel and photometric metadata, while ordinary channel data is
+read directly from its source ``C`` axis.
+"""
+
 import tifffile
 import math
 import zarr
@@ -7,8 +14,9 @@ from filelock import FileLock
 from logger_tools import logger
 import itertools
 import numpy as np
-from utils import calculate_hash, get_directory_size, delete_oldest_files
-
+from utils import calculate_hash, get_directory_size, delete_oldest_files, loader_cache_key
+from loader_indexing import normalize_data_key
+from loader_axes import plan_tczyx_source_read, samples_as_channels
 
 class tiff_loader:
     """
@@ -97,15 +105,24 @@ class tiff_loader:
         self.arrays = {}
 
         self.type = self.image.series[0].axes
-        if self.type.endswith("S"):
-            self._standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4, "S":5}
-        else:
-            self._standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4}
+        if "C" in self.type and "S" in self.type:
+            raise TypeError(
+                f"TIFF axes {self.type!r} contain both C and S; this layout is unsupported"
+            )
+        self._standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4}
         self.axes_pos_dic = self.axes_pos_extract(self.type)
         self.axes_value_dic = self.axes_value_extract(
             self.type, self.image.series[0].shape
         )
-        self.Channels = self.axes_value_dic.get("C")
+        self.source_channels = self.axes_value_dic.get("C", 1)
+        self.samples_per_pixel = self.axes_value_dic.get("S", 1)
+        self.Channels = self.source_channels * self.samples_per_pixel
+        photometric_name = str(getattr(self.photometric, "name", self.photometric)).upper()
+        self.packed_rgb = (
+            self.source_channels == 1
+            and self.samples_per_pixel == 3
+            and (photometric_name == "RGB" or str(self.photometric) == "2")
+        )
         self.z = self.axes_value_dic.get("Z")
         # if nonstandard_axes_wrap:
         #     self.TimePoints = (
@@ -141,6 +158,11 @@ class tiff_loader:
         if self.pyramid_generation_allowed:
             self.pyramid_validators(self.image)
         self.metaData['datapath'] = self.datapath
+        self.metaData['source_axes'] = self.type
+        self.metaData['source_channels'] = self.source_channels
+        self.metaData['samples_per_pixel'] = self.samples_per_pixel
+        self.metaData['samples_folded_into_channels'] = self.samples_per_pixel > 1
+        self.metaData['packed_rgb'] = self.packed_rgb
         self.ResolutionLevels = len(self.image.series[0].levels) if self.is_pyramidal else len(self.image.series)
         layers = self.image.series[0].levels if self.is_pyramidal else self.image.series
 
@@ -174,7 +196,7 @@ class tiff_loader:
                                                     self.tile_size[0] if self.tile_size[0] is not None else 1, 
                                                     self.tile_size[1] if self.tile_size[1] is not None else 1)
                 self.metaData[r, t, c, 'dtype'] = array.dtype
-                self.metaData[r, t, c, 'ndim'] = array.ndim
+                self.metaData[r, t, c, 'ndim'] = 5
 
                 
                 self.change_resolution_lock(self.ResolutionLevelLock)
@@ -198,7 +220,7 @@ class tiff_loader:
             self.metaData[self.ResolutionLevelLock, 0, 0, 'shape'][-2],
             self.metaData[self.ResolutionLevelLock, 0, 0, 'shape'][-1]
         )
-        self.ndim = len(self.shape) + 1 if self.type.endswith("S") else len(self.shape)
+        self.ndim = 5
         self.chunks = self.metaData[self.ResolutionLevelLock,0,0,'chunks']
         self.resolution = self.metaData[self.ResolutionLevelLock,0,0,'resolution']
         self.dtype = self.metaData[self.ResolutionLevelLock,0,0,'dtype']
@@ -206,8 +228,7 @@ class tiff_loader:
     def _sort_axes(self, arr: np.ndarray, current_order: str,
               standard_axes: dict[str, int]) -> np.ndarray:
         """
-        Re-permute `arr` so the axes listed in `current_order`
-        appear in the order dictated by `standard_axes`.
+        Normalize source axes to TCZYX and fold samples into channels.
 
         Parameters
         ----------
@@ -222,16 +243,9 @@ class tiff_loader:
         Returns
         -------
         np.ndarray
-            View of `arr` with axes sorted; no singleton
-            dimensions are added/removed.
+            Five-dimensional TCZYX view/copy of `arr`.
         """
-        # Translate the current labels into their canonical positions
-        canonical_pos = [standard_axes[a] for a in current_order]
-
-        # Argsort gives the indices that would sort those positions
-        perm = np.argsort(canonical_pos)
-
-        return arr.transpose(perm)
+        return samples_as_channels(arr, current_order)
 
 
     def __getitem__(self,key):
@@ -246,7 +260,7 @@ class tiff_loader:
         """
         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
         logger.info(key)
-        if isinstance(key,slice) == False and isinstance(key,int) == False and len(key) == 6:
+        if isinstance(key, tuple) and len(key) == 6:
         # if isinstance(key,slice) == False and isinstance(key,int) == False:
             res = key[0]
             if res >= self.ResolutionLevels:
@@ -255,27 +269,7 @@ class tiff_loader:
         logger.info(res)
         logger.info(key)
         
-        if isinstance(key, int):
-            key = [slice(key,key+1)]
-            for _ in range(self.ndim-1):
-                key.append(slice(None))
-            key = tuple(key)
-            
-        if isinstance(key,tuple):
-            key = [slice(x,x+1) if isinstance(x,int) else x for x in key]
-            while len(key) < self.ndim:
-                key.append(slice(None))
-            key = tuple(key)
-        
-        logger.info(key)
-        newKey = []
-        for ss in key:
-            if ss.start is None and isinstance(ss.stop,int):
-                newKey.append(slice(ss.stop,ss.stop+1,ss.step))
-            else:
-                newKey.append(ss)
-                
-        key = tuple(newKey)
+        key = normalize_data_key(key, self.ndim)
         logger.info(key)
         
         
@@ -290,11 +284,7 @@ class tiff_loader:
                         )
         if self.squeeze:
             return np.squeeze(array)
-        else:
-            for key in self._standard_axes:
-                if self.axes_pos_dic.get(key) is None:
-                    array = np.expand_dims(array, axis=self._standard_axes[key])
-            return array
+        return array
     def getSlice(self,r,t,c,z,y,x):
         """
         Retrieve a slice of the image at a specific resolution and dimensions.
@@ -313,49 +303,27 @@ class tiff_loader:
         incomingSlices = (r, t, c, z, y, x)
         logger.info(incomingSlices)
         if self.cache is not None:
-            key = f"{self.file_ino + self.modification_time + str(incomingSlices)}"
+            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
                 logger.info(f"loader cache found: {incomingSlices}")
                 return result
-        list_tp = None
-        if self.type.endswith("S"):
-            list_tp = [0] * (len(self.type) - 1)
-        else:
-            list_tp = [0] * len(self.type)
-        r = r
-
-        if (
-            self.axes_pos_dic.get("T") != None
-            # or self.axes_pos_dic.get("Q") != None
-            # or self.axes_pos_dic.get("I") != None
-        ):
-            # if self.axes_pos_dic.get("T") != None:
-            list_tp[self.axes_pos_dic.get("T")] = t
-            # elif self.axes_pos_dic.get("Q") != None:
-            #     list_tp[self.axes_pos_dic.get("Q")] = t
-            # elif self.axes_pos_dic.get("I") != None:
-            #     list_tp[self.axes_pos_dic.get("I")] = t
-        if self.axes_pos_dic.get("C") != None:
-            list_tp[self.axes_pos_dic.get("C")] = c
-        if self.axes_pos_dic.get("Z") != None:
-            list_tp[self.axes_pos_dic.get("Z")] = z
-        if self.axes_pos_dic.get("Y") != None:
-            list_tp[self.axes_pos_dic.get("Y")] = y
-        if self.axes_pos_dic.get("X") != None:
-            list_tp[self.axes_pos_dic.get("X")] = x
-        # if self.axes_pos_dic.get("S") != None:
-        #     list_tp[self.axes_pos_dic.get("S")] = s
-        logger.info(f'{list_tp},{self.type}')
+        # Plan the complete TCZYX -> source-axis mapping before the only data
+        # read. Ordinary C and packed S selections are pushed down directly.
         zarr_array = None
         if self.is_pyramidal:
             zarr_array = self.image.aszarr(series=0, level=r)
         else:
             zarr_array = self.image.aszarr(series=r, level=0)
         zarr_store = zarr.open(zarr_array)
-        tp = tuple(list_tp)
-        zarr_result = zarr_store[tp]
+        source_key, post_channel_key = plan_tczyx_source_read(
+            (t, c, z, y, x), self.type, zarr_store.shape
+        )
+        logger.info(f"source key {source_key}, source axes {self.type}")
+        zarr_result = zarr_store[source_key]
         result = self._sort_axes(zarr_result,self.type,self._standard_axes)
+        if post_channel_key is not None:
+            result = result[:, post_channel_key, :, :, :]
         # Here for python > 3.11, to use the unpack operator *
         # result = zarr_store[
         #     *(tp),
@@ -783,9 +751,7 @@ class tiff_loader:
         Returns:
             dict: Mapping of axis labels to their sizes.
         """
-        dic = {"T": 1, "C": 1, "Z": 1, "Y": 1, "X": 1}
-        if axes.endswith("S"):
-            dic["S"] = 1
+        dic = {"T": 1, "C": 1, "Z": 1, "Y": 1, "X": 1, "S": 1}
         characters = list(axes)
         # logger.info("Axis characters:", characters)
         for index, char in enumerate(characters):
@@ -793,6 +759,18 @@ class tiff_loader:
                 dic[char] = shape[index]
         return dic
     def res_to_um(self, res_tag, unit):
+        """Convert a TIFF pixels-per-unit resolution value to micrometers.
+
+        Args:
+            res_tag: TIFF resolution value expressed as pixels per unit.
+            unit: TIFF resolution-unit enum or compatible value.
+
+        Returns:
+            float: Physical size of one pixel in micrometers.
+
+        Raises:
+            ValueError: If the TIFF resolution unit is unknown.
+        """
         
         dots_per_unit = res_tag
         if unit == 1:                            # meter

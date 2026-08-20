@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Mar 23 20:44:29 2022
-
-@author: alpha
-"""
+"""Flask-Login setup with optional Windows-domain LDAP authentication."""
 
 '''
 Windows domain auth:
@@ -44,6 +40,8 @@ def user_info():
     return {'is_authenticated':current_user.is_authenticated, 'id':current_user.id if current_user.is_authenticated else None}
 
 class User(UserMixin):
+    """Minimal Flask-Login user identified by a username."""
+
     def __init__(self,username):
         self.id = username
 
@@ -82,6 +80,7 @@ def setup_auth(app):
     
     @login_manager.user_loader
     def load_user(user_id):
+        """Reconstruct a session user from its serialized identifier."""
         return User(user_id)
     
     
@@ -96,6 +95,7 @@ def setup_auth(app):
     
     @app.errorhandler(429)
     def ratelimit_handler(e):
+        """Redirect rate-limited login attempts back to the login page."""
         flash("Login ratelimit exceeded %s" % e.description)
         return redirect(url_for('login'))
     
@@ -107,6 +107,7 @@ def setup_auth(app):
 
     @app.route('/login')
     def login():
+        """Render the login form or redirect an authenticated user."""
         if current_user.is_authenticated:
             flash('''
                   You are already signed in as user {}.
@@ -124,6 +125,7 @@ def setup_auth(app):
     @app.route('/login', methods=['POST'])
     @limiter.limit(settings.get('auth','login_limit'))
     def login_post():
+        """Authenticate submitted credentials and create a login session."""
         
         remote_ip = request.remote_addr #<--Potential to log attempts and restrict number of tries
         username = request.form.get('username')
@@ -173,6 +175,7 @@ def setup_auth(app):
     @app.route('/profile')
     @login_required
     def profile():
+        """Render the profile page for the authenticated user."""
         return render_template('profile.html',
                                user=user_info(),
                                app_name=settings.get('app','name'),
@@ -183,6 +186,7 @@ def setup_auth(app):
     
     @app.route('/logout')
     def logout():
+        """Clear the current login session and return to the home page."""
         logout_user()
         return redirect(url_for('home'))
     
@@ -218,6 +222,7 @@ def setup_NO_auth(app):
 
     @login_manager.user_loader
     def load_user(user_id):
+        """Reject session restoration when authentication is disabled."""
         abort(404)
 
     ##########################################################
@@ -231,6 +236,7 @@ def setup_NO_auth(app):
 
     @app.errorhandler(429)
     def ratelimit_handler(e):
+        """Hide the login rate-limit route when authentication is disabled."""
         flash("Login ratelimit exceeded %s" % e.description)
         return abort(404)
 
@@ -241,20 +247,24 @@ def setup_NO_auth(app):
 
     @app.route('/login')
     def login():
+        """Return 404 because authentication routes are disabled."""
         abort(404)
 
     @app.route('/login', methods=['POST'])
     # @limiter.limit(settings.get('auth', 'login_limit'))
     def login_post():
+        """Return 404 because credential submission is disabled."""
         abort(404)
 
     @app.route('/profile')
     # @login_required
     def profile():
+        """Return 404 because profiles are disabled."""
         abort(404)
 
     @app.route('/logout')
     def logout():
+        """Return 404 because logout is disabled."""
         return abort(404)
 
     return app, login_manager

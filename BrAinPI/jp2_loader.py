@@ -1,157 +1,254 @@
-import multiprocessing.process
-from logger_tools import logger
-import numpy as np
+"""JPEG 2000 loader with explicit image semantics and TIFF pyramid backing.
+
+JP2 codestreams are inherently two-dimensional.  Their optional third decoded
+axis is a component/sample axis, not automatically an RGB declaration.  This
+loader maps a JP2 into one of three BrAinPI layouts:
+
+* packed RGB: ``YXS`` -> ``TCZYX`` with RGB samples folded into ``C``; or
+* component channels: ``CYX`` -> ``TCZYX`` with one logical channel per JP2
+  component, including a one-component grayscale image as ``C=1``.
+
+For normal operation, it builds one in-memory image in the source dtype by
+decoding bounded JP2 windows, then creates a tiled pyramidal TIFF from that
+array.  This avoids Glymur's full-image float32 working allocation while also
+avoiding repeated JP2 decoding for every pyramid level.
+"""
+
 import itertools
-import os
-import glymur
-import tifffile
-import hashlib
-from pathlib import Path
 import math
-import time
+import os
+import shutil
+import tempfile
+
+import glymur
+import numpy as np
+import tifffile
 from filelock import FileLock
+
 import tiff_loader
-import multiprocessing
-from utils import calculate_hash, get_directory_size, delete_oldest_files
-
-# def calculate_hash(input_string):
-#     # Calculate the SHA-256 hash of the input string
-#     hash_result = hashlib.sha256(input_string.encode()).hexdigest()
-#     return hash_result
+from logger_tools import logger
+from loader_axes import samples_as_channels
+from loader_indexing import normalize_data_key
+from utils import calculate_hash, delete_oldest_files, get_directory_size, loader_cache_key
 
 
-# def get_directory_size(directory):
-#     total_size = 0
-#     for dirpath, dirnames, filenames in os.walk(directory):
-#         for f in filenames:
-#             fp = os.path.join(dirpath, f)
-#             total_size += os.path.getsize(fp)
-#     return total_size
+# Match the established JP2 loader: fewer, larger Glymur reads are much faster
+# than many small windows.  The final array remains native dtype in RAM.
+JP2_LOAD_CHUNK_EDGE = 10000
+COLOURSPACE_SRGB = 16
+COLOURSPACE_YCC = 18
 
 
-# def delete_oldest_files(directory, size_limit):
-#     items = sorted(Path(directory).glob("*"), key=os.path.getctime)
-#     total_size = get_directory_size(directory)
-
-#     # Delete oldest items until the total size is within the size limit
-#     for item in items:
-#         if total_size <= size_limit:
-#             break
-#         if item.is_file():
-#             item_size = os.path.getsize(item)
-#             os.remove(item)
-#             total_size -= item_size
-#             logger.success(f"Deleted file {item} of size {item_size} bytes")
-#         elif item.is_dir():
-#             dir_size = get_directory_size(item)
-#             shutil.rmtree(item)
-#             total_size -= dir_size
-#             logger.success(f"Deleted directory {item} of size {dir_size} bytes")
+def _find_colour_specification(boxes):
+    """Return the first nested JP2 ``colr`` box, if a file has one."""
+    for box in boxes:
+        if getattr(box, "box_id", None) == "colr":
+            return box
+        nested = getattr(box, "box", None)
+        if nested:
+            found = _find_colour_specification(nested)
+            if found is not None:
+                return found
+    return None
 
 
-def separate_process_generation(
-    jp2_img, factor, file_temp, subresolutions, datapath, tile_size
-):
-    """
-    Generate a pyramid image structure in a separate process.
+def _colourspace_value(colour_box):
+    """Read Glymur's colour-space field across supported Glymur versions."""
+    if colour_box is None:
+        return None
+    return getattr(colour_box, "colorspace", getattr(colour_box, "enumcs", None))
 
-    Args:
-        jp2_img (numpy.ndarray): The input JP2 image.
-        factor (int): The downsampling factor for sub-resolutions.
-        file_temp (str): Temporary file path for the output.
-        subresolutions (int): Number of sub-resolutions to generate.
-        datapath (str): The original data path.
-        tile_size (tuple): The size of the tiles.
 
-    Returns:
-        None
-    """
-    start_load = time.time()
-    # data = jp2_img[:]
-    height, width = jp2_img.shape[:2]
+def _component_count(jp2_img):
+    """Return decoded component count while rejecting non-2-D JP2 layouts."""
+    shape = tuple(jp2_img.shape)
+    if len(shape) == 2:
+        return 1
+    if len(shape) == 3 and shape[-1] >= 1:
+        return int(shape[-1])
+    raise TypeError(
+        f"JP2 shape {shape!r} is unsupported; only 2-D YX or YXS data is supported."
+    )
 
-    # Initialize an empty array to store the final result
-    data = np.zeros(jp2_img.shape, dtype=jp2_img.dtype)
-    chunk_size = 10000
-    # Process the image in chunks
-    logger.success("Chunks loading start...")
-    for row_start in range(0, height, chunk_size):
-        for col_start in range(0, width, chunk_size):
-            logger.success(f"loading chunk {row_start}, {col_start}")
-            # Calculate chunk boundaries
-            row_end = min(row_start + chunk_size, height)
-            col_end = min(col_start + chunk_size, width)
-            
-            # Load the chunk
-            chunk = jp2_img[row_start:row_end, col_start:col_end]
-            
-            # Insert the chunk into the final array
-            data[row_start:row_end, col_start:col_end] = chunk
-    logger.success(f"Entire data loading completed, shape {data.shape}")
-    end_load = time.time()
-    load_time = end_load - start_load
-    logger.success(f"loading first series or level {datapath} time: {load_time}")
-    # hard coded
-    xy_resolution = (1,1)
-    resolutionunit = 2
-    start_generation = time.time()
-    with tifffile.TiffWriter(file_temp, bigtiff=True) as tif:
 
-        metadata = {
-            "axes": "YXS",
-            # "SignificantBits": 10,
-            # "TimeIncrement": 0.1,
-            # "TimeIncrementUnit": "s",
-            # "PhysicalSizeX": xy_resolution,
-            # "PhysicalSizeXUnit": "Âµm",
-            # "PhysicalSizeY": xy_resolution,
-            # "PhysicalSizeYUnit": "Âµm",
-            # 'Channel': {'Name': ['Channel 1', 'Channel 2']},
-            # 'Plane': {'PositionX': [0.0] * 16, 'PositionXUnit': ['Âµm'] * 16}
-        }
-        options = dict(
-            # photometric=self.photometric,
-            tile=tile_size,
-            # compression=self.compression,
-            # resolutionunit="CENTIMETER",
-            resolutionunit=resolutionunit
-        )
-
-        tif.write(
-            data,
-            subifds=subresolutions,
-            resolution=xy_resolution,
-            metadata=metadata,
-            **options,
-        )
-        # in production use resampling to generate sub-resolution images
-        for level in range(subresolutions):
-            mag = factor ** (level + 1)
-            tif.write(
-                data[..., ::mag, ::mag, :],
-                subfiletype=1,
-                resolution=(
-                    xy_resolution[0] * mag,
-                    xy_resolution[1] * mag,
-                ),
-                **options,
+def detect_jp2_image_type(jp2_img):
+    """Classify a JP2 as packed RGB or independent component channels."""
+    components = _component_count(jp2_img)
+    colour_box = _find_colour_specification(getattr(jp2_img, "box", ()))
+    colours = _colourspace_value(colour_box)
+    if colours in (COLOURSPACE_SRGB, COLOURSPACE_YCC):
+        if components != 3:
+            raise TypeError(
+                f"JP2 declares RGB/YCC but decodes to {components} components."
             )
-    end_generation = time.time()
-    generation_time = end_generation - start_generation
-    logger.success(f"actual pyramid generation {datapath} time:{generation_time}")
+        return "rgb"
+
+    logger.info(
+        f"JP2 has {components} components without an RGB/YCC declaration; "
+        "preserving them as independent channels."
+    )
+    return "channels"
+
+
+def _jp2_axes(image_type):
+    return {"rgb": "YXS", "channels": "CYX"}[image_type]
+
+
+def _prepare_pixels(pixels, image_type, component_count):
+    """Convert a decoded JP2 window into its TIFF storage layout."""
+    pixels = np.asarray(pixels)
+    if image_type == "rgb":
+        if pixels.ndim == 3 and pixels.shape[-1] == 3:
+            return pixels
+    elif image_type == "channels":
+        if component_count == 1 and pixels.ndim == 2:
+            return pixels[np.newaxis, :, :]
+        if pixels.ndim == 3 and pixels.shape[-1] == component_count:
+            return np.moveaxis(pixels, -1, 0)
+    raise ValueError(
+        f"Decoded JP2 window shape {pixels.shape!r} is incompatible with "
+        f"{image_type!r} interpretation."
+    )
+
+
+def _tile_shape(jp2_img):
+    """Return a TIFF-compatible tile size based on JP2 tiling when available."""
+    tile = getattr(jp2_img, "tilesize", None) or (256, 256)
+    height, width = (int(tile[0]), int(tile[1]))
+    # TIFF tiles must be multiples of 16.  A larger tile remains valid at image edges.
+    height = max(16, int(math.ceil(height / 16.0) * 16))
+    width = max(16, int(math.ceil(width / 16.0) * 16))
+    return height, width
+
+
+def _level_count(height, width, tile_shape):
+    levels = 1
+    tile_height, tile_width = tile_shape
+    while height > tile_height or width > tile_width:
+        height = math.ceil(height / 2)
+        width = math.ceil(width / 2)
+        levels += 1
+    return levels
+
+
+def _pyramid_level_pixels(pixels, image_type, scale):
+    """Return an in-memory view of one dyadic pyramid level."""
+    if image_type == "channels":
+        return pixels[:, ::scale, ::scale]
+    if image_type == "rgb":
+        return pixels[::scale, ::scale, :]
+    return pixels[::scale, ::scale]
+
+
+def _full_image_shape(jp2_img, image_type, component_count):
+    """Return the native-dtype buffer shape for the selected JP2 interpretation."""
+    height, width = jp2_img.shape[:2]
+    if image_type == "channels":
+        return component_count, height, width
+    if image_type == "rgb":
+        return height, width, 3
+    return height, width
+
+
+def load_full_image_by_chunks(jp2_img, image_type, component_count):
+    """Fill one native-dtype image using bounded JP2 decode windows.
+
+    Glymur/OpenJPEG may create a float32 working buffer while decoding.  Reading
+    the complete JP2 in one operation therefore has a much higher peak-memory
+    cost than the final image.  Here that temporary buffer is limited to one
+    window, while the retained full image remains in the source dtype.
+    """
+    height, width = jp2_img.shape[:2]
+    pixels = np.empty(
+        _full_image_shape(jp2_img, image_type, component_count), dtype=jp2_img.dtype
+    )
+    total_windows = math.ceil(height / JP2_LOAD_CHUNK_EDGE) * math.ceil(
+        width / JP2_LOAD_CHUNK_EDGE
+    )
+    report_every = max(1, math.ceil(total_windows / 10))
+    completed_windows = 0
+    logger.info(
+        f"JP2 pyramid: loading {height}x{width} into a {pixels.dtype} array "
+        f"using {total_windows} decode window(s)."
+    )
+    for y0 in range(0, height, JP2_LOAD_CHUNK_EDGE):
+        for x0 in range(0, width, JP2_LOAD_CHUNK_EDGE):
+            y1 = min(y0 + JP2_LOAD_CHUNK_EDGE, height)
+            x1 = min(x0 + JP2_LOAD_CHUNK_EDGE, width)
+            decoded = _prepare_pixels(
+                jp2_img[y0:y1, x0:x1], image_type, component_count
+            )
+            if image_type == "channels":
+                pixels[:, y0:y1, x0:x1] = decoded
+            elif image_type == "rgb":
+                pixels[y0:y1, x0:x1, :] = decoded
+            else:
+                pixels[y0:y1, x0:x1] = decoded
+            completed_windows += 1
+            if completed_windows % report_every == 0 or completed_windows == total_windows:
+                logger.info(
+                    f"JP2 pyramid: loaded {completed_windows}/{total_windows} windows "
+                    f"({completed_windows * 100 // total_windows}%)."
+                )
+    return pixels
+
+
+def generate_tiff_pyramid(source_path, destination_path, image_type):
+    """Create an atomic TIFF pyramid from one staged in-memory JP2 image."""
+    jp2_img = glymur.Jp2k(source_path)
+    component_count = _component_count(jp2_img)
+    height, width = jp2_img.shape[:2]
+    tile_shape = _tile_shape(jp2_img)
+    levels = _level_count(height, width, tile_shape)
+    destination_dir = os.path.dirname(destination_path)
+    os.makedirs(destination_dir, exist_ok=True)
+    work_dir = tempfile.mkdtemp(prefix="jp2-pyramid-", dir=destination_dir)
+    temporary_tiff = os.path.join(work_dir, "pyramid.ome.tif")
+
+    try:
+        logger.success(
+            f"JP2 pyramid: generating {levels} TIFF level(s) for "
+            f"{os.path.basename(source_path)} as {_jp2_axes(image_type)}."
+        )
+        pixels = load_full_image_by_chunks(jp2_img, image_type, component_count)
+        logger.success(
+            f"JP2 pyramid: staged {pixels.nbytes / 1024**2:.1f} MiB in memory."
+        )
+        photometric = "rgb" if image_type == "rgb" else "minisblack"
+        metadata = {"axes": _jp2_axes(image_type)}
+        with tifffile.TiffWriter(temporary_tiff, bigtiff=True) as tif:
+            for level in range(levels):
+                scale = 2**level
+                level_data = _pyramid_level_pixels(pixels, image_type, scale)
+                logger.info(
+                    f"JP2 pyramid level {level}: writing TIFF data "
+                    f"with shape {level_data.shape}."
+                )
+                tif.write(
+                    level_data,
+                    subifds=levels - 1 if level == 0 else None,
+                    subfiletype=1 if level else 0,
+                    tile=tile_shape,
+                    photometric=photometric,
+                    metadata=metadata if level == 0 else None,
+                )
+                logger.success(f"JP2 pyramid level {level}: TIFF write complete.")
+        os.replace(temporary_tiff, destination_path)
+        logger.success(f"JP2 pyramid: saved {destination_path}.")
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 class jp2_loader:
-    """
-    A loader class for handling JP2 images and generating pyramid structures.
-    """
+    """BrAinPI loader for JP2 images, backed by a generated TIFF pyramid."""
+
     def __init__(
         self,
         location,
         pyramid_generation_allowed=False,
-        pyramid_images_connection = {},
-        pyramids_images_allowed_store_size_gb = 100,
-        pyramids_images_allowed_generation_size_gb = 2,
+        pyramid_images_connection=None,
+        pyramids_images_allowed_store_size_gb=100,
+        pyramids_images_allowed_generation_size_gb=2,
         pyramids_images_store=None,
         extension_type=".ome.tif",
         ResolutionLevelLock=None,
@@ -159,430 +256,221 @@ class jp2_loader:
         squeeze=True,
         cache=None,
     ):
-        """
-        Args:
-            location (str): Path to the JP2 file.
-            pyramid_generation_allowed (bool): Flag to allow pyramid image generation. Defaults to False.
-            pyramid_images_connection (dict): A dictionary for mapping hash values to pyramid images.
-            pyramids_images_allowed_store_size_gb (float): Maximum allowed size for the pyramid images store in GB. Defaults to 100.
-            pyramids_images_allowed_generation_size_gb (float): Maximum allowed size for the pyramid image generation in GB. Defaults to 10.
-            pyramids_images_store (str, optional): Directory for storing pyramid images. Defaults to None.
-            extension_type (str, optional): File extension for the generated pyramid images. Defaults to ".ome.tif".
-            ResolutionLevelLock (int, optional): Initial resolution lock level. Defaults to 0.
-            verbose (bool, optional): Verbose output flag. Defaults to None.
-            squeeze (bool, optional): If True, squeeze output arrays. Defaults to True.
-            cache (object, optional): Cache object for storing slices. Defaults to None.
-
-        Raises:
-            Exception: If the JP2 file exceeds the allowed file size.
-        """
-        # assert StoreLike is s3fs.S3Map or any([issubclass(zarr_store_type,x) for x in StoreLike.__args__]), 'zarr_store_type is not a zarr storage class'
-
         self.location = location
         self.datapath = location
-        self.ResolutionLevelLock = (
-            0 if ResolutionLevelLock is None else ResolutionLevelLock
+        self.squeeze = squeeze
+        self.cache = cache
+        self.verbose = verbose
+        self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
+        self.pyramid_generation_allowed = pyramid_generation_allowed
+        self.pyramid_dic = pyramid_images_connection if pyramid_images_connection is not None else {}
+        self.pyramids_images_store = (
+            os.path.expanduser(pyramids_images_store) if pyramids_images_store else None
         )
+        self.extension_type = extension_type
+        self.allowed_store_size_byte = float(pyramids_images_allowed_store_size_gb) * 1024**3
+        self.allowed_file_size_byte = float(pyramids_images_allowed_generation_size_gb) * 1024**3
+
         self.file_stat = os.stat(location)
-        self.filename = os.path.split(self.datapath)[1]
         self.file_ino = str(self.file_stat.st_ino)
         self.modification_time = str(self.file_stat.st_mtime)
         self.file_size = self.file_stat.st_size
-        # self.allowed_store_size_gb = float(
-        #     self.settings.get("jp2_loader", "pyramids_images_allowed_store_size_gb")
-        # )
-        self.allowed_store_size_gb = float(pyramids_images_allowed_store_size_gb)
-        self.allowed_store_size_byte = self.allowed_store_size_gb * 1024 * 1024 * 1024
-        # self.allowed_file_size_gb = float(
-        #     self.settings.get(
-        #         "jp2_loader", "pyramids_images_allowed_generation_size_gb"
-        #     )
-        # )
-        self.allowed_file_size_gb = float(pyramids_images_allowed_generation_size_gb)
-        self.allowed_file_size_byte = self.allowed_file_size_gb * 1024 * 1024 * 1024
-        self.pyramids_images_store = pyramids_images_store
-        self.extension_type = extension_type
-        self.pyramid_dic = pyramid_images_connection
-        self.verbose = verbose
-        self.squeeze = squeeze
-        self.cache = cache
-        self.pyramid_generation_allowed = pyramid_generation_allowed
-        
-        if self.datapath.endswith(".jp2"):
-            jp2_img = self.validate_jp2_file(self.datapath)
-            # if self.pyramid_generation_allowed:
-            self.tile_size = jp2_img.tilesize if jp2_img.tilesize else (128, 128)
-            if self.pyramid_generation_allowed:
-                self.pyramid_builders(jp2_img)
-                self.tif_obj = tiff_loader.tiff_loader(
-                    self.datapath,
-                    True,
-                    pyramid_images_connection,
-                    self.allowed_store_size_gb,
-                    self.allowed_file_size_gb,
-                    self.pyramids_images_store,
-                    self.extension_type,
-                    ResolutionLevelLock = self.ResolutionLevelLock,
-                    squeeze=self.squeeze,
-                    cache=self.cache,
+        self.jp2_img = glymur.Jp2k(location)
+        glymur.set_option("lib.num_threads", 4)
+        self.component_count = _component_count(self.jp2_img)
+        self.image_type = detect_jp2_image_type(self.jp2_img)
+        self.tile_size = _tile_shape(self.jp2_img)
+
+        logger.info(
+            f"JP2 {location} detected as {self.image_type}: "
+            f"source shape={self.jp2_img.shape}, components={self.component_count}, "
+            f"axes={_jp2_axes(self.image_type)}"
+        )
+
+        if pyramid_generation_allowed:
+            self._open_tiff_backing()
+        else:
+            self._set_direct_metadata()
+        self.change_resolution_lock(self.ResolutionLevelLock)
+
+    def _pyramid_path(self):
+        if not self.pyramids_images_store:
+            raise ValueError("JP2 pyramid storage is not configured.")
+        hash_value = calculate_hash(self.file_ino + self.modification_time)
+        directory = os.path.join(
+            self.pyramids_images_store, hash_value[:2], hash_value[2:4]
+        )
+        return hash_value, os.path.join(directory, hash_value + self.extension_type)
+
+    def _open_tiff_backing(self):
+        hash_value, pyramid_path = self._pyramid_path()
+        if not os.path.exists(pyramid_path):
+            if self.file_size > self.allowed_file_size_byte:
+                raise ValueError(
+                    f"JP2 file is too large to generate a pyramid: {self.file_size} bytes "
+                    f"exceeds the configured {self.allowed_file_size_byte} byte limit."
                 )
-                self.metaData = self.tif_obj.metaData
-                self.ResolutionLevelLock = self.tif_obj.ResolutionLevelLock
-                self.shape = self.tif_obj.shape
-                self.ndim = self.tif_obj.ndim
-                self.chunks = self.tif_obj.chunks
-                self.resolution = self.tif_obj.resolution
-                self.dtype = self.tif_obj.dtype
-                self.TimePoints = self.tif_obj.TimePoints
-                self.ResolutionLevels = self.tif_obj.ResolutionLevels
-                self.Channels = self.tif_obj.Channels
-            else:
-                self.TimePoints = 1
-                self.Channels = 1
-                cod = next(seg for seg in jp2_img.codestream.segment if seg.marker_id == 'COD')
-                self.ResolutionLevels = cod.num_res
-                self.ndim  = jp2_img.ndim
-                self.dtype = jp2_img.dtype
-                self.metaData = {}
-                def _base_voxel():
-                    for box in jp2_img.box:
-                        if box.box_id == 'res ':
-                            for sub in box.box:
-                                if sub.box_id.strip() in ('resc', 'resd'):
-                                    v = sub.vertical_numerator   / 10**sub.vertical_exponent
-                                    h = sub.horizontal_numerator / 10**sub.horizontal_exponent
-                                    return (v, h)
-                    return (1.0, 1.0)      # fall‑back = unit pixels
-                base_voxel = _base_voxel()     
-                for r in range(self.ResolutionLevels):
-                    for t, c in itertools.product(range(self.TimePoints), range(self.Channels)):
-                        scale   = 2**r                   # 2**r  (dyadic down‑sampling)
-                        voxel   = tuple(v * scale for v in base_voxel)
-                        chunks  = (self.tile_size[0],self.tile_size[1])
-                        shape_r = tuple(math.ceil(s / scale) for s in jp2_img.shape[:2])
+            os.makedirs(os.path.dirname(pyramid_path), exist_ok=True)
+            lock = FileLock(pyramid_path + ".lock")
+            with lock:
+                if not os.path.exists(pyramid_path):
+                    logger.info(f"Generating TIFF pyramid for JP2: {self.location}")
+                    generate_tiff_pyramid(self.location, pyramid_path, self.image_type)
+                    if get_directory_size(self.pyramids_images_store) > self.allowed_store_size_byte:
+                        delete_oldest_files(
+                            self.pyramids_images_store, self.allowed_store_size_byte
+                        )
 
-                        self.metaData[r, t, c, 'shape'] = (1, 1, 1, shape_r[0], shape_r[1])
-                        self.metaData[r, t, c, 'resolution'] = voxel
-                        self.metaData[r, t, c, 'chunks'] = (1, 1, 1, chunks[0], chunks[1])
-                        self.metaData[r, t, c, 'dtype'] = self.dtype
-                        self.metaData[r, t, c, 'ndim'] = self.ndim
-                self.metaData['datapath'] = self.datapath
-                self.change_resolution_lock(self.ResolutionLevelLock)
+        self.pyramid_dic[hash_value] = pyramid_path
+        self.datapath = pyramid_path
+        self.tif_obj = tiff_loader.tiff_loader(
+            pyramid_path,
+            pyramid_generation_allowed=False,
+            pyramid_images_connection=self.pyramid_dic,
+            pyramids_images_allowed_store_size_gb=self.allowed_store_size_byte / 1024**3,
+            pyramids_images_allowed_generation_size_gb=self.allowed_file_size_byte / 1024**3,
+            pyramids_images_store=self.pyramids_images_store,
+            extension_type=self.extension_type,
+            ResolutionLevelLock=self.ResolutionLevelLock,
+            squeeze=self.squeeze,
+            cache=self.cache,
+        )
+        self._copy_tiff_metadata()
 
-    def validate_jp2_file(self, file_path):
-        """
-        Validate the JP2 file for compatibility and size. Only supports 2D RGB images now.
+    def _copy_tiff_metadata(self):
+        for name in (
+            "shape", "ndim", "chunks", "resolution", "dtype", "TimePoints",
+            "ResolutionLevels", "Channels", "ResolutionLevelLock",
+        ):
+            setattr(self, name, getattr(self.tif_obj, name))
+        self.metaData = dict(self.tif_obj.metaData)
+        self.metaData["jp2_image_type"] = self.image_type
+        self.metaData["jp2_component_count"] = self.component_count
+        self.metaData["packed_rgb"] = self.image_type == "rgb"
+        self.metaData["samples_folded_into_channels"] = self.image_type == "rgb"
+
+    def _set_direct_metadata(self):
+        height, width = self.jp2_img.shape[:2]
+        self.TimePoints = 1
+        self.Channels = self.component_count
+        self.ResolutionLevels = _level_count(height, width, self.tile_size)
+        self.metaData = {
+            "datapath": self.datapath,
+            "jp2_image_type": self.image_type,
+            "jp2_component_count": self.component_count,
+            "packed_rgb": self.image_type == "rgb",
+            "samples_folded_into_channels": self.image_type == "rgb",
+        }
+        for resolution in range(self.ResolutionLevels):
+            scale = 2**resolution
+            shape = (1, 1, 1, math.ceil(height / scale), math.ceil(width / scale))
+            chunks = (1, 1, 1, self.tile_size[0], self.tile_size[1])
+            for timepoint, channel in itertools.product(
+                range(self.TimePoints), range(self.Channels)
+            ):
+                self.metaData[resolution, timepoint, channel, "shape"] = shape
+                self.metaData[resolution, timepoint, channel, "resolution"] = (
+                    1.0,
+                    float(scale),
+                    float(scale),
+                )
+                self.metaData[resolution, timepoint, channel, "chunks"] = chunks
+                self.metaData[resolution, timepoint, channel, "dtype"] = self.jp2_img.dtype
+                self.metaData[resolution, timepoint, channel, "ndim"] = 5
+
+    def change_resolution_lock(self, resolution_level_lock):
+        """Select the default resolution and refresh array-like attributes.
 
         Args:
-            file_path (str): Path to the JP2 file.
-
-        Returns:
-            glymur.Jp2k: Validated JP2 object.
+            resolution_level_lock: Zero-based pyramid level.
 
         Raises:
-            Exception: If the file exceeds the allowed size.
-            TypeError: If the JP2 file's shape is not supported.
+            ValueError: If the requested level does not exist.
         """
-        if self.file_size > self.allowed_file_size_byte:
-            logger.info(
-                f"File '{self.filename}' can not generate pyramid structure. Due to resource constrait, {self.allowed_file_size_gb}GB and below are acceptable for generation process."
-            )
-            raise Exception(
-                f"File '{self.filename}' can not generate pyramid structure. Due to resource constrait, {self.allowed_file_size_gb}GB and below are acceptable for generation process."
-            )
-        self.jp2_img = glymur.Jp2k(file_path)
-        glymur.set_option('lib.num_threads', 4)
-        if len(self.jp2_img.shape)!=3 and self.jp2_img.shape[-1]!=3:
-            raise TypeError("Jp2 image shape not supported")
-        return self.jp2_img
-
-    def pyramid_builders(self, jp2_img):
-        """
-        Build or retrieve pyramid images for a JP2 file.
-
-        Args:
-            jp2_img (glymur.Jp2k): JP2 image object.
-
-        Returns:
-            None
-        """
-        hash_value = calculate_hash(self.file_ino + self.modification_time)
-        # pyramids_images_store = self.settings.get("jp2_loader", "pyramids_images_store")
-        pyramids_images_store = self.pyramids_images_store
-        pyramids_images_store_dir = (
-            pyramids_images_store + hash_value[0:2] + "/" + hash_value[2:4] + "/"
-        )
-        suffix = self.extension_type
-        pyramid_image_location = pyramids_images_store_dir + hash_value + suffix
-        if self.pyramid_dic.get(hash_value) and os.path.exists(pyramid_image_location):
-            self.datapath = self.pyramid_dic.get(hash_value)
-            logger.info("Location replaced by generated pyramid image")
-        else:
-            # Avoid other gunicore workers to build pyramids images
-            if os.path.exists(pyramid_image_location):
-                logger.info(
-                    "Pyramid image was already built by first worker and picked up now by others"
-                )
-                self.pyramid_dic[hash_value] = pyramid_image_location
-                self.datapath = pyramid_image_location
-            # 1 hash exists but the pyramid images are deleted during server running
-            # 2 no hash and no pyramid images (first time generation)
-            else:
-                self.pyramid_building_process(
-                    jp2_img,
-                    2,
-                    hash_value,
-                    pyramids_images_store,
-                    pyramids_images_store_dir,
-                    pyramid_image_location,
-                )
-        # self.datapath = pyramid_image_location
-
-    def pyramid_building_process(
-        self,
-        jp2_img,
-        factor,
-        hash_value,
-        pyramids_images_store,
-        pyramids_images_store_dir,
-        pyramid_image_location,
-    ):
-        """
-        Generate a pyramid structure for a JP2 image and store it in a specified location.
-
-        This method creates a multi-resolution pyramid structure for efficient image storage and retrieval. 
-        It handles multiprocessing, file locking, and storage management to ensure the process runs safely 
-        and efficiently.
-
-        Args:
-            jp2_img (np.ndarray): The JP2 image to process.
-            factor (int): The downscaling factor for generating sub-resolutions.
-            hash_value (str): A unique hash value identifying the image.
-            pyramids_images_store (str): The directory where pyramid images are stored.
-            pyramids_images_store_dir (str): The specific directory for storing the pyramid image.
-            pyramid_image_location (str): The final location of the generated pyramid image.
-        """
-        os.makedirs(pyramids_images_store_dir, exist_ok=True)
-        file_temp = pyramid_image_location.replace(hash_value, "temp_" + hash_value)
-        file_temp_lock = file_temp + ".lock"
-        file_lock = FileLock(file_temp_lock)
-        try:
-            with file_lock.acquire():
-                logger.info("File lock acquired.")
-                if not os.path.exists(pyramid_image_location):
-                    logger.success(f"==> pyramid image is building...")
-                    subresolutions = self.divide_time(
-                        jp2_img.shape, factor, self.tile_size
-                    )
-                    start_time = time.time()
-                    process = multiprocessing.Process(
-                        target=separate_process_generation,
-                        args=(
-                            jp2_img,
-                            factor,
-                            file_temp,
-                            subresolutions,
-                            self.datapath,
-                            self.tile_size,
-                        ),
-                    )
-                    process.start()
-                    process.join()
-                    logger.success("Process complete!")
-                    end_time = time.time()
-                    execution_time = end_time - start_time
-                    os.rename(file_temp, pyramid_image_location)
-                    logger.success(
-                        f"{self.datapath} connected to ==> {pyramid_image_location}"
-                    )
-                    logger.success(
-                        f"pyramid image building complete {self.datapath} total execution time: {execution_time}"
-                    )
-                    if (
-                        get_directory_size(pyramids_images_store)
-                        > self.allowed_store_size_byte
-                    ):
-                        delete_oldest_files(
-                            pyramids_images_store, self.allowed_store_size_byte
-                        )
-                else:
-                    logger.info("file detected!")
-                    if os.path.exists(file_temp):
-                        os.remove(file_temp)
-            self.pyramid_dic[hash_value] = pyramid_image_location
-            self.datapath = pyramid_image_location
-        except Exception as e:
-            logger.error(f"An error occurred during generation process: {e}")
-        finally:
-            # self.image = tifffile.TiffFile(pyramid_image_location)
-            # Ensure any allocated memory or resources are released
-            if "data" in locals():
-                del data
-            logger.success("Resources cleaned up.")
-
-    def change_resolution_lock(self, ResolutionLevelLock):
-        """
-        Change the resolution lock level and update metadata.
-
-        Args:
-            ResolutionLevelLock (int): The new resolution lock level.
-
-        Returns:
-            None
-        """
-        self.ResolutionLevelLock = ResolutionLevelLock
-        # self.shape = self.metaData[self.ResolutionLevelLock, 0, 0, "shape"]
-        self.shape = (
-            self.TimePoints,
-            self.Channels,
-            self.metaData[self.ResolutionLevelLock, 0, 0, 'shape'][-3],
-            self.metaData[self.ResolutionLevelLock, 0, 0, 'shape'][-2],
-            self.metaData[self.ResolutionLevelLock, 0, 0, 'shape'][-1]
-        )
-        self.ndim = len(self.shape)
-        self.chunks = self.metaData[self.ResolutionLevelLock, 0, 0, "chunks"]
-        self.resolution = self.metaData[self.ResolutionLevelLock, 0, 0, "resolution"]
-        self.dtype = self.metaData[self.ResolutionLevelLock, 0, 0, "dtype"]
+        if hasattr(self, "tif_obj"):
+            self.tif_obj.change_resolution_lock(resolution_level_lock)
+            self._copy_tiff_metadata()
+            return
+        if not 0 <= resolution_level_lock < self.ResolutionLevels:
+            raise ValueError("Resolution level is outside the JP2 pyramid.")
+        self.ResolutionLevelLock = resolution_level_lock
+        metadata = self.metaData[resolution_level_lock, 0, 0, "shape"]
+        self.shape = (self.TimePoints, self.Channels, *metadata[-3:])
+        self.ndim = 5
+        self.chunks = self.metaData[resolution_level_lock, 0, 0, "chunks"]
+        self.resolution = self.metaData[resolution_level_lock, 0, 0, "resolution"]
+        self.dtype = self.metaData[resolution_level_lock, 0, 0, "dtype"]
 
     def __getitem__(self, key):
-        """
-        Overwrite the getitem method by reusing the geitem function of tif_loader
-        """
-        if self.pyramid_generation_allowed:
+        if hasattr(self, "tif_obj"):
             return self.tif_obj[key]
-        else:
-            
 
-            res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
-            logger.info(key)
-            if (
-                isinstance(key, slice) == False
-                and isinstance(key, int) == False
-                and len(key) == 6
-            ):
-                res = key[0]
-                if res >= self.ResolutionLevels:
-                    raise ValueError("Layer is larger than the number of ResolutionLevels")
-                key = tuple([x for x in key[1::]])
-            logger.info(res)
-            logger.info(key)
-
-            if isinstance(key, int):
-                key = [slice(key, key + 1)]
-                for _ in range(self.ndim - 1):
-                    key.append(slice(None))
-                key = tuple(key)
-
-            if isinstance(key, tuple):
-                key = [slice(x, x + 1) if isinstance(x, int) else x for x in key]
-                while len(key) < self.ndim:
-                    key.append(slice(None))
-                key = tuple(key)
-
-            logger.info(key)
-            newKey = []
-            for ss in key:
-                if ss.start is None and isinstance(ss.stop, int):
-                    newKey.append(slice(ss.stop, ss.stop + 1, ss.step))
-                else:
-                    newKey.append(ss)
-
-            key = tuple(newKey)
-            logger.info(key)
-
-            array = self.getSlice(r=res, t=key[0], c=key[1], z=key[2], y=key[3], x=key[4])
-
-            if self.squeeze:
-                return np.squeeze(array)
-            else:
-                while len(array.shape) < 5:
-                    array = np.expand_dims(array, axis=0)
-                return array
+        resolution = self.ResolutionLevelLock
+        if isinstance(key, tuple) and len(key) == 6:
+            resolution, key = key[0], key[1:]
+        if not 0 <= resolution < self.ResolutionLevels:
+            raise ValueError("Resolution level is outside the JP2 pyramid.")
+        key = normalize_data_key(key, self.ndim)
+        result = self.getSlice(resolution, *key)
+        return np.squeeze(result) if self.squeeze else result
 
     def getSlice(self, r, t, c, z, y, x):
-        """
-        Access the requested slice based on resolution level and
-        5-dimentional (t,c,z,y,x) access to zarr array. Retrieve a 
-        slice of the image at a specific resolution.
+        """Read one TCZYX selection from direct JP2 or TIFF pyramid backing.
 
         Args:
-            r (int): Resolution level.
-            t (slice): Time dimension slice.
-            c (slice): Channel dimension slice.
-            z (slice): Z-axis slice.
-            y (slice): Y-axis slice.
-            x (slice): X-axis slice.
+            r: Resolution level.
+            t: Time slice; JP2 contains one logical time point.
+            c: Logical component/channel slice.
+            z: Z slice; JP2 contains one logical plane.
+            y: Y slice.
+            x: X slice.
 
         Returns:
-            np.ndarray: The requested slice.
+            numpy.ndarray: Selection with loader dimensions retained.
         """
-
+        if hasattr(self, "tif_obj"):
+            return self.tif_obj.getSlice(r, t, c, z, y, x)
         incomingSlices = (r, t, c, z, y, x)
-        logger.info(incomingSlices)
-        if self.cache is not None:
-            key = f"{self.datapath}_getSlice_{str(incomingSlices)}"
-            # key = self.datapath + '_getSlice_' + str(incomingSlices)
-            result = self.cache.get(key, default=None, retry=True)
+        cache_key = None
+        cache = getattr(self, "cache", None)
+        if cache is not None:
+            cache_key = loader_cache_key(
+                self.file_ino, self.modification_time, incomingSlices
+            )
+            result = cache.get(cache_key, default=None, retry=True)
             if result is not None:
-                logger.info(f"Returned from cache: {incomingSlices}")
+                logger.info("JP2 loader cache found")
                 return result
-        y_start = y.start*2**r if y.start*2**r >= 0 else 0
-        y_stop = y.stop*2**r if y.stop*2**r <= self.shape[-2] else self.shape[-2]
-        x_start = x.start*2**r if x.start*2**r >= 0 else 0
-        x_stop = x.stop*2**r if x.stop*2**r <= self.shape[-1] else self.shape[-1]
-        result = self.jp2_img[y_start:y_stop:2**r,x_start:x_stop:2**r]
-        # result = self.jp2_img[y.start*2**r:y.stop*2**r:2**r,x.start*2**r:x.stop*2**r:2**r]
-        # result = self.arrays[r][t, c, z, y, x]
+        if z.start not in (None, 0) or z.stop not in (None, 1):
+            raise IndexError("JP2 images have only one Z plane.")
+        scale = 2**r
+        height, width = self.jp2_img.shape[:2]
+        y_start, y_stop, y_step = y.indices(math.ceil(height / scale))
+        x_start, x_stop, x_step = x.indices(math.ceil(width / scale))
+        source_key = (
+            slice(y_start * scale, min(y_stop * scale, height), scale * y_step),
+            slice(x_start * scale, min(x_stop * scale, width), scale * x_step),
+        )
+        if self.component_count > 1:
+            # Glymur applies the component slice after OpenJPEG decoding, but
+            # including it here still guarantees one source query per key and
+            # avoids a second loader-side channel selection/read.
+            source_key = (*source_key, c)
+            decoded = self.jp2_img[source_key]
+            result = samples_as_channels(decoded, "YXS")
+            result = result[t, :, z]
+        else:
+            decoded = self.jp2_img[source_key]
+            result = samples_as_channels(decoded, "YX")
+            result = result[t, c, z]
 
-        if self.cache is not None:
-            self.cache.set(key, result, expire=None, tag=self.datapath, retry=True)
-            # test = True
-            # while test:
-            #     # logger.info('Caching slice')
-            #     self.cache.set(key, result, expire=None, tag=self.datapath, retry=True)
-            #     if result == self.getSlice(*incomingSlices):
-            #         test = False
-
+        if cache is not None:
+            cache.set(
+                cache_key,
+                result,
+                expire=None,
+                tag=self.file_ino + self.modification_time,
+                retry=True,
+            )
+            logger.info("JP2 loader cache saved")
         return result
-        return self.open_array(r)[t,c,z,y,x]
-
-    def locationGenerator(self, res):
-        """
-        Generate the file path for a specific resolution level.
-
-        This method combines the base data path (`datapath`) with the dataset paths
-        for a specific resolution level to produce the full file path.
-
-        Args:
-            res (int): The resolution level index.
-
-        Returns:
-            str: The file path corresponding to the specified resolution level.
-        """
-        return os.path.join(self.datapath, self.dataset_paths[res])
-
-    def divide_time(self, shape, factor, tile_size):
-        """
-        Calculate the number of downsampling steps required to fit an image 
-        within a specified tile size.
-
-        This method iteratively divides the dimensions of an image by a given 
-        factor until both dimensions are smaller than the tile size. It is used 
-        to determine the number of pyramid levels for multi-resolution storage.
-
-        Args:
-            shape (tuple): The shape of the image as (height, width).
-            factor (int): The downsampling factor for each step.
-            tile_size (tuple): The target tile size as (tile_height, tile_width).
-
-        Returns:
-            int: The number of downsampling steps (or pyramid levels).
-        """
-        shape_y = shape[0]
-        shape_x = shape[1]
-        times = 0
-        while shape_y > tile_size[0] or shape_x > tile_size[1]:
-            shape_y = shape_y // factor
-            shape_x = shape_x // factor
-            times = times + 1
-        return times

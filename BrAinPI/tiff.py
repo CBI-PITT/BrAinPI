@@ -1,6 +1,4 @@
-"""
-Describes an endpoint for access of datasets as tiff files including whole datasets at specified resolutions
-"""
+"""Export complete datasets or selected resolutions as TIFF responses."""
 import tifffile as tf
 from itertools import product
 import io

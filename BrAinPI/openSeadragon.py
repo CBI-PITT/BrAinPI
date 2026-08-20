@@ -1,10 +1,16 @@
+"""Render OpenSeadragon views and generate dtype-stable PNG tiles.
+
+The endpoint reads TCZYX loader slices, converts non-uint8 pixels according to
+their source dtype, and supplies browser-side channel controls. OpenSeadragon
+metadata is internal to page rendering; a public ``/info`` resource is not
+provided.
+"""
+
 import utils
 import os
 from flask import (
     render_template,
     request,
-    redirect,
-    jsonify,
     Response,
 )
 from PIL import Image
@@ -15,7 +21,6 @@ import hashlib
 from logger_tools import logger
 import cv2
 import re
-import json
 
 DEFAULT_CHANNEL_COLORS = [
     "#00ff00",
@@ -27,14 +32,16 @@ DEFAULT_CHANNEL_COLORS = [
     "#ffa500",
     "#ffffff",
 ]
+DEFAULT_LUT_PERCENTILES = (1, 99)
 
 
 def _is_rgb_volume(img_obj):
     """
-    Detect packed RGB-style datasets that should bypass single-channel controls.
+    Detect source RGB datasets, including those normalized from S into C.
     """
     try:
-        return int(img_obj.metadata.get("ndim", 0)) == 6
+        metadata = img_obj.metadata
+        return bool(metadata.get("packed_rgb")) or int(metadata.get("ndim", 0)) == 6
     except Exception:
         return False
 
@@ -60,18 +67,20 @@ def _normalize_hex_color(color, fallback):
     return f"#{color.lower()}"
 
 
-def _sample_channel_range(img_obj, channel_index):
-    """
-    Estimate a stable display range from the lowest resolution for a channel.
-    """
-    cache = getattr(img_obj, "_osd_channel_range_cache", None)
+def _sample_channel_display_stats(img_obj, channel_index):
+    """Estimate full encoding and percentile default-window ranges for a channel."""
+    cache = getattr(img_obj, "_osd_channel_display_stats_cache", None)
     if cache is None:
         cache = {}
-        setattr(img_obj, "_osd_channel_range_cache", cache)
+        setattr(img_obj, "_osd_channel_display_stats_cache", cache)
     if channel_index in cache:
         return cache[channel_index]
 
-    lowest_res = int(img_obj.metadata.get("ResolutionLevels", img_obj.ResolutionLevels)) - 1
+    lowest_res = int(
+        img_obj.metadata.get(
+            "ResolutionLevels", getattr(img_obj, "ResolutionLevels", 1)
+        )
+    ) - 1
     sample = img_obj[
         lowest_res,
         slice(0, 1),
@@ -83,60 +92,39 @@ def _sample_channel_range(img_obj, channel_index):
     sample = np.asarray(sample, dtype=np.float32)
     finite = sample[np.isfinite(sample)]
     if finite.size == 0:
-        cache[channel_index] = (0.0, 1.0)
+        cache[channel_index] = ((0.0, 1.0), (0.0, 1.0))
         return cache[channel_index]
 
-    positive = finite[finite > 0]
-    working = positive if positive.size else finite
-    low = float(np.min(working))
-    high = float(np.max(working))
-    if high <= low:
-        high = low + 1.0
-    cache[channel_index] = (low, high)
+    # The server encodes this full range into PNG so no intensity is clipped
+    # before the browser's default percentile window is applied.
+    range_min = float(np.min(finite))
+    range_max = float(np.max(finite))
+    if range_max <= range_min:
+        range_max = range_min + 1.0
+
+    nonnegative = finite[finite >= 0]
+    positive = nonnegative[nonnegative > 0]
+    working = positive if positive.size else nonnegative
+    if working.size == 0:
+        cache[channel_index] = ((range_min, range_max), (range_min, range_max))
+        return cache[channel_index]
+    window_min, window_max = np.percentile(working, DEFAULT_LUT_PERCENTILES)
+    window_min = float(window_min)
+    window_max = float(window_max)
+    if window_max <= window_min:
+        window_max = min(range_max, window_min + 1.0)
+    cache[channel_index] = ((range_min, range_max), (window_min, window_max))
     return cache[channel_index]
 
 
-def _sample_rgb_channel_ranges(img_obj):
-    """
-    Estimate stable display ranges for packed RGB images from the lowest resolution.
-    """
-    cache = getattr(img_obj, "_osd_rgb_channel_range_cache", None)
-    if cache is not None:
-        return cache
+def _sample_channel_range(img_obj, channel_index):
+    """Return the full raw range that is encoded into the 8-bit PNG tile."""
+    return _sample_channel_display_stats(img_obj, channel_index)[0]
 
-    lowest_res = int(img_obj.metadata.get("ResolutionLevels", img_obj.ResolutionLevels)) - 1
-    sample = img_obj[
-        lowest_res,
-        slice(0, 1),
-        slice(0, 1),
-        slice(None),
-        slice(None),
-        slice(None),
-    ]
-    sample = np.squeeze(np.asarray(sample, dtype=np.float32))
 
-    if sample.ndim != 3 or sample.shape[-1] != 3:
-        cache = [(0.0, 255.0)] * 3
-        setattr(img_obj, "_osd_rgb_channel_range_cache", cache)
-        return cache
-
-    ranges = []
-    for idx in range(sample.shape[-1]):
-        channel = sample[..., idx]
-        finite = channel[np.isfinite(channel)]
-        if finite.size == 0:
-            ranges.append((0.0, 1.0))
-            continue
-        positive = finite[finite > 0]
-        working = positive if positive.size else finite
-        low = float(np.min(working))
-        high = float(np.max(working))
-        if high <= low:
-            high = low + 1.0
-        ranges.append((low, high))
-
-    setattr(img_obj, "_osd_rgb_channel_range_cache", ranges)
-    return ranges
+def _sample_channel_default_window(img_obj, channel_index):
+    """Return the percentile-based default window for browser-side coloring."""
+    return _sample_channel_display_stats(img_obj, channel_index)[1]
 
 
 def _get_channel_info(img_obj, channel_index):
@@ -146,8 +134,13 @@ def _get_channel_info(img_obj, channel_index):
     fallback_color = DEFAULT_CHANNEL_COLORS[channel_index % len(DEFAULT_CHANNEL_COLORS)]
     label = f"Channel {channel_index}"
     color = fallback_color
-    range_min = None
-    range_max = None
+    metadata = getattr(img_obj, "metadata", {})
+    source_dtype = getattr(img_obj, "dtype", metadata.get((0, 0, 0, "dtype")))
+    if source_dtype is None:
+        range_min = None
+        range_max = None
+    else:
+        range_min, range_max = utils.uint8_source_range(source_dtype)
     window_start = None
     window_end = None
 
@@ -160,31 +153,41 @@ def _get_channel_info(img_obj, channel_index):
                 label = str(channel_meta.get("label") or label)
                 color = _normalize_hex_color(channel_meta.get("color"), fallback_color)
                 window = channel_meta.get("window", {})
-                range_min = window.get("min")
-                range_max = window.get("max")
+                if range_min is None:
+                    range_min = window.get("min")
+                if range_max is None:
+                    range_max = window.get("max")
                 window_start = window.get("start")
                 window_end = window.get("end")
     except Exception:
         pass
 
-    metadata = getattr(img_obj, "metadata", {})
-    if range_min is None:
-        range_min = metadata.get((0, 0, channel_index, "min"))
-    if range_max is None:
-        range_max = metadata.get((0, 0, channel_index, "max"))
+    sampled_range = None
+    sampled_window = None
 
     if range_min is None or range_max is None:
-        range_min, range_max = _sample_channel_range(img_obj, channel_index)
+        sampled_range, sampled_window = _sample_channel_display_stats(
+            img_obj, channel_index
+        )
+        range_min, range_max = sampled_range
 
     range_min = float(range_min)
     range_max = float(range_max)
     if range_max <= range_min:
         range_max = range_min + 1.0
 
+    if window_start is None or window_end is None:
+        if sampled_window is None:
+            _sampled_range, sampled_window = _sample_channel_display_stats(
+                img_obj, channel_index
+            )
+        default_window_start, default_window_end = sampled_window
+    else:
+        default_window_start, default_window_end = window_start, window_end
     if window_start is None:
-        window_start = range_min
+        window_start = default_window_start
     if window_end is None:
-        window_end = range_max
+        window_end = default_window_end
 
     window_start = max(range_min, min(float(window_start), range_max))
     window_end = max(window_start, min(float(window_end), range_max))
@@ -202,18 +205,6 @@ def _get_channel_info(img_obj, channel_index):
     }
 
 
-def _scale_rgb_to_uint8(chunk, img_obj):
-    """
-    Scale packed RGB data to uint8 using stable per-channel ranges.
-    """
-    ranges = _sample_rgb_channel_ranges(img_obj)
-    scaled = np.zeros(chunk.shape, dtype=np.uint8)
-    for idx in range(min(chunk.shape[-1], len(ranges))):
-        low, high = ranges[idx]
-        scaled[..., idx] = _scale_to_uint8(chunk[..., idx], low, high)
-    return scaled
-
-
 def _build_channel_infos(img_obj):
     """
     Build and cache display defaults for all channels.
@@ -229,18 +220,9 @@ def _build_channel_infos(img_obj):
     return infos
 
 
-def _scale_to_uint8(chunk, low, high):
-    """
-    Scale a single channel to uint8 using a stable display range.
-    """
-    chunk = np.asarray(chunk, dtype=np.float32)
-    chunk = np.nan_to_num(chunk, nan=low, posinf=high, neginf=low)
-    if high <= low:
-        return np.zeros(chunk.shape, dtype=np.uint8)
-    chunk = np.clip(chunk, low, high)
-    chunk = (chunk - low) / (high - low)
-    chunk = np.clip(chunk, 0.0, 1.0)
-    return (chunk * 255.0).astype(np.uint8)
+def _convert_to_uint8(chunk):
+    """Convert a tile according to its source dtype, independent of its values."""
+    return utils.dtype_to_uint8(chunk)
 
 def _build_time_index_map(img_obj):
     """
@@ -343,6 +325,15 @@ def setup_openseadragon(app, config):
     Match_class = re.Match
     @logger.catch
     def openseadragon_entry(req_path):
+        """Render an OpenSeadragon page or return one PNG tile.
+
+        Args:
+            req_path: Route path below the ``/osd/`` prefix.
+
+        Returns:
+            flask.Response: Viewer HTML, PNG tile, 404 for ``/info``, or an
+            error page when the source cannot be opened.
+        """
         path_split, datapath = get_html_split_and_associated_file_path(config, request)
         # if isinstance(match(file_pattern, path_split[-1]), Match_class):
         #     datapath = os.path.split(datapath)[0]
@@ -376,12 +367,7 @@ def setup_openseadragon(app, config):
             try:
                 path_split = tuple(part for part in path_split if part != "osd_view")
                 datapath = datapath.replace("/osd_view", "")
-                stat = os.stat(datapath)
-                file_ino = str(stat.st_ino)
-                modification_time = str(stat.st_mtime)
-                datapath_key = config.loadDataset(
-                    file_ino + modification_time, datapath
-                )
+                datapath_key = utils.load_dataset(config, datapath)
                 img_obj = config.opendata[datapath_key]
                 #   further check if the file has been deleted during server runing
                 #   mainly used for the generated pyramid images
@@ -393,13 +379,12 @@ def setup_openseadragon(app, config):
                 #     )
                 #     img_obj = config.opendata[datapath_key]
                 # logger.info(img_obj.metadata.get('datapath'))
-                if img_obj.metadata.get('datapath'):
-                    if not os.path.exists(img_obj.metadata.get('datapath')):
+                source_datapath = img_obj.metadata.get('datapath')
+                if source_datapath and not utils.is_s3_path(source_datapath):
+                    if not os.path.exists(source_datapath):
                         logger.info("files may be deleted, doing regeneration...")
-                        del config.opendata[file_ino + modification_time]
-                        datapath_key = config.loadDataset(
-                            file_ino + modification_time, datapath
-                        )
+                        del config.opendata[datapath_key]
+                        datapath_key = utils.load_dataset(config, datapath)
                         img_obj = config.opendata[datapath_key]
                 t_values, m_values, time_index_map = _build_time_index_map(img_obj)
                 if t_values:
@@ -451,7 +436,7 @@ def setup_openseadragon(app, config):
                     m_point=m_point,
                     m_point_values=m_values,
                     time_index_map=time_index_map,
-                    channel=img_obj.metadata.get('Channels'),
+                    channel=1 if is_rgb_volume else img_obj.metadata.get('Channels'),
                     z_stack=img_obj.metadata.get('shape')[-3],
                     resolutionlevels=img_obj.metadata.get('ResolutionLevels') - 1,
                     level_shapes=level_shapes,
@@ -470,19 +455,18 @@ def setup_openseadragon(app, config):
         # elif utils.split_html(datapath)[-1].endswith("png"):
         elif isinstance(match(file_pattern, path_split[-1]), Match_class):
             # return 'break point'
-            datapath_split = datapath.split("/")
             # The actual path excluded the r-t-c-z-y-x parameters
-            datapath = "/" + os.path.join(*datapath_split[:-4])
-            stat = os.stat(datapath)
-            file_ino = str(stat.st_ino)
-            modification_time = str(stat.st_mtime)
-            datapath_key = config.loadDataset(file_ino + modification_time, datapath)
+            datapath_parts = datapath.rsplit("/", 4)
+            if len(datapath_parts) != 5:
+                return Response(status=404)
+            datapath = datapath_parts[0]
+            datapath_key = utils.load_dataset(config, datapath)
             # print('datapath', datapath)
 
             img_obj = config.opendata[datapath_key]
 
             # key = datapath_split[-7:-1]
-            key = datapath_split[-4:]
+            key = datapath_parts[1:]
             r = int(key[0])
             t = int(key[1])
             c = int(key[2])
@@ -496,33 +480,33 @@ def setup_openseadragon(app, config):
             img = None
             if config.cache is not None:
                 # print("cache not none")
-                cache_key = f"osd_{file_ino + modification_time}-{r}-{t}-{c}-{z}-{y}-{x}"
+                cache_key = f"osd_{datapath_key}-{r}-{t}-{c}-{z}-{y}-{x}"
                 img = config.cache.get(cache_key, default=None, retry=True)
                 if img is not None:
                     logger.info("osd cache found")
             if img is None:
+                is_rgb_volume = _is_rgb_volume(img_obj)
+                channel_slice = slice(None) if is_rgb_volume else slice(c, c + 1)
                 chunk = img_obj[r,
                                 slice(t,t+1),
-                                slice(c,c+1),
+                                channel_slice,
                                 slice(z,z+1),
                                 slice(y[0],y[1]),
                                 slice(x[0],x[1]),
                                 ]
                 logger.info(chunk.shape)
                 chunk = np.squeeze(chunk)
+                if is_rgb_volume and chunk.ndim == 3 and chunk.shape[0] == 3:
+                    chunk = np.moveaxis(chunk, 0, -1)
                 if len(chunk.shape) == 3 and chunk.shape[2] == 3:  # Color image
                     if chunk.dtype != np.uint8:
-                        chunk = _scale_rgb_to_uint8(chunk, img_obj)
+                        chunk = utils.dtype_to_uint8(chunk)
                     chunk = cv2.cvtColor(chunk, cv2.COLOR_RGB2BGR)
-                elif not _is_rgb_volume(img_obj):
+                elif not is_rgb_volume:
                     channel_info = _build_channel_infos(img_obj)[c]
-                    chunk = _scale_to_uint8(
-                        chunk,
-                        channel_info["range_min"],
-                        channel_info["range_max"],
-                    )
+                    chunk = _convert_to_uint8(chunk)
                 elif chunk.dtype != np.uint8:
-                    chunk = utils.conv_np_dtypes(chunk, "uint8")
+                    chunk = utils.dtype_to_uint8(chunk)
 
                 image_stream = io.BytesIO()
 
@@ -545,40 +529,8 @@ def setup_openseadragon(app, config):
                     )
                     logger.info("osd cache saved")
             return Response(img, mimetype="image/png")
-        elif utils.split_html(datapath)[-1].endswith("info"):
-            try:
-                datapath = datapath.replace("/info", "")
-                # print(datapath)
-
-                # stat = os.stat(datapath)
-                # file_ino = str(stat.st_ino)
-                # modification_time = str(stat.st_mtime)
-                # datapath_key = str(config.loadDataset(file_ino + modification_time, datapath))
-                # tif_obj = config.opendata[datapath_key]
-                stat = os.stat(datapath)
-                file_ino = str(stat.st_ino)
-                modification_time = str(stat.st_mtime)
-                datapath_key = config.loadDataset(file_ino + modification_time, datapath)
-                # print('datapath', datapath)
-
-                img_obj = config.opendata[datapath_key]
-                # file_precheck_info = tif_file_precheck(datapath)
-                # meta_data_info = file_precheck_info.metaData
-                # # print(asizeof.asizeof(file_precheck_info))
-                # del file_precheck_info
-                # gc.collect()
-                json_serializable_metadata = {
-                    str(key): value for key, value in img_obj.metadata.items()
-                }
-                return json.dumps(json_serializable_metadata, indent=4)
-                # return json.dumps(img_obj.metadata)
-            except Exception as e:
-                logger.error(e)
-                return render_template(
-                    "file_exception.html",
-                    gtag=config.settings.get("GA4", "gtag"),
-                    exception=e,
-                )
+        elif utils.split_html(datapath)[-1] == "info":
+            return Response(status=404)
         else:
             return "No end point recognized!"
 

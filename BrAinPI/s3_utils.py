@@ -1,6 +1,14 @@
+"""Anonymous S3 browsing and read-only storage adapters.
+
+Directory helpers use unsigned boto3 requests. OME-Zarr access uses a Zarr 3
+``FsspecStore`` configured for anonymous, read-only operation. Recursive
+listings are constrained to the requested prefix.
+"""
+
 import os
 import time
 import functools
+import builtins
 
 import boto3
 import datetime
@@ -13,10 +21,15 @@ from io import BytesIO
 from zarr.abc.store import (
     Store,
 )
-from cache_tools import get_cache
+from zarr.storage import FsspecStore
+from cache_tools import cache_head_space, get_cache
 cache_disk = get_cache()
-# # cache_ram = cache_head_space(10)
-# # cache_ram = None
+
+# The application installs its shared cache in builtins before importing this
+# module.  Keep a local cache available for loaders and command-line imports.
+cache_ram = getattr(builtins, "brainpi_cache_ram", None)
+if cache_ram is None:
+    cache_ram = cache_head_space(10)
 
 
 def get_ttl_hash(hours=24):
@@ -29,6 +42,15 @@ def get_ttl_hash(hours=24):
 
 client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
 paginator = client.get_paginator('list_objects_v2')
+
+
+def s3_fsspec_store(path):
+    """Return a read-only anonymous Zarr 3 store for an S3 URL."""
+    return FsspecStore.from_url(
+        path,
+        storage_options={'anon': True},
+        read_only=True,
+    )
 
 
 def s3_catch_exceptions_retry(func):
@@ -46,6 +68,7 @@ def s3_catch_exceptions_retry(func):
     """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        """Invoke an S3 operation and handle configured transport failures."""
         tries = 0
         try:
             return func(*args, **kwargs)
@@ -118,7 +141,7 @@ def s3_get_dir_contents(path, recursive=False):
     # client = boto3.client('s3', config=Config(signature_version=UNSIGNED))
     # paginator = client.get_paginator('list_objects_v2')
     if recursive:
-        pages = paginator.paginate(Bucket=bucket, MaxKeys=1000)
+        pages = paginator.paginate(Bucket=bucket, MaxKeys=1000, Prefix=prefix)
     else:
         pages = paginator.paginate(Bucket=bucket, MaxKeys=1000, Prefix=prefix, Delimiter='/')
     dirs = ()
@@ -153,7 +176,7 @@ def s3_get_dir_contents(path, recursive=False):
 s3_get_dir_contents = s3_catch_exceptions_retry(s3_get_dir_contents)
 if cache_disk is not None:
     s3_get_dir_contents = cache_disk.memoize()(s3_get_dir_contents)
-s3_get_dir_contents = brainpi_cache_ram.memoize(s3_get_dir_contents)
+s3_get_dir_contents = cache_ram.memoize(s3_get_dir_contents)
 
 def s3_get_bucket_and_path_parts(path):
     """

@@ -1,3 +1,5 @@
+"""Start the optional local Neuroglancer Python server once per host."""
+
 import neuroglancer
 import urllib.request
 import signal

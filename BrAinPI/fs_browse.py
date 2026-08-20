@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Mar 28 11:47:11 2022
+"""HTML and JSON browsing for filesystem and S3 roots in ``settings.ini``.
 
-@author: awatson
+Visible aliases are selected from anonymous and authenticated path maps. The
+browser can return directory metadata, download eligible files, and construct
+viewer links for supported dataset formats.
 """
-
-'''
-Make a browseable filesystem that limits paths to those configured in 
-settings.ini and according to authentication / groups.ini
-'''
 
 from flask_login import (
                          current_user,
@@ -51,6 +47,41 @@ def time_format(time_from_os_stat):
         return datetime.datetime.fromtimestamp(time_from_os_stat).strftime("%Y-%m-%d %H:%I")
     elif isinstance(time_from_os_stat, datetime.datetime):
         return time_from_os_stat.strftime("%Y-%m-%d %H:%I")
+
+
+def _collect_browser_entry_metadata(paths, *, directories):
+    """Collect aligned metadata while tolerating disappearing child entries.
+
+    Directory listings are snapshots.  A child can be removed, renamed, or
+    become inaccessible before its metadata is queried.  Treat that as a
+    skipped child rather than failing the entire browser request.
+    """
+    entries = []
+    for path in paths:
+        try:
+            if "s3://" not in path:
+                stat = os.stat(path)
+                modified = stat.st_mtime
+                size_bytes = stat.st_size
+            else:
+                modified = utils.get_mod_time(path)
+                size_bytes = utils.get_file_size(path)
+
+            record = {
+                "path": path,
+                "modtime": time_format(modified),
+            }
+            if directories:
+                record["entry_count"] = utils.num_dirs_files(path)
+            else:
+                record["size_bytes"] = size_bytes
+                record["size"] = utils.format_file_size(size_bytes)
+            entries.append(record)
+        except OSError as exc:
+            logger.warning(
+                f"Skipping unavailable browser entry {path!r}: {exc}"
+            )
+    return entries
 
 
 #########################################################################################################
@@ -973,6 +1004,7 @@ def initiate_browseable(app,config):
     @app.route(base + '<path:req_path>')
     @app.route(base, defaults={'req_path': ''})
     def browse_fs(req_path):
+        """Render a browser page or return a file response for one path."""
         
         
         logger.info(request.path)
@@ -1002,6 +1034,7 @@ def initiate_browseable(app,config):
     @app.route(base_json + '<path:req_path>')
     @app.route(base_json, defaults={'req_path': ''})
     def browse_fs_json(req_path):
+        """Return browser path data as JSON when the target is a directory."""
         
         
         print(request.path)
@@ -1039,6 +1072,7 @@ def initiate_NOT_browseable(app, config):
     @app.route(base + '<path:req_path>')
     @app.route(base, defaults={'req_path': ''})
     def browse_fs(req_path):
+        """Return 404 for every browser request when browsing is disabled."""
         abort(404)
 
     return app

@@ -1,5 +1,12 @@
+"""Application configuration and format-specific dataset loader dispatch.
+
+The :class:`config` object owns the datasets opened by one application worker,
+the persistent disk cache, and per-dataset reentrant locks. Local datasets are
+selected by extension; public S3 Zarr datasets use a read-only Fsspec store.
+"""
 
 import os
+import threading
 import imaris_ims_file_reader as ims
 # Import zarr stores
 from zarr.storage import LocalStore
@@ -85,8 +92,11 @@ def get_pyramid_images_connection(settings):
     # print(connection)
     return connection
 class config:
-    """
-    This class will be used to manage open datasets and persistant cache
+    """Manage open datasets, cache state, and initialization locks per worker.
+
+    ``opendata`` maps stable dataset identities to loader instances. Calls to
+    :meth:`loadDataset` for the same identity are serialized within a worker so
+    concurrent requests cannot construct duplicate loaders.
     """
 
     def __init__(self):
@@ -107,16 +117,47 @@ class config:
         """
         self.opendata = {}
         self.opendata_set = set()
+        self._dataset_locks = {}
+        self._dataset_locks_guard = threading.Lock()
         self.settings = get_config('settings.ini')
         self.pyramid_images_connection = get_pyramid_images_connection(self.settings)
         from cache_tools import get_cache
         self.cache = get_cache()
 
-        def __del__(self):
+    def __del__(self):
             if self.cache is not None:
                 self.cache.close()
 
-    def loadDataset(self, key: str, dataPath: str ):
+    def dataset_lock(self, key):
+        """Return the reentrant lock associated with one dataset identity.
+
+        Locks are local to the current process. Reentrancy is required because
+        endpoint metadata initialization can occur while the loader call stack
+        already owns the same dataset lock.
+
+        Args:
+            key: Stable dataset identity used in :attr:`opendata`.
+
+        Returns:
+            threading.RLock: Lock shared by loader and metadata initialization.
+        """
+        with self._dataset_locks_guard:
+            return self._dataset_locks.setdefault(key, threading.RLock())
+
+    def loadDataset(self, key: str, dataPath: str):
+        """Load or reuse one dataset under its per-worker initialization lock.
+
+        Args:
+            key: Stable local inode/mtime identity or S3 URL.
+            dataPath: Local filesystem path or supported ``s3://`` URL.
+
+        Returns:
+            str: ``key``, which indexes the loader in :attr:`opendata`.
+        """
+        with self.dataset_lock(key):
+            return self._loadDataset(key, dataPath)
+
+    def _loadDataset(self, key: str, dataPath: str):
         """
         Given the filesystem path to a file, open that file with the appropriate
         reader and store it in the opendata attribute with the hash of dataPath
@@ -150,10 +191,15 @@ class config:
                 
         elif dataPath.endswith('.ome.zarr'):
             from ome_zarr_loader import ome_zarr_loader
+            if dataPath.startswith('s3://'):
+                from s3_utils import s3_fsspec_store
+                zarr_store_type = s3_fsspec_store
+            else:
+                zarr_store_type = LocalStore
             self.opendata[key] = ome_zarr_loader(
                 dataPath, 
                 squeeze=False, 
-                zarr_store_type=LocalStore, 
+                zarr_store_type=zarr_store_type,
                 cache=self.cache
                 )
             # self.opendata[dataPath].isomezarr = True
@@ -230,18 +276,26 @@ class config:
             import nd2_loader
             logger.info('Creating nd2 object')
             self.opendata[key] = nd2_loader.nd2_loader(dataPath, squeeze_output=False, cache=self.cache)
-            self.opendata[key].open()
+            self.opendata_set.add(dataPath)
+        elif dataPath.lower().endswith('.pcd'):
+            from ng_precomputed_loader import ng_precomputed_loader
+            logger.info('Creating neuroglancer precomputed object')
+            self.opendata[key] = ng_precomputed_loader(
+                dataPath,
+                squeeze=False,
+                cache=self.cache,
+            )
             self.opendata_set.add(dataPath)
         elif dataPath.endswith('.zarr'):
             # import s3fs
             # self.opendata[dataPath] = ome_zarr_loader(dataPath, squeeze=False, zarr_store_type=s3fs.S3Map,
             #                                           cache=self.cache)
             if dataPath.startswith('s3://'):
-                from s3_utils import s3_boto_store
+                from s3_utils import s3_fsspec_store
                 self.opendata[key] = ome_zarr_loader(
                     dataPath, 
                     squeeze=False, 
-                    zarr_store_type=s3_boto_store,
+                    zarr_store_type=s3_fsspec_store,
                     cache=self.cache
                     )
                 self.opendata_set.add(dataPath)

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Nov  2 14:12:11 2021
+"""Read local or public-S3 OME-Zarr multiscales through a TCZYX interface.
 
-@author: alpha
+OME axis metadata is mapped into BrAinPI's logical ``(T, C, Z, Y, X)`` order.
+The loader supports local Zarr stores and caller-provided read-only stores such
+as the anonymous S3 Fsspec adapter.
 """
 import io
 
@@ -23,6 +24,8 @@ from typing import Union
 Path = Union[str, bytes, None]
 StoreLike = Union[ Store, MutableMapping]
 from logger_tools import logger
+from loader_indexing import normalize_data_key
+from utils import loader_cache_key
 # import s3fs
 
 class ome_zarr_loader:
@@ -53,9 +56,14 @@ class ome_zarr_loader:
         self.squeeze = squeeze
         self.cache = cache
         self.metaData = {}
-        self.file_stat = os.stat(location)
-        self.file_ino = str(self.file_stat.st_ino)
-        self.modification_time = str(self.file_stat.st_mtime)
+        if location.startswith('s3://'):
+            self.file_stat = None
+            self.file_ino = location
+            self.modification_time = ''
+        else:
+            self.file_stat = os.stat(location)
+            self.file_ino = str(self.file_stat.st_ino)
+            self.modification_time = str(self.file_stat.st_mtime)
 
         # Open zarr store
         self.zarr_store = zarr_store_type # Only relevant for non-s3 datasets
@@ -146,6 +154,18 @@ class ome_zarr_loader:
         #     self.arrays[res] = self.open_array(res)
 
     def axes_pos_extract(self,multiscale0: dict):
+        """Map OME axis names to positions in a multiscale source array.
+
+        Args:
+            multiscale0: First OME ``multiscales`` entry containing ``axes``.
+
+        Returns:
+            dict: Positions for ``t``, ``c``, ``z``, ``y``, and ``x``; absent
+            axes map to ``None``.
+
+        Raises:
+            ValueError: If the OME axes declaration is missing.
+        """
         axes = multiscale0.get("axes")
         if axes is None:
             raise ValueError("multiscales[0].axes missing")
@@ -221,7 +241,7 @@ class ome_zarr_loader:
         """
         res = 0 if self.ResolutionLevelLock is None else self.ResolutionLevelLock
         logger.info(key)
-        if isinstance(key,slice) == False and isinstance(key,int) == False and len(key) == 6:
+        if isinstance(key, tuple) and len(key) == 6:
             res = key[0]
             if res >= self.ResolutionLevels:
                 raise ValueError('Layer is larger than the number of ResolutionLevels')
@@ -229,27 +249,7 @@ class ome_zarr_loader:
         logger.info(res)
         logger.info(key)
         
-        if isinstance(key, int):
-            key = [slice(key,key+1)]
-            for _ in range(self.ndim-1):
-                key.append(slice(None))
-            key = tuple(key)
-            
-        if isinstance(key,tuple):
-            key = [slice(x,x+1) if isinstance(x,int) else x for x in key]
-            while len(key) < self.ndim:
-                key.append(slice(None))
-            key = tuple(key)
-        
-        logger.info(key)
-        newKey = []
-        for ss in key:
-            if ss.start is None and isinstance(ss.stop,int):
-                newKey.append(slice(ss.stop,ss.stop+1,ss.step))
-            else:
-                newKey.append(ss)
-                
-        key = tuple(newKey)
+        key = normalize_data_key(key, self.ndim)
         logger.info(key)
         
         
@@ -300,7 +300,7 @@ class ome_zarr_loader:
         incomingSlices = (r,t,c,z,y,x)
         logger.info(incomingSlices)
         if self.cache is not None:
-            key = f'{self.file_ino + self.modification_time + str(incomingSlices)}'
+            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
             # key = self.location + '_getSlice_' + str(incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
@@ -667,4 +667,3 @@ A Zarr store that uses boto3 (and not s3fs) to access zarr stores in s3://
 #     else:
 #         for parent, dirs, files in os.walk(path):
 #             return parent, dirs, files
-
