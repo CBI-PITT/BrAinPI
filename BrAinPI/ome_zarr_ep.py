@@ -505,21 +505,33 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
             }
         ]
 
+    base_resolution = np.asarray(
+        metadata[(0, 0, 0, 'resolution')], dtype=np.float64
+    )
+    base_translation = np.asarray(
+        metadata.get((0, 0, 0, 'translation'), (0.0, 0.0, 0.0)),
+        dtype=np.float64,
+    )
+
     datasets = []
     for res in range(metadata['ResolutionLevels']):
-        if res == 0:
-            translation = (0,0,0,0,0)
+        source_translation = metadata.get((res, 0, 0, 'translation'))
+        if source_translation is not None:
+            # Loaders use canonical ZYX micrometre order for source origins.
+            spatial_translation = np.asarray(source_translation, dtype=np.float64)
         else:
-            # Proportional difference in spacing between current and previous scale
-            translation = [x/y for x,y in zip(metadata[(res, 0, 0, 'resolution')],metadata[(res-1, 0, 0, 'resolution')])]
-            # Determine micron shift in origin by dividing current resoluton by proportional difference
-            translation = [x/y if y!=1 else 0 for x,y in zip(metadata[(res, 0, 0, 'resolution')], translation)]
-            # translation = [x if x!=1 else 0 for x in translation]
-            translation = (0,0,*translation)
+            current_resolution = np.asarray(
+                metadata[(res, 0, 0, 'resolution')], dtype=np.float64
+            )
+            # NGFF pixel coordinates refer to voxel centres.  For a pyramid
+            # made by binning from level 0, the centre of the first coarse
+            # voxel is half the difference between its extent and the base
+            # voxel extent.  Keep any known level-0 physical origin.
+            spatial_translation = (
+                base_translation + (current_resolution - base_resolution) / 2.0
+            )
 
-            # # I think we can just pass the previous resolution here (need to test carefully)
-            # translation = metadata[(res-1, 0, 0, 'resolution')]
-            # translation = (0, 0, *translation)
+        translation = (0.0, 0.0, *spatial_translation.tolist())
         level = {
             'path':str(res),
             'coordinateTransformations':[
@@ -535,21 +547,28 @@ def get_zattr_file(numpy_like_dataset,force8Bit=False):
             }
         datasets.append(level)
 
-    zattr['multiscales'] = [
-        {
+    multiscale = {
         'axes':axes,
         'datasets':datasets,
         'version':'0.4',
-        'type':'gaussian',
-        'metadata':{
-            'description':'Describe how multiscale was created',
-            'method': 'The function used to create',
-            'version':'version of method',
-            'other':'stuff',
-            'other2':'stuff2'
-            }
-        }
-        ]
+    }
+
+    # Downsampling method fields are optional in NGFF.  Preserve real source
+    # declarations when proxying OME-Zarr, but do not invent "gaussian" (or
+    # placeholder method metadata) for formats whose pyramid method is unknown.
+    source_multiscales = getattr(numpy_like_dataset, 'multiscales', None)
+    if isinstance(source_multiscales, list) and source_multiscales:
+        source_multiscale = source_multiscales[0]
+    elif isinstance(source_multiscales, dict):
+        source_multiscale = source_multiscales
+    else:
+        source_multiscale = {}
+    if isinstance(source_multiscale, dict):
+        for field in ('type', 'metadata'):
+            if field in source_multiscale:
+                multiscale[field] = source_multiscale[field]
+
+    zattr['multiscales'] = [multiscale]
 
     # colors * math.ceil(metadata['Channels']/len(colors))
     if metadata.get('packed_rgb', False) and metadata['Channels'] == 3:

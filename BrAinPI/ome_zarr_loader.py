@@ -28,6 +28,14 @@ from loader_indexing import normalize_data_key
 from utils import loader_cache_key
 # import s3fs
 
+_LENGTH_TO_MICROMETER = {
+    "nanometer": 1e-3,
+    "micrometer": 1.0,
+    "millimeter": 1e3,
+    "centimeter": 1e4,
+    "meter": 1e6,
+}
+
 class ome_zarr_loader:
     """
     A loader class for handling OME-Zarr datasets with multi-resolution access and metadata extraction.
@@ -87,24 +95,43 @@ class ome_zarr_loader:
         except:
             raise ValueError("OME-Zarr multiscales attribute missing")
         # self.multiscales = zgroup.attrs['multiscales']
-        self.axes_pos_dic = self.axes_pos_extract(self.multiscales[0])
+        self.multiscale = (
+            self.multiscales[0]
+            if isinstance(self.multiscales, list)
+            else self.multiscales
+        )
+        self.axes = self.multiscale['axes']
+        self.axes_pos_dic = self.axes_pos_extract(self.multiscale)
         # logger.info(f"Axes positions: {self.axes_pos_dic}")
         self._standard_axes = {"t":0, "c":1, "z":2, "y":3, "x":4}
         logger.info(self.multiscales)
         del zgroup
         del store
         
-        try:
-            self.multiscale_datasets = self.multiscales[0]['datasets']
-        except:
-            self.multiscale_datasets = self.multiscales['datasets']
+        self.multiscale_datasets = self.multiscale['datasets']
         self.ResolutionLevels = len(self.multiscale_datasets)
         
         self.dataset_paths = []
         self.dataset_scales = []
+        self.dataset_translations = []
         for res in range(self.ResolutionLevels):
-            self.dataset_paths.append(self.multiscale_datasets[res]['path'])
-            self.dataset_scales.append(self.multiscale_datasets[res]['coordinateTransformations'][0]['scale'])
+            dataset = self.multiscale_datasets[res]
+            self.dataset_paths.append(dataset['path'])
+            transformations = dataset.get('coordinateTransformations', [])
+            scale = next(
+                (item.get('scale') for item in transformations
+                 if item.get('type') == 'scale'),
+                None,
+            )
+            if scale is None:
+                raise ValueError(f"OME-Zarr resolution {res} is missing its scale transform")
+            translation = next(
+                (item.get('translation') for item in transformations
+                 if item.get('type') == 'translation'),
+                None,
+            )
+            self.dataset_scales.append(scale)
+            self.dataset_translations.append(translation)
         
         self.arrays = {}
         for r in range(self.ResolutionLevels):
@@ -128,9 +155,13 @@ class ome_zarr_loader:
                                                          array.shape[self.axes_pos_dic['x']] if self.axes_pos_dic['x'] is not None else 1)
                 ## Need to extract resolution by some other means.  For now, default to 1,1,1 and divide by 2 for each series
 
-                self.metaData[r,t,c,'resolution'] = [self.dataset_scales[r][self.axes_pos_dic['z']] if self.axes_pos_dic['z'] is not None else 1 * (2**r),
-                                                         self.dataset_scales[r][self.axes_pos_dic['y']] if self.axes_pos_dic['y'] is not None else 1 * (2**r),
-                                                         self.dataset_scales[r][self.axes_pos_dic['x']] if self.axes_pos_dic['x'] is not None else 1 * (2**r)]
+                self.metaData[r,t,c,'resolution'] = self.spatial_values_um(
+                    self.dataset_scales[r], missing_value=1.0
+                )
+                if self.dataset_translations[r] is not None:
+                    self.metaData[r,t,c,'translation'] = self.spatial_values_um(
+                        self.dataset_translations[r], missing_value=0.0
+                    )
 
                 # Collect dataset info
                 self.metaData[r,t,c,'chunks'] = (1,1,array.chunks[self.axes_pos_dic['z']] if self.axes_pos_dic['z'] is not None else 1,
@@ -187,6 +218,20 @@ class ome_zarr_loader:
                 if a["name"] in dic:
                     dic[a["name"]] = index
         return dic  # mapping from axis name to array dimension index
+
+    def spatial_values_um(self, values, missing_value):
+        """Return one source transform in canonical ZYX micrometre order."""
+        result = []
+        for axis_name in ("z", "y", "x"):
+            position = self.axes_pos_dic[axis_name]
+            if position is None:
+                result.append(float(missing_value))
+                continue
+            axis = self.axes[position]
+            unit = axis.get("unit") if isinstance(axis, dict) else None
+            factor = _LENGTH_TO_MICROMETER.get(unit, 1.0)
+            result.append(float(values[position]) * factor)
+        return tuple(result)
 
 
     def zarr_store_type(self, path):

@@ -186,13 +186,27 @@ class nifti_zarr_loader:
 
         self.dataset_paths = []
         self.dataset_scales = []
+        self.dataset_translations = []
         self.arrays = {}
         self._structured_fields = {}
         for r in range(self.ResolutionLevels):
-            self.dataset_paths.append(self.multiscale_datasets[r]["path"])
-            self.dataset_scales.append(
-                self.multiscale_datasets[r]["coordinateTransformations"][0]["scale"]
+            dataset = self.multiscale_datasets[r]
+            self.dataset_paths.append(dataset["path"])
+            transformations = dataset.get("coordinateTransformations", [])
+            scale = next(
+                (item.get("scale") for item in transformations
+                 if item.get("type") == "scale"),
+                None,
             )
+            if scale is None:
+                raise ValueError(f"NIfTI-Zarr resolution {r} is missing its scale transform")
+            translation = next(
+                (item.get("translation") for item in transformations
+                 if item.get("type") == "translation"),
+                None,
+            )
+            self.dataset_scales.append(scale)
+            self.dataset_translations.append(translation)
             array = self.open_array(r)
             dtype_fields = array.dtype.fields
             if dtype_fields is None:
@@ -253,6 +267,18 @@ class nifti_zarr_loader:
                     self.dataset_scales[r][self.axes_pos_dic['y']] if self.axes_pos_dic['y'] is not None else 1,
                     self.dataset_scales[r][self.axes_pos_dic['x']] if self.axes_pos_dic['x'] is not None else 1)
                     # self.metaData[r, t, c, "resolution"] = self.dataset_scales[r][-3:]
+
+                if self.dataset_translations[r] is not None:
+                    spatial_translation = tuple(
+                        self.dataset_translations[r][self.axes_pos_dic[axis]]
+                        if self.axes_pos_dic[axis] is not None else 0
+                        for axis in ("z", "y", "x")
+                    )
+                    if self.space_unit == "mm" or self.space_unit == "millimeter":
+                        spatial_translation = tuple(
+                            value * 1000 for value in spatial_translation
+                        )
+                    self.metaData[r, t, c, "translation"] = spatial_translation
 
                 # Collect dataset info
                 self.metaData[r, t, c, "chunks"] = (1,1, array.chunks[self.axes_pos_dic['z'] if self.axes_pos_dic['z'] is not None else 1],

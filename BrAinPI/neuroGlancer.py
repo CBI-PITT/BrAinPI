@@ -181,9 +181,8 @@ def ng_shader(numpy_like_object):
         else:
             lowestResVolume = numpy_like_object[res - 1, 0, idx, :, :, :]
             display_min, display_max = _percentile_display_range(lowestResVolume)
-            print(
-                "Neuroglancer channel "
-                f"{idx}: OMERO window unavailable; using "
+            logger.info(
+                f"Neuroglancer channel {idx}: OMERO window unavailable; using "
                 f"percentiles {DEFAULT_LUT_PERCENTILES[0]}/"
                 f"{DEFAULT_LUT_PERCENTILES[1]} as invlerp mapping range "
                 f"[{display_min}, {display_max}]"
