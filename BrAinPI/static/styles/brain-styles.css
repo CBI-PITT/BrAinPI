@@ -23,16 +23,15 @@ body.browser-shell { min-height: 100vh; display: flex; flex-direction: column; m
 
 .browser-nav { position: sticky; top: 0; z-index: 1030; min-height: 82px; padding: 0; background: rgba(7,25,35,.97); box-shadow: 0 10px 35px rgba(7,25,35,.13); backdrop-filter: blur(15px); }
 .browser-nav-inner { width: min(1400px, calc(100% - 42px)); min-height: 82px; margin-inline: auto; padding: 0; }
-.browser-brand { display: inline-flex; align-items: center; gap: 12px; margin-right: clamp(28px, 5vw, 76px); color: var(--white); text-decoration: none; }
+.browser-brand-cluster { display: inline-flex; align-items: center; gap: 16px; flex: 0 0 auto; margin-right: clamp(28px, 4vw, 60px); }
+.browser-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--white); text-decoration: none; }
 .browser-brand:hover { color: var(--white); }
 .browser-brand > span:last-child { display: grid; line-height: 1.05; }
 .browser-brand strong { font-size: 1rem; }
 .browser-brand small { margin-top: 5px; color: #91aab4; font-size: .62rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-.browser-brand-mark { position: relative; width: 36px; height: 36px; display: inline-block; border-radius: 11px; background: #143e50; overflow: hidden; }
-.browser-brand-mark span { position: absolute; width: 8px; border-radius: 8px; background: var(--accent); transform: rotate(28deg); }
-.browser-brand-mark span:nth-child(1) { height: 21px; left: 7px; top: 11px; }
-.browser-brand-mark span:nth-child(2) { height: 26px; left: 15px; top: 4px; background: #72d4be; }
-.browser-brand-mark span:nth-child(3) { height: 16px; left: 23px; top: 8px; background: var(--warm); }
+.browser-brand-icon { width: 42px; height: 42px; display: block; flex: 0 0 auto; border-radius: 13px; object-fit: cover; filter: drop-shadow(0 6px 12px rgba(0,0,0,.22)); }
+.browser-brand-divider { width: 1px; height: 34px; background: rgba(255,255,255,.14); }
+.browser-cbi-logo { width: 78px; height: 34px; display: block; padding: 5px 7px; border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(255,255,255,.94); object-fit: contain; }
 .path-context { display: grid; min-width: 0; padding-left: 22px; border-left: 1px solid rgba(255,255,255,.13); line-height: 1.2; }
 .path-context span { color: #78939e; font-size: .61rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .path-context strong { max-width: 420px; margin-top: 5px; overflow: hidden; color: #dce8eb; font-size: .78rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -115,12 +114,16 @@ button.entry { width: 100%; padding: 0; border: 0; background: transparent; curs
 
 @media (max-width: 991px) {
   .browser-nav-inner { width: calc(100% - 28px); padding: 14px 0; }
+  .browser-brand-cluster { margin-right: 0; }
   .path-context { margin: 15px 0; padding: 12px 0; border-left: 0; border-top: 1px solid rgba(255,255,255,.1); border-bottom: 1px solid rgba(255,255,255,.1); }
   .browser-links { align-items: stretch; }
   .browser-links .browser-signin { margin-left: 0; }
 }
 
 @media (max-width: 700px) {
+  .browser-brand-cluster { gap: 10px; }
+  .browser-brand-divider { display: none; }
+  .browser-cbi-logo { width: 60px; height: 30px; padding: 4px 5px; }
   .browser-main { width: calc(100% - 24px); padding: 34px 0 48px; }
   .explorer-heading { align-items: flex-start; flex-direction: column; }
   .directory-stats { width: 100%; }

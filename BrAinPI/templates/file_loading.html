@@ -13,12 +13,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b2536">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}">
     <meta http-equiv="refresh" content="0; url={{ redirect_url }}">
     <title>Opening {{ redirect_name }} · {{ file_name }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/app-theme.css') }}">
 </head>
 <body class="status-shell">
-    <div class="status-brand" aria-label="BrAinPI"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><strong>BrAinPI</strong></div>
+    <div class="status-brand" aria-label="BrAinPI"><img class="brand-icon" src="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}" alt="" aria-hidden="true"><strong>BrAinPI</strong></div>
 
     <main class="status-card status-card-with-image" aria-live="polite">
         <div class="status-art">

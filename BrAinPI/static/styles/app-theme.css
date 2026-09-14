@@ -57,11 +57,7 @@ body.app-shell {
 
 .site-nav { min-height: 82px; display: flex; align-items: center; justify-content: space-between; gap: 32px; }
 .brand { display: inline-flex; align-items: center; gap: 13px; text-decoration: none; }
-.brand-mark { position: relative; width: 38px; height: 38px; display: inline-block; border-radius: 12px; background: var(--ink-900); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
-.brand-mark span { position: absolute; display: block; width: 9px; border-radius: 10px; background: var(--accent); transform: rotate(28deg); }
-.brand-mark span:nth-child(1) { height: 22px; left: 8px; top: 12px; }
-.brand-mark span:nth-child(2) { height: 27px; left: 16px; top: 5px; background: #72d4be; }
-.brand-mark span:nth-child(3) { height: 17px; left: 24px; top: 9px; background: var(--warm); }
+.brand-icon { width: 42px; height: 42px; display: block; flex: 0 0 auto; border-radius: 13px; object-fit: cover; filter: drop-shadow(0 5px 10px rgba(7,25,35,.14)); }
 .brand-copy { display: grid; line-height: 1.1; }
 .brand-copy strong { color: var(--ink-950); font-size: 1.06rem; letter-spacing: -.02em; }
 .brand-copy small { margin-top: 5px; color: var(--ink-500); font-size: .69rem; letter-spacing: .08em; text-transform: uppercase; }

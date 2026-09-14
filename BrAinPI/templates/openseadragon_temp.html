@@ -5,6 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#071923" />
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}" />
   <title>{{ file_name }} · OpenSeadragon</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.3.1/openseadragon.min.js"></script>
   <style>
@@ -229,7 +231,7 @@
 
   <header class="osd-topbar">
     <div class="osd-brand">
-      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      <img class="brand-icon" src="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}" alt="" aria-hidden="true">
       <span class="osd-brand-copy"><strong>BrAinPI</strong><small>OpenSeadragon viewer</small></span>
     </div>
     <div class="osd-file" title="{{ file_name }}">
