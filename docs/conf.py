@@ -8,20 +8,25 @@
 
 import os
 import sys
-from sphinx.ext.apidoc import main as sphinx_apidoc_main
+from pathlib import Path
 
-sys.path.insert(0, os.path.abspath('../BrAinPI'))
-print(sys.path)
 
-def run_apidoc(_):
-    module_path = os.path.abspath('../BrAinPI')
-    output_path = os.path.abspath('.')
-    sphinx_apidoc_main([
-        '-o', output_path, module_path, '--force'
-    ])
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_DIRECTORY = REPOSITORY_ROOT / "BrAinPI"
 
-def setup(app):
-    app.connect('builder-inited', run_apidoc)
+sys.path.insert(0, str(SOURCE_DIRECTORY))
+
+# Autodoc imports application modules. Select the committed templates
+# explicitly so documentation builds never depend on deployment-only files and
+# normal application startup never has to guess that it is running under Sphinx.
+os.environ.setdefault(
+    "BRAINPI_SETTINGS",
+    str(SOURCE_DIRECTORY / "template_settings.ini"),
+)
+os.environ.setdefault(
+    "BRAINPI_GROUPS",
+    str(SOURCE_DIRECTORY / "template_groups.ini"),
+)
 
 project = 'BrainPi Document'
 copyright = '2024, Alan M Watson, Kelin He'
@@ -46,4 +51,3 @@ exclude_patterns = ['_build', '_templates', '_static','Thumbs.db', '.DS_Store']
 
 html_theme = 'sphinx_rtd_theme'
 # html_static_path = ['_static']
-

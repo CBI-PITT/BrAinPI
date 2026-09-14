@@ -1,0 +1,55 @@
+services:
+  brainpi:
+    build:
+      context: .
+      args:
+        BRAINPI_UID: ${BRAINPI_UID:-10001}
+        BRAINPI_GID: ${BRAINPI_GID:-10001}
+    image: brainpi:local
+    restart: unless-stopped
+    ports:
+      - "${BRAINPI_PORT:-5001}:5001"
+    environment:
+      BRAINPI_SETTINGS: /etc/brainpi/settings.ini
+      BRAINPI_GROUPS: /etc/brainpi/groups.ini
+      BRAINPI_PUBLIC_URL: ${BRAINPI_PUBLIC_URL:-http://localhost:5001/}
+      BRAINPI_SECRET_KEY: ${BRAINPI_SECRET_KEY:?Set BRAINPI_SECRET_KEY in .env}
+      BRAINPI_CACHE_DIR: /var/cache/brainpi
+      BRAINPI_PYRAMIDS_DIR: /var/lib/brainpi/pyramids
+      # Docker captures stdout. An explicit empty value disables the optional
+      # application logfile while plain/native startup retains logfile.log.
+      BRAINPI_LOG_FILE: ""
+    volumes:
+      - ${BRAINPI_SETTINGS_FILE:-./docker/settings.ini}:/etc/brainpi/settings.ini:ro
+      - ${BRAINPI_GROUPS_FILE:-./docker/groups.ini}:/etc/brainpi/groups.ini:ro
+      - ${BRAINPI_DATA_DIR:?Set BRAINPI_DATA_DIR in .env}:/data:ro
+      - brainpi-cache:/var/cache/brainpi
+      - brainpi-pyramids:/var/lib/brainpi/pyramids
+    init: true
+    stop_grace_period: 70s
+
+  neuroglancer:
+    # Reuse the image built by the brainpi service. Compose builds it once and
+    # starts this frontend as a separate, independently supervised process.
+    image: brainpi:local
+    command: ["python", "neuroglancer_server.py"]
+    restart: unless-stopped
+    ports:
+      - "${BRAINPI_NG_PORT:-9999}:9999"
+    environment:
+      BRAINPI_SETTINGS: /etc/brainpi/settings.ini
+      BRAINPI_LOG_FILE: ""
+    volumes:
+      - ${BRAINPI_SETTINGS_FILE:-./docker/settings.ini}:/etc/brainpi/settings.ini:ro
+    init: true
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9999/v/base/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  brainpi-cache:
+  brainpi-pyramids:

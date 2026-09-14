@@ -124,6 +124,12 @@ def home():
                            page_name='Home',
                            gtag=settings.get('GA4','gtag'))
 
+
+@app.route('/healthz', methods=['GET'])
+def healthz():
+    """Lightweight container liveness/readiness endpoint."""
+    return {"service": "brainpi", "status": "ok"}, 200
+
 ##############################################################################
 
 

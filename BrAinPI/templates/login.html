@@ -1,38 +1,27 @@
-{% with messages = get_flashed_messages() %}
-{% if messages %}
-    <div class="notification is-danger">
-        {{ messages[0] }}. Go to <a href="{{ url_for('login') }}">login page</a>.
-    </div>
-{% endif %}
-{% endwith %}
-<form method="POST" action="/login">
-
 {% extends "base.html" %}
 
 {% block content %}
-<div class="column is-4 is-offset-4">
-    <h3 class="title">Login</h3>
-    <div class="box">
-        <form method="POST" action="/login">
-            <div class="field">
-                <div class="control">
-                    <input class="input is-large" type="text" name="username" placeholder="Lab Username" autofocus="">
-                </div>
-            </div>
-
-            <div class="field">
-                <div class="control">
-                    <input class="input is-large" type="password" name="password" placeholder="Lab Password">
-                </div>
-            </div>
-            <div class="field">
-                <label class="checkbox">
-                    <input type="checkbox" name="remember">
-                    Remember me
-                </label>
-            </div>
-            <button class="button is-block is-info is-large is-fullwidth">Login</button>
-        </form>
+<section class="auth-layout">
+    <div class="auth-intro">
+        <p class="eyebrow"><span></span> Authorized access</p>
+        <h1>Welcome back.</h1>
+        <p>Sign in with your organization credentials to view protected datasets and personalized directories.</p>
+        <div class="security-note"><span class="security-icon" aria-hidden="true"></span><div><strong>Private by design</strong><small>Your password is verified by your configured identity provider.</small></div></div>
     </div>
-</div>
+
+    <div class="auth-card">
+        <div class="auth-card-heading"><span class="section-kicker">Account</span><h2>Sign in to {{ app_name }}</h2></div>
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}<div class="app-alert" role="alert"><span aria-hidden="true">!</span><p>{{ messages[0] }}</p></div>{% endif %}
+        {% endwith %}
+        <form method="post" action="{{ url_for('login_post') }}" class="auth-form">
+            <label for="username">Username</label>
+            <input id="username" type="text" name="username" placeholder="Your organization username" autocomplete="username" required autofocus>
+            <label for="password">Password</label>
+            <input id="password" type="password" name="password" placeholder="Your password" autocomplete="current-password" required>
+            <button class="app-button app-button-primary app-button-full" type="submit">Sign in <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="auth-footnote">You will remain signed in on this browser until you sign out.</p>
+    </div>
+</section>
 {% endblock %}

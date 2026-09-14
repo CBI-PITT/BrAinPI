@@ -89,21 +89,16 @@ def s3_get_dir_contents(path, recursive=False):
     Retrieve the directory contents of an S3 bucket path.
 
     This function uses a paginator to list objects and common prefixes (directories)
-    under a specified S3 path. It returns a tuple containing:
-        - root (str): The root path without the bucket name.
-        - dirs (tuple): A tuple of directory names.
-        - files (tuple): A tuple of file keys.
-        - files_sizes (tuple): A tuple of file sizes.
-        - files_modified (tuple): A tuple of file last modification timestamps (as datetime objects).
+    under a specified S3 path. It supports recursive listing as well as listing
+    with a delimiter.
 
-    The function supports recursive listing as well as listing with a delimiter.
-
-    Parameters:
+    Args:
         path (str): The S3 path in the form 'bucket/path/to/directory'.
         recursive (bool): If True, list contents recursively. Otherwise, list only immediate children.
 
     Returns:
-        tuple: (root, dirs, files, files_sizes, files_modified)
+        tuple: The root path, directory names, file keys, file sizes, and file
+        modification timestamps.
     """
     # if not ( 'cache_disk' in locals() or 'cache_disk' in globals() ):
     #     cache_disk = False

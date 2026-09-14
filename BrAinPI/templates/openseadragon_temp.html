@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deep Zoom Viewer</title>
+  <meta name="theme-color" content="#071923" />
+  <title>{{ file_name }} · OpenSeadragon</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/2.3.1/openseadragon.min.js"></script>
   <style>
     html,
@@ -211,9 +212,11 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/app-theme.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/osd-viewer.css') }}" />
 </head>
 
-<body>
+<body class="osd-shell">
   <svg width="0" height="0" style="position:absolute">
     <filter id="osd-lut-filter" color-interpolation-filters="sRGB">
       <feComponentTransfer>
@@ -224,10 +227,26 @@
     </filter>
   </svg>
 
-  <div id="control_panel">
+  <header class="osd-topbar">
+    <div class="osd-brand">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span class="osd-brand-copy"><strong>BrAinPI</strong><small>OpenSeadragon viewer</small></span>
+    </div>
+    <div class="osd-file" title="{{ file_name }}">
+      <span>Dataset</span>
+      <strong>{{ file_name }}</strong>
+    </div>
+    <div class="stream-status"><span aria-hidden="true"></span> Streaming tiles</div>
+  </header>
+
+  <section id="control_panel" aria-label="Viewer controls">
+    <div class="control-panel-heading">
+      <div><span>View controls</span><small>Choose a plane and tune its display.</small></div>
+      <span class="image-dimensions">{{ width }} × {{ height }} px</span>
+    </div>
     <div id="select_wrapper">
       <div class="control_group">
-        <label for="t_point_select">Time Point</label>
+        <label for="t_point_select">Time point</label>
         <select id="t_point_select">
           {% if t_point_values %}
           {% for t in t_point_values %}
@@ -243,7 +262,7 @@
 
       {% if m_point and m_point|int > 1 %}
       <div class="control_group">
-        <label for="m_point_select">M Point</label>
+        <label for="m_point_select">M point</label>
         <select id="m_point_select">
           {% if m_point_values %}
           {% for m in m_point_values %}
@@ -274,7 +293,7 @@
       </div>
 
       <div class="control_group">
-        <label for="z_stack_select">Z Stack</label>
+        <label for="z_stack_select">Z plane</label>
         <select id="z_stack_select">
           {% for z in range(z_stack) %}
           <option value="{{ z }}" {% if z==0 %} selected {% endif %}>{{ z }}</option>
@@ -309,19 +328,19 @@
 
       <div class="control_group">
         <label>&nbsp;</label>
-        <button id="reset_display" type="button">Reset Display</button>
+        <button id="reset_display" type="button">Reset display</button>
       </div>
       {% endif %}
 
       <div class="info_badge">
         {% if m_point and m_point|int > 1 %}
-        Support axes TCZYXM
+        Axes · TCZYXM
         {% else %}
-        Support standard axes TCZYX
+        Axes · TCZYX
         {% endif %}
       </div>
     </div>
-  </div>
+  </section>
 
   <div id="viewer"></div>
 

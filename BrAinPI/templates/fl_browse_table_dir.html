@@ -1,258 +1,129 @@
 {% extends "fl_browse_full_page.html" %}
 
 {% block content %}
-
-{# This displays a link to the parent directory above table #}
-<div class="container ps-0">
-    {% if not current_path['parent_is_root'] %}
-
-        <div id="parent-link" class="file-dir ps-5 parent-path">
-            <a href="{{ current_path['parent_path'] }}">
-                [Parent] {{  current_path['parent_folder_name'] }}
-            </a>
-        </div>
-        {% else %}
-        <div id="parent-link" class="file-dir ps-5 parent-path">
-            <a href="{{ current_path['parent_path'] }}">
-                [Top Level]
-            </a>
-        </div>
-
-{% endif %}
-
-{# This is to describe the current directory and stats in the table #}
-<table id="myTable" class="mx-auto">
-    <thead>
-    <tr class="bg-light">
-        <th class="w-50">Dir | File</th>
-       
-        <th>Updated</th>
-        <th>Size</th>
-    </tr>
-    </thead>
-
-    <tr class="">
-        <td class="file-dir ps-5 dir-path">
-            {% if not current_path['parent_is_root'] %}
-            <a class="" href="{{ current_path['parent_path'] }}">
-                {{ current_path['parent_folder_name'] }}
-            </a>
-            {% else %}
-            <a class="" href="{{ current_path['parent_path'] }}">
-            [top level]
-            </a>
-            {% endif %}
-        </td>
-        <td class="">
-            {{ current_path['current_path_modtime'] }}
-        </td>
-        <td class="">
-            D: {{ current_path['current_path_entries'][0] }} F: {{ current_path['current_path_entries'][1] }}
-        </td>
-    </tr>   
-
-{# This is to describe all directories and stats in the current directory #}
-{% for dir in current_path['dirs'] %}
-    <tr class="">
-        <td class="file-dir ps-5 subdir-path"><span class="d-none sort-hack">0</span>
-            <a class="ms-3" href="{{ dir }}">{{ current_path['dirs_name'][loop.index0] }}</a>
-        </td>
-        <td class="">
-            {{ current_path['dirs_modtime'][loop.index0] }}
-        </td>
-        <td class="">
-            D: {{ current_path['dirs_entries'][loop.index0][0] }} F: {{ current_path['dirs_entries'][loop.index0][1] }}
-        </td>
-    </tr>
-        {% endfor %}
-        
-        {# This is to describe all files and stats in the current directory #}
-        {% for file in current_path['files'] %}
-
-    <tr class="file-row">
-        <td class="file-dir ps-5 file-path" ><span class="d-none sort-hack">1</span>
-            
-<div class="brain-file-btn"
-    data-fdata='{{ current_path['files_json'][file] | tojson }}'
-    data-filename="{{ current_path['files_name'][loop.index0] }}" 
-    data-fileslug="{{ current_path['files_dl'][loop.index0] }}" 
-    data-ngslug="{{ current_path['files_ng_slug'][loop.index0] }}" 
-    data-filesize="{{ current_path['files_size'][loop.index0] }}"
-    data-opsdslug="{{current_path['files_opsd_slug'][loop.index0]}}"
-    data-omezarrslug="{{current_path['files_omezarr_slug'][loop.index0]}}"
-    data-updated="{{ current_path['files_modtime'][loop.index0] }}" 
-    data-bs-toggle="modal" data-bs-target="#brainModal">
-    <span class="ms-4">{{ current_path['files_name'][loop.index0] }}</span>
-        </div>
-             
-        </td>
-        <td class="">
-            {{ current_path['files_modtime'][loop.index0] }}
-        </td>
-        <td class=""><span class="d-none sort-hack">{{ current_path['files_size'][loop.index0][2] }}</span>
-            S: {{ current_path['files_size'][loop.index0][0] }} {{ current_path['files_size'][loop.index0][1] }}
-        </td>
-    </tr>
-{% endfor %}
-</table>
-</div>
-<!-- Button trigger modal -->
-
-  
-  <!-- Modal -->
-  <div class="modal fade" id="brainModal" tabindex="-1" aria-labelledby="brainModalLabel" aria-hidden="true">
-    <div class="modal-dialog w-75">
-      <div class="modal-content">
-        <div class="modal-header header">
-          <h5 class="modal-title" id="brainModalLabel">File Options</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <p>File Size: <span id="brainModalFileSize"></span></p>
-          <p>Last Updated: <span id="brainModalUpdated"></span></p>
-        </div>
-        <div class="modal-footer">
-          <a href="#" type="button" id="brainModalNgSlug" class="btn btn-primary btn-sm" target="ngwindow">View on NG</a>
-          <a href="#" type="button" id="brainModalOpsdSlug" class="btn btn-primary btn-sm" target="opsdwindow">View on OSD</a>
-          <a href="#" type="button" id="brainModalFileSlug" class="btn btn-primary btn-sm" target="dlwindow">Download</a>
-          <a href="#" type="button" id="brainModalFileInfo" class="btn btn-primary btn-sm" target="nginfowindow">NG Info</a>
-          <a href="#" type="button" id="brainModalOmeZarrSlug" class="btn btn-primary btn-sm" target="omezarrwindow">OmeZarr</a>
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-          
-        </div>
-      </div>
+<section class="explorer-heading">
+    <div>
+        <p class="browser-eyebrow">Dataset explorer</p>
+        <h1>{% if current_path['html_path_split']|length > 1 %}{{ current_path['html_path_split'][-1] }}{% else %}Available data{% endif %}</h1>
+        <p>Navigate folders or select an imaging file to choose a viewer and inspect its metadata.</p>
     </div>
-  </div>
-  
-  
+    <div class="directory-stats" aria-label="Directory summary">
+        <span><strong>{{ current_path['current_path_entries'][0] }}</strong> folders</span>
+        <span><strong>{{ current_path['current_path_entries'][1] }}</strong> files</span>
+    </div>
+</section>
+
+<a id="parent-link" class="parent-link" href="{{ current_path['parent_path'] }}">
+    <span aria-hidden="true">←</span>
+    {% if not current_path['parent_is_root'] %}Back to {{ current_path['parent_folder_name'] }}{% else %}Back to top level{% endif %}
+</a>
+
+<section class="table-card" aria-label="Files and folders">
+    <table id="myTable" class="explorer-table">
+        <thead><tr><th>Name</th><th>Last updated</th><th>Contents / size</th></tr></thead>
+        <tbody>
+            <tr class="current-directory-row">
+                <td>
+                    <div class="entry entry-folder entry-current">
+                        <span class="entry-glyph" aria-hidden="true"></span>
+                        <span><strong>Current directory</strong><small>{{ current_path['current_path'] }}</small></span>
+                    </div>
+                </td>
+                <td>{{ current_path['current_path_modtime'] }}</td>
+                <td><span class="meta-pill">{{ current_path['current_path_entries'][0] }} D · {{ current_path['current_path_entries'][1] }} F</span></td>
+            </tr>
+
+            {% for dir in current_path['dirs'] %}
+            <tr>
+                <td><span class="d-none sort-hack">0</span><a class="entry entry-folder" href="{{ dir }}"><span class="entry-glyph" aria-hidden="true"></span><span><strong>{{ current_path['dirs_name'][loop.index0] }}</strong><small>Folder</small></span></a></td>
+                <td>{{ current_path['dirs_modtime'][loop.index0] }}</td>
+                <td><span class="meta-pill">{{ current_path['dirs_entries'][loop.index0][0] }} D · {{ current_path['dirs_entries'][loop.index0][1] }} F</span></td>
+            </tr>
+            {% endfor %}
+
+            {% for file in current_path['files'] %}
+            <tr class="file-row">
+                <td><span class="d-none sort-hack">1</span>
+                    <button class="entry entry-file brain-file-btn" type="button"
+                        data-fdata='{{ current_path['files_json'][file] | tojson }}'
+                        data-bs-toggle="modal" data-bs-target="#brainModal">
+                        <span class="entry-glyph" aria-hidden="true"></span>
+                        <span><strong>{{ current_path['files_name'][loop.index0] }}</strong><small>Imaging dataset · Select for options</small></span>
+                    </button>
+                </td>
+                <td>{{ current_path['files_modtime'][loop.index0] }}</td>
+                <td><span class="d-none sort-hack">{{ current_path['files_size'][loop.index0][2] }}</span><span class="meta-pill">{{ current_path['files_size'][loop.index0][0] }} {{ current_path['files_size'][loop.index0][1] }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<div class="modal fade" id="brainModal" tabindex="-1" aria-labelledby="brainModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content file-modal">
+            <div class="modal-header">
+                <div><span class="modal-kicker">Dataset options</span><h2 class="modal-title" id="brainModalLabel">File options</h2></div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="file-detail"><span>File size</span><strong id="brainModalFileSize"></strong></div>
+                <div class="file-detail"><span>Last updated</span><strong id="brainModalUpdated"></strong></div>
+                <p class="modal-help">Available actions depend on the dataset format.</p>
+            </div>
+            <div class="modal-footer">
+                <a href="#" id="brainModalNgSlug" class="browser-button browser-button-primary" target="ngwindow">Open Neuroglancer</a>
+                <a href="#" id="brainModalOpsdSlug" class="browser-button browser-button-primary" target="opsdwindow">OpenSeadragon</a>
+                <a href="#" id="brainModalFileSlug" class="browser-button" target="dlwindow">Download</a>
+                <a href="#" id="brainModalFileInfo" class="browser-button" target="nginfowindow">NG info</a>
+                <a href="#" id="brainModalOmeZarrSlug" class="browser-button" target="omezarrwindow">Copy OME-Zarr URL</a>
+                <button type="button" class="browser-button browser-button-muted" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-
-
-
-
-// Modal configuration for accessing file options
-
-const dataTable = new simpleDatatables.DataTable(
-    "#myTable", 
-      {
-         searchable: true,
-         fixedHeight: true,
-         columns: [
-             // Sort the second column in ascending order
-             { select: 0, sort: "asc" },
-           ]
-       }
-);
-
-// frows.addEventListener('click',barfalert,false);
-
-var brainModalEl = document.getElementById('brainModal')
-brainModalEl.addEventListener('show.bs.modal', function (event) {
-  console.log('got modal, got dataset',event.relatedTarget.dataset);
-  var bdata = event.relatedTarget.dataset;
-  var fdata = JSON.parse(event.relatedTarget.dataset.fdata);
-  // console.log('got fdata?',fdata.files_omezarr_slug);
-
-  event.target.querySelector('#brainModalLabel').innerHTML = fdata.files_name;
-  event.target.querySelector('#brainModalUpdated').innerHTML = fdata.files_modtime;
-  event.target.querySelector('#brainModalFileSize').innerHTML = fdata.files_size[0] + ' ' + fdata.files_size[1];
-
-// Button Configuration for file options
-
-// OPSD Button 
-
-var opsd_btn = event.target.querySelector('#brainModalOpsdSlug')
-  if (fdata.files_opsd_slug)
-{
-  opsd_btn.setAttribute('href',fdata.files_opsd_slug);
-  opsd_btn.classList.remove('d-none');
-}
-else{
-  opsd_btn.setAttribute('href',fdata.files_opsd_slug)
-  opsd_btn.classList.add('d-none');
-}  
-
-// Neuroglancer Button and Info
-
-  var ng_btn = event.target.querySelector('#brainModalNgSlug')
-  var ng_info_btn = event.target.querySelector('#brainModalFileInfo')
-  if (fdata.files_ng_slug)
-{
-  
-  ng_btn.setAttribute('href',fdata.files_ng_slug);
-  ng_btn.classList.remove('d-none');
-  
-  ng_info_btn.setAttribute('href',fdata.files_ng_info);
-  ng_info_btn.classList.remove('d-none');
-  
-}
-else{
-  ng_btn.setAttribute('href',fdata.files_ng_slug)
-  ng_btn.classList.add('d-none');
-  
-  ng_info_btn.setAttribute('href',fdata.files_ng_info);
-  ng_info_btn.classList.add('d-none');
-}  
-
-// Download Button
-
-  var dl_btn = event.target.querySelector('#brainModalFileSlug') 
-
-  if (fdata.files_dl)
-  {
-  dl_btn.setAttribute('href',fdata.files_dl);
-  dl_btn.classList.remove('d-none');
-}
-  else{
-  dl_btn.setAttribute('href',fdata.files_dl);
-  dl_btn.classList.add('d-none');
-  }
-
-// OmeZarr Button
-  var omezarr_btn = event.target.querySelector('#brainModalOmeZarrSlug')
-  if (fdata.files_omezarr_slug)
-{
-  // console.log('omezarr exist')
-  // console.log('omezarr link',fdata.files_omezarr_slug)
-  omezarr_btn.setAttribute('href',fdata.files_omezarr_slug);
-  omezarr_btn.classList.remove('d-none');
-  
-}  else{
-  omezarr_btn.setAttribute('href',fdata.files_omezarr_slug);
-  omezarr_btn.classList.add('d-none');
-  }
-  
-  
-  console.log('does target have href?',bdata.ngslug,event.target.querySelector('#brainModalNgSlug').href)
-
-  // event.target.querySelector('#')
-  console.log('what is event.target',event.target.querySelector('#brainModalLabel'));
-})
-
-
-document.getElementById('brainModalOmeZarrSlug').addEventListener('click', async function (e) {
-  e.preventDefault();
-
-  const href = this.getAttribute('href');
-  if (!href) return;
-
-  // Convert relative URL → full URL
-  const fullUrl = new URL(href, window.location.origin).href;
-
-  try {
-    await navigator.clipboard.writeText(fullUrl);
-
-    const originalText = this.textContent;
-    this.textContent = 'Copied ✅';
-
-    setTimeout(() => {
-      this.textContent = originalText;
-    }, 1500);
-
-  } catch (err) {
-    alert('Copy failed. Please try again.');
-  }
+const dataTable = new simpleDatatables.DataTable("#myTable", {
+    searchable: true,
+    fixedHeight: false,
+    perPage: 15,
+    perPageSelect: [10, 15, 25, 50],
+    labels: { placeholder: "Search this directory…", perPage: "{select} entries per page", noRows: "This directory is empty", info: "Showing {start}–{end} of {rows}" },
+    columns: [{ select: 0, sort: "asc" }]
 });
-  </script>
-  
+
+const modal = document.getElementById('brainModal');
+const setAction = (selector, href) => {
+    const element = modal.querySelector(selector);
+    if (href) { element.setAttribute('href', href); element.classList.remove('d-none'); }
+    else { element.removeAttribute('href'); element.classList.add('d-none'); }
+};
+
+modal.addEventListener('show.bs.modal', (event) => {
+    const data = JSON.parse(event.relatedTarget.dataset.fdata);
+    modal.querySelector('#brainModalLabel').textContent = data.files_name;
+    modal.querySelector('#brainModalUpdated').textContent = data.files_modtime;
+    modal.querySelector('#brainModalFileSize').textContent = `${data.files_size[0]} ${data.files_size[1]}`;
+    setAction('#brainModalOpsdSlug', data.files_opsd_slug);
+    setAction('#brainModalNgSlug', data.files_ng_slug);
+    setAction('#brainModalFileInfo', data.files_ng_info);
+    setAction('#brainModalFileSlug', data.files_dl);
+    setAction('#brainModalOmeZarrSlug', data.files_omezarr_slug);
+});
+
+document.getElementById('brainModalOmeZarrSlug').addEventListener('click', async function (event) {
+    event.preventDefault();
+    const href = this.getAttribute('href');
+    if (!href) return;
+    try {
+        await navigator.clipboard.writeText(new URL(href, window.location.origin).href);
+        const originalText = this.textContent;
+        this.textContent = 'URL copied ✓';
+        setTimeout(() => { this.textContent = originalText; }, 1500);
+    } catch (error) {
+        window.prompt('Copy this OME-Zarr URL:', new URL(href, window.location.origin).href);
+    }
+});
+</script>
 {% endblock %}

@@ -33,6 +33,7 @@ DEFAULT_CHANNEL_COLORS = [
     "#ffffff",
 ]
 DEFAULT_LUT_PERCENTILES = (1, 99)
+OSD_TILE_CACHE_VERSION = 2
 
 
 def _is_rgb_volume(img_obj):
@@ -44,6 +45,71 @@ def _is_rgb_volume(img_obj):
         return bool(metadata.get("packed_rgb")) or int(metadata.get("ndim", 0)) == 6
     except Exception:
         return False
+
+
+def _packed_color_samples(img_obj):
+    """Return the packed RGB(A) sample count advertised by a loader."""
+    try:
+        metadata = img_obj.metadata
+        value = metadata.get("packed_color_samples")
+        if value is not None:
+            return int(value)
+        # Backwards compatibility for loaders that only expose packed_rgb.
+        if metadata.get("packed_rgb") or int(metadata.get("ndim", 0)) == 6:
+            return 3
+        return None
+    except Exception:
+        return None
+
+
+def _prepare_packed_color_chunk(chunk, sample_count, alpha_associated=False):
+    """Convert a C-first RGB(A) loader tile into OpenCV's BGR(A) layout."""
+    chunk = np.asarray(chunk)
+    if chunk.ndim > 3:
+        # A loader may retain singleton T/Z dimensions. Remove only those,
+        # preserving one-pixel Y/X dimensions in edge tiles and tiny images.
+        sample_axes = [
+            axis
+            for axis, size in enumerate(chunk.shape[:-2])
+            if size == sample_count
+        ]
+        if not sample_axes:
+            raise ValueError(
+                f"Packed color tile expected {sample_count} samples; received shape {chunk.shape}"
+            )
+        sample_axis = sample_axes[0]
+        index = tuple(
+            slice(None) if axis in (sample_axis, chunk.ndim - 2, chunk.ndim - 1) else 0
+            for axis in range(chunk.ndim)
+        )
+        chunk = chunk[index]
+    if chunk.ndim != 3:
+        raise ValueError(f"Packed color tile must be 3D; received shape {chunk.shape}")
+    if chunk.shape[0] == sample_count:
+        chunk = np.moveaxis(chunk, 0, -1)
+    elif chunk.shape[-1] != sample_count:
+        raise ValueError(
+            f"Packed color tile expected {sample_count} samples; received shape {chunk.shape}"
+        )
+
+    if chunk.dtype != np.uint8:
+        chunk = utils.dtype_to_uint8(chunk)
+
+    if sample_count == 3:
+        return cv2.cvtColor(chunk, cv2.COLOR_RGB2BGR)
+    if sample_count != 4:
+        raise ValueError(f"Unsupported packed color sample count: {sample_count}")
+
+    if alpha_associated:
+        # TIFF associated alpha stores premultiplied RGB, whereas PNG expects
+        # straight (unassociated) alpha. Undo the multiplication before encode.
+        rgba = chunk.astype(np.float32)
+        alpha = rgba[..., 3:4]
+        scale = np.zeros_like(alpha)
+        np.divide(255.0, alpha, out=scale, where=alpha > 0)
+        rgba[..., :3] = np.clip(rgba[..., :3] * scale, 0, 255)
+        chunk = np.rint(rgba).astype(np.uint8)
+    return cv2.cvtColor(chunk, cv2.COLOR_RGBA2BGRA)
 
 
 def _normalize_hex_color(color, fallback):
@@ -421,6 +487,7 @@ def setup_openseadragon(app, config):
                 channel_infos = [] if is_rgb_volume else _build_channel_infos(img_obj)
                 return render_template(
                     "openseadragon_temp.html",
+                    file_name=os.path.basename(datapath),
                     height=int(img_obj.metadata.get('shape')[-2]),
                     width=int(img_obj.metadata.get('shape')[-1]),
                     # tileSize=img_obj.metadata.get('chunks')[-2:],
@@ -480,13 +547,19 @@ def setup_openseadragon(app, config):
             img = None
             if config.cache is not None:
                 # print("cache not none")
-                cache_key = f"osd_{datapath_key}-{r}-{t}-{c}-{z}-{y}-{x}"
+                cache_key = (
+                    f"osd_v{OSD_TILE_CACHE_VERSION}_"
+                    f"{datapath_key}-{r}-{t}-{c}-{z}-{y}-{x}"
+                )
                 img = config.cache.get(cache_key, default=None, retry=True)
                 if img is not None:
                     logger.info("osd cache found")
             if img is None:
                 is_rgb_volume = _is_rgb_volume(img_obj)
-                channel_slice = slice(None) if is_rgb_volume else slice(c, c + 1)
+                color_samples = _packed_color_samples(img_obj) if is_rgb_volume else None
+                channel_slice = (
+                    slice(0, color_samples) if color_samples is not None else slice(c, c + 1)
+                )
                 chunk = img_obj[r,
                                 slice(t,t+1),
                                 channel_slice,
@@ -495,14 +568,15 @@ def setup_openseadragon(app, config):
                                 slice(x[0],x[1]),
                                 ]
                 logger.info(chunk.shape)
-                chunk = np.squeeze(chunk)
-                if is_rgb_volume and chunk.ndim == 3 and chunk.shape[0] == 3:
-                    chunk = np.moveaxis(chunk, 0, -1)
-                if len(chunk.shape) == 3 and chunk.shape[2] == 3:  # Color image
-                    if chunk.dtype != np.uint8:
-                        chunk = utils.dtype_to_uint8(chunk)
-                    chunk = cv2.cvtColor(chunk, cv2.COLOR_RGB2BGR)
-                elif not is_rgb_volume:
+                if color_samples is not None:
+                    chunk = _prepare_packed_color_chunk(
+                        chunk,
+                        color_samples,
+                        bool(img_obj.metadata.get("alpha_associated", False)),
+                    )
+                else:
+                    chunk = np.squeeze(chunk)
+                if not is_rgb_volume:
                     channel_info = _build_channel_infos(img_obj)[c]
                     chunk = _convert_to_uint8(chunk)
                 elif chunk.dtype != np.uint8:

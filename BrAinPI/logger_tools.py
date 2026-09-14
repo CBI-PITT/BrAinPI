@@ -1,5 +1,6 @@
 """Configure the process-wide Loguru logger from ``settings.ini``."""
 
+import os
 import sys
 from config_tools import get_config
 from loguru import logger
@@ -8,6 +9,7 @@ from loguru import logger
 settings = get_config("settings.ini")
 
 ENVIRONMENT = settings.get("app", "log_engine")
+LOG_FILE = os.environ.get("BRAINPI_LOG_FILE", "logfile.log")
 # Logging setting
 # Remove the default logger to avoid duplicate logs
 def setup_logger():
@@ -20,7 +22,8 @@ def setup_logger():
         logger.add(sys.stdout, level="TRACE")
     if ENVIRONMENT == "production":
         logger.add(sys.stdout, level="SUCCESS")
-        logger.add("logfile.log", rotation="500 MB", level="SUCCESS")
+        if LOG_FILE:
+            logger.add(LOG_FILE, rotation="500 MB", level="SUCCESS")
 
 # Ensure the logger is set up once during import
 setup_logger()

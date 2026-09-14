@@ -18,6 +18,23 @@ from utils import calculate_hash, get_directory_size, delete_oldest_files, loade
 from loader_indexing import normalize_data_key
 from loader_axes import plan_tczyx_source_read, samples_as_channels
 
+
+def _packed_color_metadata(photometric, samples_per_pixel, extra_samples=()):
+    """Describe packed RGB/RGBA samples without classifying ordinary C axes."""
+    photometric_name = str(getattr(photometric, "name", photometric)).upper()
+    is_rgb = photometric_name == "RGB" or str(photometric) == "2"
+    sample_count = int(samples_per_pixel)
+    if not is_rgb or sample_count not in (3, 4):
+        return False, None, False
+
+    extra_sample_names = tuple(
+        str(getattr(sample, "name", sample)).upper() for sample in extra_samples
+    )
+    has_alpha = sample_count == 4
+    alpha_associated = has_alpha and "ASSOCALPHA" in extra_sample_names
+    return True, sample_count, alpha_associated
+
+
 class tiff_loader:
     """
     A class to load, validate, and process TIFF image files.
@@ -117,12 +134,16 @@ class tiff_loader:
         self.source_channels = self.axes_value_dic.get("C", 1)
         self.samples_per_pixel = self.axes_value_dic.get("S", 1)
         self.Channels = self.source_channels * self.samples_per_pixel
-        photometric_name = str(getattr(self.photometric, "name", self.photometric)).upper()
-        self.packed_rgb = (
-            self.source_channels == 1
-            and self.samples_per_pixel == 3
-            and (photometric_name == "RGB" or str(self.photometric) == "2")
+        packed_color, packed_color_samples, alpha_associated = _packed_color_metadata(
+            self.photometric,
+            self.samples_per_pixel,
+            self.image.pages[0].extrasamples,
         )
+        # ``S`` represents interleaved color samples here. A source ``C`` axis,
+        # even one with four channels, remains ordinary scientific channel data.
+        self.packed_rgb = self.source_channels == 1 and "S" in self.type and packed_color
+        self.packed_color_samples = packed_color_samples if self.packed_rgb else None
+        self.alpha_associated = alpha_associated if self.packed_rgb else False
         self.z = self.axes_value_dic.get("Z")
         # if nonstandard_axes_wrap:
         #     self.TimePoints = (
@@ -163,6 +184,8 @@ class tiff_loader:
         self.metaData['samples_per_pixel'] = self.samples_per_pixel
         self.metaData['samples_folded_into_channels'] = self.samples_per_pixel > 1
         self.metaData['packed_rgb'] = self.packed_rgb
+        self.metaData['packed_color_samples'] = self.packed_color_samples
+        self.metaData['alpha_associated'] = self.alpha_associated
         self.ResolutionLevels = len(self.image.series[0].levels) if self.is_pyramidal else len(self.image.series)
         layers = self.image.series[0].levels if self.is_pyramidal else self.image.series
 

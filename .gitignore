@@ -11,6 +11,7 @@ __pycache__/
 */groups.ini
 */public_key.pem
 */private_key.key
+.env
 
 # Distribution / packaging
 .Python
@@ -90,4 +91,3 @@ venv/
 
 # written by setuptools_scm
 **/_version.py
-

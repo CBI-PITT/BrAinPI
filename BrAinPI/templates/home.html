@@ -1,17 +1,43 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h1 style="font-size: 30px">{{app_name}}</h1>
-{% if app_description %}
-<p style="font-size: 20px">{{app_description}}</p>
-{% endif %}
-<div class="img-with-text">
-    {% if app_logo %}
-    <img src="{{ url_for('static', filename=app_logo) }}" alt="logo" />
-    {% endif %}
-    {% if app_motto %}
-    <p style="font-size: 30px">{{app_motto}}</p>
-    {% endif %}
-</div>
+<div class="home-page">
+    <section class="home-hero home-hero-balanced">
+        <div class="hero-copy">
+            <p class="eyebrow"><span></span> {{ app_description or 'Imaging data infrastructure' }}</p>
+            <h1 class="display-title">Explore imaging data with clarity.</h1>
+            <p class="hero-lead">{{ app_name }} brings large microscopy datasets, essential metadata, and scientific viewers into one focused workspace.</p>
+            <div class="hero-actions">
+                <a class="app-button app-button-primary" href="{{ url_for('browse_fs') }}">Browse datasets <span aria-hidden="true">→</span></a>
+                {% if not user['is_authenticated'] %}<a class="app-button app-button-secondary" href="{{ url_for('login') }}">Sign in for protected data</a>{% endif %}
+            </div>
+            {% if app_motto %}<p class="home-caption">{{ app_motto }}</p>{% endif %}
+        </div>
 
+        <aside class="home-showcase" aria-label="Core platform capabilities">
+            <div class="showcase-heading">
+                <span class="section-kicker">Core capabilities</span>
+                {% if app_logo %}<img src="{{ url_for('static', filename=app_logo) }}" alt="{{ app_name }} logo">{% endif %}
+                <h2>Visualize and stream data at scale.</h2>
+            </div>
+            <ol class="showcase-steps">
+                <li><span>01</span><div><strong>Visualization</strong><small>Explore multidimensional images in Neuroglancer or OpenSeadragon.</small></div></li>
+                <li><span>02</span><div><strong>Streaming data</strong><small>Serve metadata, tiles, and chunks on demand without downloading the complete source first.</small></div></li>
+            </ol>
+        </aside>
+    </section>
+
+    <section class="capabilities-section" aria-labelledby="capabilities-title">
+        <div class="capabilities-heading">
+            <div><p class="eyebrow"><span></span> Built for research data</p><h2 id="capabilities-title">A practical path through complex images.</h2></div>
+            <p>Keep the original data organization while making large multidimensional images easier to discover, inspect, and share with the right audience.</p>
+        </div>
+        <div class="capability-grid">
+            <article><span class="capability-index">01</span><h3>Data at scale</h3><p>Pyramid generation and chunk-aware delivery keep very large microscopy images accessible.</p></article>
+            <article><span class="capability-index">02</span><h3>Viewer ready</h3><p>Launch supported datasets directly in Neuroglancer or OpenSeadragon from the browser.</p></article>
+            <article><span class="capability-index">03</span><h3>Access aware</h3><p>Separate public and authenticated paths with optional LDAP and group-based visibility.</p></article>
+            <article><span class="capability-index">04</span><h3>Deploy flexibly</h3><p>Run natively or in Docker while keeping datasets, cache, and generated pyramids persistent.</p></article>
+        </div>
+    </section>
+</div>
 {% endblock %}

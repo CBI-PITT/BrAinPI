@@ -14,6 +14,30 @@ from zarr_stores.archived_nested_store import Archived_Nested_Store
 from zarr_stores.h5_nested_store import H5_Nested_Store
 import hashlib
 
+
+_CONFIG_ENV = {
+    "settings.ini": "BRAINPI_SETTINGS",
+    "groups.ini": "BRAINPI_GROUPS",
+}
+
+
+def _resolve_config_path(file):
+    """Resolve a configuration file, honoring container-friendly overrides."""
+    if os.path.isabs(file):
+        return file
+
+    override_name = _CONFIG_ENV.get(file)
+    override = os.environ.get(override_name) if override_name else None
+    if override:
+        return os.path.abspath(override)
+
+    config_dir = os.environ.get("BRAINPI_CONFIG_DIR")
+    if config_dir:
+        return os.path.abspath(os.path.join(config_dir, file))
+
+    dir_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(dir_path, file)
+
 # def calculate_hash(input_string):
 #     """
 #     Calculate the SHA-256 hash of the input string
@@ -23,12 +47,11 @@ import hashlib
 
 def get_config(file='settings.ini',allow_no_value=True):
     """
-    Load configuration settings from the created setting.ini file.
+    Load configuration settings from the requested INI file.
 
-    This function reads configuration settings from a specified settings,ini file.
-    It is primarily used for loading settings. It can be used for Sphinx 
-    documentation generation if the file does not exist, it will fall back to a 
-    template version of the file.
+    Relative default filenames honor the corresponding ``BRAINPI_*`` path
+    override and ``BRAINPI_CONFIG_DIR``. Missing files are rejected immediately;
+    callers such as Sphinx must explicitly select a template configuration.
 
     Args:
         file (str, optional): The name of the INI file to load. Defaults to 'settings.ini'.
@@ -39,14 +62,41 @@ def get_config(file='settings.ini',allow_no_value=True):
         configparser.ConfigParser: A ConfigParser object containing the parsed configuration.
     """
     import configparser
-    dir_path = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(dir_path, file)
-    # This condition is used for documentation generation through sphinx and readTheDoc, plz always have settings.ini.
-    if os.path.exists(file_path) is False:
-        file_path = os.path.join(dir_path, 'template_' + file)
-        print('sphinx generation',file_path)
+    file_path = _resolve_config_path(file)
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"Configured BrAinPI config file does not exist: {file_path}")
     config = configparser.ConfigParser(allow_no_value=allow_no_value)
-    config.read(file_path)
+    with open(file_path, encoding="utf-8") as config_file:
+        config.read_file(config_file)
+
+    # Keep secrets and public deployment URLs out of image layers and config
+    # templates. Environment variables take precedence when supplied.
+    environment_overrides = {
+        "BRAINPI_SECRET_KEY": ("auth", "secret_key"),
+        "BRAINPI_PUBLIC_URL": ("app", "url"),
+        "BRAINPI_CACHE_DIR": ("disk_cache", "location_unix"),
+    }
+    for env_name, (section, option) in environment_overrides.items():
+        value = os.environ.get(env_name)
+        if value:
+            if not config.has_section(section):
+                config.add_section(section)
+            config.set(section, option, value)
+
+    pyramid_root = os.environ.get("BRAINPI_PYRAMIDS_DIR")
+    if pyramid_root:
+        pyramid_root = os.path.abspath(pyramid_root)
+        pyramid_locations = {
+            "pyramids_images_location": pyramid_root,
+            "tif_loader": os.path.join(pyramid_root, "tif"),
+            "nifti_loader": os.path.join(pyramid_root, "nifti"),
+            "jp2_loader": os.path.join(pyramid_root, "jp2"),
+        }
+        for section, path in pyramid_locations.items():
+            if not config.has_section(section):
+                config.add_section(section)
+            option = "location" if section == "pyramids_images_location" else "pyramids_images_store"
+            config.set(section, option, path)
     return config
     
 def get_pyramid_images_connection(settings):

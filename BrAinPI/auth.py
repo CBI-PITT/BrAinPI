@@ -130,18 +130,30 @@ def setup_auth(app):
         remote_ip = request.remote_addr #<--Potential to log attempts and restrict number of tries
         username = request.form.get('username')
         password = request.form.get('password')
-        #remember = True if request.form.get('remember') else False
-        remember = True
         ## Check user against domain server
         user = False # Default to False for security
         if 'auth' in settings and not settings.getboolean('auth','bypass_auth'):
+            # With ConfigParser(allow_no_value=True), both ``key =`` and a
+            # valueless ``key`` are valid, but the latter is returned as None.
+            domain_server = (settings.get('auth', 'domain_server', fallback='') or '').strip()
+            domain_port = (settings.get('auth', 'domain_port', fallback='') or '').strip()
+            domain_name = (settings.get('auth', 'domain_name', fallback='') or '').strip()
+
+            # An empty public/container template must not accidentally attempt
+            # authentication against localhost or construct an invalid LDAP
+            # URL. Anonymous routes remain usable when LDAP is not configured.
+            if not all((domain_server, domain_port, domain_name)):
+                app.logger.warning('LDAP login requested, but LDAP is not configured')
+                flash('Authentication is not configured for this deployment.')
+                return redirect(url_for('login'))
+
             user = domain_auth(username,
                                password,
                                domain_server=r"ldap://{}:{}".format(
-                                   settings.get('auth','domain_server'),
-                                   settings.get('auth','domain_port')
+                                   domain_server,
+                                   domain_port
                                    ),
-                               domain=settings.get('auth','domain_name')
+                               domain=domain_name
                                ) # Return bool True/False if auth succeeds/fails and None if error
             
             if user == False:
@@ -159,7 +171,9 @@ def setup_auth(app):
             return redirect(url_for('login')) # if the user doesn't exist or password is wrong, reload the page
     
         # if the above check passes, then we know the user has the right credentials
-        login_user(load_user(username), remember=remember)  
+        # Keep the authenticated identity across browser restarts until the
+        # remember cookie expires or the user explicitly logs out.
+        login_user(load_user(username), remember=True)
         print('Got to here')
         return redirect(url_for('browse_fs'))
     

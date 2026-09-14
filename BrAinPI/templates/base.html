@@ -1,64 +1,46 @@
-<!DOCTYPE html>
-<html>
-
+<!doctype html>
+<html lang="en">
 <head>
     {% if gtag %}
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id={{gtag}}"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag }}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', '{{gtag}}');
+      gtag('config', '{{ gtag }}');
     </script>
     {% endif %}
-
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ app_name }} {{ page_name }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles/base_template.css') }}" />
+    <meta name="theme-color" content="#0b2536">
+    <title>{{ app_name }}{% if page_name %} · {{ page_name }}{% endif %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/base_template.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/app-theme.css') }}">
 </head>
-
-<body>
-    <section class="hero is-primary is-fullheight">
-
-        <div class="hero-head">
-            <nav class="navbar">
-                <div class="container">
-                    {% if browser_active %}
-                    <div id="navbarMenuHeroA" class="navbar-menu">
-                        <div class="navbar-end">
-                            <a href="{{ url_for('home') }}" class="navbar-item">
-                                Home
-                            </a>
-							<a href="{{ url_for('browse_fs') }}" class="navbar-item">
-                                Browse Files
-                            </a>
-                            {% if not user['is_authenticated'] %}
-                            <a href="{{ url_for('login') }}" class="navbar-item">
-                                Login
-                            </a>
-                            {% endif %}
-                            {% if user['is_authenticated'] %}
-                            <a href="{{ url_for('logout') }}" class="navbar-item">
-                                Logout: {{ user.id }}
-                            </a>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
+<body class="app-shell">
+    <header class="site-header">
+        <div class="shell-container site-nav">
+            <a class="brand" href="{{ url_for('home') }}" aria-label="{{ app_name }} home">
+                <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+                <span class="brand-copy"><strong>{{ app_name }}</strong><small>Microscopy data platform</small></span>
+            </a>
+            <nav class="nav-links" aria-label="Primary navigation">
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('browse_fs') }}">Data browser</a>
+                {% if not user['is_authenticated'] %}
+                <a class="nav-action" href="{{ url_for('login') }}">Sign in</a>
+                {% else %}
+                <span class="user-chip" title="Signed in user">{{ user['id'] }}</span>
+                <a class="nav-action nav-action-muted" href="{{ url_for('logout') }}">Sign out</a>
+                {% endif %}
             </nav>
         </div>
+    </header>
 
-        <div class="hero-body">
-            <div class="container has-text-centered">
-               {% block content %}
-               {% endblock %}
-            </div>
-        </div>
-    </section>
+    <main class="site-main"><div class="shell-container">{% block content %}{% endblock %}</div></main>
+
+    <footer class="site-footer">
+        <div class="shell-container footer-inner"><span>{{ app_name }}</span><span>Research data, clearly presented.</span></div>
+    </footer>
 </body>
-
 </html>

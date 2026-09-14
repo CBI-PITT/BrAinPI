@@ -1,16 +1,17 @@
-{% with messages = get_flashed_messages() %}
-{% if messages %}
-    <div class="notification is-danger">
-        {{ messages[0] }}.</a>.
-    </div>
-{% endif %}
-{% endwith %}
-<form method="GET" action="/profile">
-
 {% extends "base.html" %}
 
 {% block content %}
-<h1 class="title">
-  Welcome, {{ user.id }}!
-</h1>
+<section class="profile-panel">
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}<div class="app-alert" role="alert"><span>!</span><p>{{ messages[0] }}</p></div>{% endif %}
+    {% endwith %}
+    <div class="profile-avatar" aria-hidden="true">{{ user['id'][0]|upper }}</div>
+    <p class="eyebrow"><span></span> Active session</p>
+    <h1>Welcome, {{ user['id'] }}.</h1>
+    <p>Your account is authenticated and protected datasets available to your user or groups can now appear in the data browser.</p>
+    <div class="hero-actions">
+        <a class="app-button app-button-primary" href="{{ url_for('browse_fs') }}">Open data browser <span>→</span></a>
+        <a class="app-button app-button-secondary" href="{{ url_for('logout') }}">Sign out</a>
+    </div>
+</section>
 {% endblock %}

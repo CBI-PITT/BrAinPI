@@ -854,7 +854,7 @@ def fix_special_characters_in_html(html_string):
 
 def strip_trailing_new_line(string):
     """
-    Remove trailing newline characters (`\n`) from a string.
+    Remove trailing ``\\n`` characters from a string.
 
     This function iteratively removes newline characters from the end of a string
     until no more trailing newlines remain.

@@ -1,90 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
+<head>
     {% if gtag %}
-    <!-- Google tag (gtag.js) -->
-    <script
-      async
-      src="https://www.googletagmanager.com/gtag/js?id={{gtag}}"
-    ></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtag }}"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
-      function gtag() {
-        dataLayer.push(arguments);
-      }
-      gtag("js", new Date());
-      gtag("config", "{{gtag}}");
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '{{ gtag }}');
     </script>
     {% endif %}
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>File Exception Warning</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        background-color: #f8f9fa;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-      }
-      .container {
-        text-align: center; /* Center the content */
-        background-color: #e7dcdc; /* White background */
-        padding: 30px; /* Add padding */
-        border-radius: 10px; /* Rounded corners */
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Add shadow */
-        max-width: 50%;
-      }
-      .exception-img {
-        border-radius: 1%; /* Make the image round */
-        box-shadow: 10px 10px 10px rgb(104, 81, 81); /* Add shadow to the image (right and bottom) */
-        margin-bottom: 20px; /* Margin space below the image */
-      }
-      h1 {
-        color: #dc3545;
-        font-size: 24px;
-        margin-bottom: 20px;
-      }
-      p {
-        color: #6c757d;
-        font-size: 18px;
-        margin-bottom: 20px;
-      }
-      .exception {
-        font-weight: bold;
-        color: #495057;
-      }
-      /* .button {
-            display: inline-block;
-            padding: 10px 20px;
-            font-size: 16px;
-            font-weight: bold;
-            color: #fff;
-            background-color: #007bff;
-            border: none;
-            border-radius: 4px;
-            text-decoration: none;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .button:hover {
-            background-color: #0056b3;
-        } */
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <img
-        src="{{ url_for('static', filename='images/file_exception.png')}}"
-        alt="Exception img"
-        class="exception-img"
-      />
-      <h1>Failed: Exception Happened</h1>
-      <p><span class="exception">Error: {{exception}}</span></p>
-      <!-- <a href="#" class="button" onclick="history.back()">Go Back</a> -->
-    </div>
-  </body>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b2536">
+    <title>Unable to open dataset · BrAinPI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/app-theme.css') }}">
+</head>
+<body class="status-shell status-shell-error">
+    <div class="status-brand" aria-label="BrAinPI"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><strong>BrAinPI</strong></div>
+
+    <main class="status-card status-card-with-image error-card" role="alert">
+        <div class="status-art error-art">
+            <img src="{{ url_for('static', filename='images/file_exception.png') }}" alt="Illustration of a file that could not be opened">
+            <span>Dataset exception</span>
+        </div>
+        <div class="status-content">
+            <p class="status-kicker error-kicker">Viewer unavailable</p>
+            <h1>Unable to open this dataset.</h1>
+            <p class="status-copy">BrAinPI encountered a problem while preparing the file for the viewer.</p>
+            <div class="error-detail"><span>Error detail</span><strong>{{ exception }}</strong></div>
+        </div>
+    </main>
+
+    <p class="status-footnote">The error has been recorded in the application log.</p>
+</body>
 </html>

@@ -153,6 +153,81 @@ Recommand to use one seperated Neuroglancer instance, configure it in setting.in
 python BrAinPI/neuroglancer_server.py
 ```
 
+## Docker
+
+The repository includes a Linux-based Docker deployment that runs on Docker
+Engine and Docker Desktop for Linux, macOS, and Windows. Configuration, source
+datasets, generated pyramids, and disk cache are kept outside the image.
+
+Create the local environment file and edit the data path and secret:
+
+```bash
+cp .env.example .env
+cp docker/template_settings.ini docker/settings.ini
+cp docker/template_groups.ini docker/groups.ini
+```
+
+Edit the renamed INI files for the deployment. They are ignored by Git, just
+like the plain/native `BrAinPI/settings.ini` and `BrAinPI/groups.ini` files.
+
+`BRAINPI_DATA_DIR` must be an existing absolute host path. On Docker Desktop,
+make sure that directory is shared with Docker. The container mounts source
+datasets read-only at `/data`; generated pyramids and cache entries use Docker
+named volumes.
+
+In `docker/settings.ini`, keep Neuroglancer as a separate Compose service and
+point generated viewer links at the browser-reachable frontend URL:
+
+```ini
+[neuroglancer]
+use_local_server = False
+local_ip = 0.0.0.0
+local_port = 9999
+url = http://localhost:9999/v/base/
+```
+
+Use a plain URL in the INI file; Markdown `[text](url)` syntax is invalid. If
+users open BrainPi from other computers, replace `localhost` with the server's
+hostname or public HTTPS URL.
+
+Build the shared image and start both BrAinPI and the independently supervised
+Neuroglancer frontend:
+
+```bash
+docker compose up --build -d
+docker compose ps
+curl http://localhost:5001/healthz
+curl http://localhost:9999/v/base/
+```
+
+Both services use the same `brainpi:local` image, so the image is built once.
+The `brainpi` container runs Gunicorn while the `neuroglancer` container runs
+`neuroglancer_server.py`. Keeping `use_local_server = False` prevents each
+Gunicorn worker from trying to launch another frontend process.
+
+Docker configuration templates are in `docker/template_settings.ini` and
+`docker/template_groups.ini`. Copy and rename them as shown above, then fill in
+deployment-specific values. The templates intentionally contain no LDAP
+server, domain, usernames, or group membership. Without LDAP settings, the
+service and anonymous paths remain available, while login and authenticated
+paths are unavailable. Keep `[all]` in the groups file even when it has no
+members. `BRAINPI_SETTINGS_FILE` and `BRAINPI_GROUPS_FILE` in `.env` may point
+Compose at differently named host files when needed.
+The following environment variables override their corresponding INI values:
+
+- `BRAINPI_SETTINGS` and `BRAINPI_GROUPS`: paths inside the container.
+- `BRAINPI_SECRET_KEY`: Flask session and signed-URL secret.
+- `BRAINPI_PUBLIC_URL`: browser-reachable base URL.
+- `BRAINPI_CACHE_DIR`: writable disk-cache path.
+- `BRAINPI_PYRAMIDS_DIR`: writable generated-pyramid root.
+- `BRAINPI_LOG_FILE`: optional file-log override. Plain production startup
+  defaults to `logfile.log`; Compose passes an empty value so Docker uses its
+  collected stdout logs instead.
+
+For production, put the service behind a TLS reverse proxy and replace the
+default external Neuroglancer URL as needed. Do not add protected datasets
+until authorization has been verified for the viewer-facing data endpoints.
+
 ## Main endpoints
 
 | Endpoint | Purpose |
