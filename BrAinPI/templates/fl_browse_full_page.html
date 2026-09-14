@@ -13,8 +13,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b2536">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/brainpi_icon.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/brainpi_icon.png') }}">
     <title>{{ current_path['title'] }} · Data browser</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/bootstrapv5.1.3.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/simple-datatablesv5.1.3.css') }}">
@@ -27,7 +27,7 @@
         <div class="container-fluid browser-nav-inner">
             <div class="browser-brand-cluster">
                 <a class="browser-brand" href="{{ url_for('home') }}" aria-label="BrAinPI home">
-                    <img class="browser-brand-icon" src="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}" alt="" aria-hidden="true">
+                    <img class="browser-brand-icon" src="{{ url_for('static', filename='images/brainpi_icon.png') }}" alt="" aria-hidden="true">
                     <span><strong>{{ current_path['header'] }}</strong><small>Data browser</small></span>
                 </a>
                 <span class="browser-brand-divider" aria-hidden="true"></span>

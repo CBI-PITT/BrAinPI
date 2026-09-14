@@ -13,8 +13,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0b2536">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/brainpi_icon.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/brainpi_icon.png') }}">
     <title>{{ app_name }}{% if page_name %} · {{ page_name }}{% endif %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/base_template.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/app-theme.css') }}">
@@ -23,7 +23,7 @@
     <header class="site-header">
         <div class="shell-container site-nav">
             <a class="brand" href="{{ url_for('home') }}" aria-label="{{ app_name }} home">
-                <img class="brand-icon" src="{{ url_for('static', filename='images/brainpi_icon_v3.png') }}" alt="" aria-hidden="true">
+                <img class="brand-icon" src="{{ url_for('static', filename='images/brainpi_icon.png') }}" alt="" aria-hidden="true">
                 <span class="brand-copy"><strong>{{ app_name }}</strong><small>Microscopy data platform</small></span>
             </a>
             <nav class="nav-links" aria-label="Primary navigation">
