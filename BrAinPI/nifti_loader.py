@@ -7,7 +7,6 @@ are rejected.
 
 import zarr, os, itertools
 import numpy as np
-import hashlib
 import shutil
 import time
 import nibabel as nib
@@ -19,14 +18,16 @@ from zarr.abc.store import (
 )
 from typing import Union
 from niizarr import nii2zarr
-# Path = Union[str, bytes, None]
-from pathlib import Path
 StoreLike = Union[ Store, MutableMapping]
 from logger_tools import logger
 from loader_indexing import normalize_data_key
 import gc
 import multiprocessing
-from utils import calculate_hash, get_directory_size, delete_oldest_files, loader_cache_key
+from utils import (
+    calculate_hash,
+    loader_cache_key,
+    pyramid_artifact_path,
+)
 
 
 def separate_process_generation(inp, out, time_axe):
@@ -43,41 +44,6 @@ def separate_process_generation(inp, out, time_axe):
     """
     nii2zarr(inp, out, no_time=time_axe)
 
-# def calculate_hash(input_string):
-#     # Calculate the SHA-256 hash of the input string
-#     hash_result = hashlib.sha256(input_string.encode()).hexdigest()
-#     return hash_result
-
-
-# def get_directory_size(directory):
-#     total_size = 0
-#     for dirpath, dirnames, filenames in os.walk(directory):
-#         for f in filenames:
-#             fp = os.path.join(dirpath, f)
-#             total_size += os.path.getsize(fp)
-#     return total_size
-
-
-# def delete_oldest_files(directory, size_limit):
-#     items = sorted(Path(directory).glob("*"), key=os.path.getctime)
-#     total_size = get_directory_size(directory)
-
-#     # Delete oldest items until the total size is within the size limit
-#     for item in items:
-#         if total_size <= size_limit:
-#             break
-#         if item.is_file():
-#             item_size = os.path.getsize(item)
-#             os.remove(item)
-#             total_size -= item_size
-#             logger.success(f"Deleted file {item} of size {item_size} bytes")
-#         elif item.is_dir():
-#             dir_size = get_directory_size(item)
-#             shutil.rmtree(item)
-#             total_size -= dir_size
-#             logger.success(f"Deleted directory {item} of size {dir_size} bytes")
-
-
 class nifti_zarr_loader:
     """
     A loader class for handling NIfTI files with pyramid generation using Zarr format.
@@ -85,8 +51,6 @@ class nifti_zarr_loader:
     def __init__(
         self,
         location,
-        pyramid_images_connection={},
-        pyramids_images_allowed_store_size_gb=100,
         pyramids_images_allowed_generation_size_gb=2,
         pyramids_images_store=None,
         extension_type=".nii.zarr",
@@ -101,8 +65,6 @@ class nifti_zarr_loader:
 
         Args:
             location (str): Path to the NIfTI file.
-            pyramid_images_connection (dict): Mapping of hash values to pyramid images.
-            pyramids_images_allowed_store_size_gb (float): Maximum allowed size for the pyramid images store in GB. Defaults to 100.
             pyramids_images_allowed_generation_size_gb (float): Maximum allowed size for pyramid generation in GB. Defaults to 2.
             pyramids_images_store (str, optional): Directory for storing pyramid images. Defaults to None.
             extension_type (str, optional): File extension for the generated pyramid images. Defaults to ".nii.zarr".
@@ -122,17 +84,8 @@ class nifti_zarr_loader:
         self.file_ino = str(self.file_stat.st_ino)
         self.modification_time = str(self.file_stat.st_mtime)
         self.file_size = self.file_stat.st_size
-        # self.allowed_store_size_gb = float(
-        #     self.settings.get("nifti_loader", "pyramids_images_allowed_store_size_gb")
-        # )
-        self.allowed_store_size_gb = float(pyramids_images_allowed_store_size_gb)
-        self.allowed_store_size_byte = self.allowed_store_size_gb * 1024 * 1024 * 1024
-        # self.allowed_file_size_gb = float(
-        #     self.settings.get("nifti_loader", "pyramids_images_allowed_generation_size_gb")
-        # )
         self.allowed_file_size_gb = float(pyramids_images_allowed_generation_size_gb)
         self.allowed_file_size_byte = self.allowed_file_size_gb * 1024 * 1024 * 1024
-        self.pyramid_dic = pyramid_images_connection
         self.pyramids_images_store = pyramids_images_store
         self.extension_type = extension_type
         self.verbose = verbose
@@ -350,42 +303,25 @@ class nifti_zarr_loader:
             nifti_file_location (str): Path to the NIfTI file.
         """
         hash_value = calculate_hash(self.file_ino + self.modification_time)
-        pyramids_images_store = self.pyramids_images_store
-        pyramids_images_store_dir = (
-            pyramids_images_store + hash_value[0:2] + "/" + hash_value[2:4] + "/"
+        pyramid_image_location = pyramid_artifact_path(
+            self.pyramids_images_store,
+            hash_value,
+            self.extension_type,
         )
-        suffix = self.extension_type
-        pyramid_image_location = pyramids_images_store_dir + hash_value + suffix
-        if self.pyramid_dic.get(hash_value) and os.path.exists(pyramid_image_location):
-            self.datapath = self.pyramid_dic.get(hash_value)
-            logger.info("Location replaced by generated pyramid image")
+        if os.path.exists(pyramid_image_location):
+            logger.info("Using existing generated NIfTI pyramid")
+            self.datapath = pyramid_image_location
         else:
-            # Avoid other gunicore workers to build pyramids images
-            if os.path.exists(pyramid_image_location):
-                logger.info(
-                    "Pyramid image was already built by first worker and picked up now by others"
-                )
-                self.pyramid_dic[hash_value] = pyramid_image_location
-                self.datapath = pyramid_image_location
-            # 1 hash exists but the pyramid images are deleted during server running
-            # 2 no hash and no pyramid images (first time generation)
-            else:
-                self.pyramid_building_process(
-                    nifti_file_location,
-                    False,
-                    hash_value,
-                    pyramids_images_store,
-                    pyramids_images_store_dir,
-                    pyramid_image_location,
-                )
+            self.pyramid_building_process(
+                nifti_file_location,
+                False,
+                pyramid_image_location,
+            )
 
     def pyramid_building_process(
         self,
         nifti_file_location,
         time_axe,
-        hash_value,
-        pyramids_images_store,
-        pyramids_images_store_dir,
         pyramid_image_location,
     ):
         """
@@ -398,19 +334,23 @@ class nifti_zarr_loader:
         Args:
             nifti_file_location (str): The file path to the input NIfTI file.
             time_axe (bool): If True, the time axis is ignored during the conversion process.
-            hash_value (str): A unique hash value identifying the image.
-            pyramids_images_store (str): The directory where pyramid images are stored.
-            pyramids_images_store_dir (str): The specific directory for storing the pyramid image.
             pyramid_image_location (str): The final location of the generated pyramid image.
         """
+        pyramids_images_store_dir = os.path.dirname(pyramid_image_location)
         os.makedirs(pyramids_images_store_dir, exist_ok=True)
-        file_temp = pyramid_image_location.replace(hash_value, "temp_" + hash_value)
-        file_temp_lock = file_temp + ".lock"
-        file_lock = FileLock(file_temp_lock)
+        file_temp = os.path.join(
+            pyramids_images_store_dir,
+            "temp_" + os.path.basename(pyramid_image_location),
+        )
+        file_lock = FileLock(pyramid_image_location + ".lock")
         try:
             with file_lock.acquire():
                 logger.success("File lock acquired.")
                 if not os.path.exists(pyramid_image_location):
+                    if os.path.isdir(file_temp):
+                        shutil.rmtree(file_temp)
+                    elif os.path.exists(file_temp):
+                        os.remove(file_temp)
                     logger.success(f"==> Pyramid image is building...")
                     start_time = time.time()
                     # nii2zarr(nifti_file_location,file_temp, no_time=time_axe)
@@ -423,33 +363,34 @@ class nifti_zarr_loader:
                     process = multiprocessing.Process(target=separate_process_generation, args=(nifti_file_location, file_temp, time_axe))
                     process.start()
                     process.join()
+                    if process.exitcode != 0:
+                        raise RuntimeError(
+                            f"NIfTI pyramid generator exited with code {process.exitcode}"
+                        )
                     logger.success("Process complete!")
 
                     end_time= time.time()
                     execution_time = end_time - start_time
-                    os.rename(file_temp, pyramid_image_location)
+                    os.replace(file_temp, pyramid_image_location)
                     logger.success(
                         f"{nifti_file_location} connected to ==> {pyramid_image_location}"
                     )
                     logger.success(
                         f"Pyramid image building complete {nifti_file_location} total execution time: {execution_time}"
                     )
-                    if (
-                        get_directory_size(pyramids_images_store)
-                        > self.allowed_store_size_byte
-                    ):
-                        delete_oldest_files(
-                            pyramids_images_store, self.allowed_store_size_byte
-                        )
                 else:
                     logger.info("File detected!")
                     if os.path.exists(file_temp):
                         logger.warning('file_temp exist!')
-                        os.remove(file_temp)
-            self.pyramid_dic[hash_value] = pyramid_image_location
+                        shutil.rmtree(file_temp)
             self.datapath = pyramid_image_location
         except Exception as e:
-            logger.error(f"An error occurred during generation process: {e}")
+            if os.path.isdir(file_temp):
+                shutil.rmtree(file_temp)
+            elif os.path.exists(file_temp):
+                os.remove(file_temp)
+            logger.exception(f"An error occurred during generation process: {e}")
+            raise
         finally:
             if "data" in locals():
                 del data

@@ -14,7 +14,11 @@ from filelock import FileLock
 from logger_tools import logger
 import itertools
 import numpy as np
-from utils import calculate_hash, get_directory_size, delete_oldest_files, loader_cache_key
+from utils import (
+    calculate_hash,
+    loader_cache_key,
+    pyramid_artifact_path,
+)
 from loader_indexing import normalize_data_key
 from loader_axes import plan_tczyx_source_read, samples_as_channels
 
@@ -47,8 +51,6 @@ class tiff_loader:
         self,
         file_location,
         pyramid_generation_allowed=False,
-        pyramid_images_connection={}, 
-        pyramids_images_allowed_store_size_gb = 100,
         pyramids_images_allowed_generation_size_gb = 10,
         pyramids_images_store = None,
         extension_type = ".ome.tif",
@@ -62,8 +64,6 @@ class tiff_loader:
         Args:
             file_location (str): Path to the TIFF file.
             pyramid_generation_allowed (bool): Whether pyramid image generation is allowed. Defaults to False.
-            pyramid_images_connection (dict): Mapping of hash values to pyramid images.
-            pyramids_images_allowed_store_size_gb (float): Maximum allowed size for the pyramid images store in GB. Defaults to 100.
             pyramids_images_allowed_generation_size_gb (float): Maximum allowed size for generating pyramid images in GB. Defaults to 10.
             pyramids_images_store (str, optional): Path to the directory for storing pyramid images. Defaults to None.
             extension_type (str, optional): The file extension type for the pyramid images. Defaults to ".ome.tif".
@@ -71,7 +71,6 @@ class tiff_loader:
             ResolutionLevelLock (int, optional): Resolution level lock. Defaults to None.
             squeeze (bool, optional): Whether to squeeze singleton dimensions. Defaults to True.
         """
-        # logger.info('pyramid_images_connection',pyramid_images_connection)
         self.cache = cache
         self.squeeze = squeeze
         # self.settings = settings
@@ -83,14 +82,6 @@ class tiff_loader:
         self.file_ino = str(self.file_stat.st_ino)
         self.modification_time = str(self.file_stat.st_mtime)
         self.file_size = self.file_stat.st_size
-        # self.allowed_store_size_gb = float(
-        #     self.settings.get("tif_loader", "pyramids_images_allowed_store_size_gb")
-        # )
-        self.allowed_store_size_gb = float(pyramids_images_allowed_store_size_gb)
-        self.allowed_store_size_byte = self.allowed_store_size_gb * 1024 * 1024 * 1024
-        # self.allowed_file_size_gb = float(
-        #     self.settings.get("tif_loader", "pyramids_images_allowed_generation_size_gb")
-        # )
         self.allowed_file_size_gb = float(pyramids_images_allowed_generation_size_gb)
         self.allowed_file_size_byte = self.allowed_file_size_gb * 1024 * 1024 * 1024
         self.pyramids_images_store = pyramids_images_store
@@ -163,7 +154,6 @@ class tiff_loader:
         self.TimePoints = self.axes_value_dic.get("T") #if self.axes_value_dic.get("T") != 1 else 1   
             
 
-        self.pyramid_dic = pyramid_images_connection
         logger.info(self.type)
         logger.info(f"axes_pos_dic, {self.axes_pos_dic}")
         logger.info(f"axes_value_dic, {self.axes_value_dic}")
@@ -172,9 +162,6 @@ class tiff_loader:
             for i_l, level in enumerate(s.levels):
                 logger.info(f"Level {i_l}: {level}")
                 # self.metaData[f"Series:{i_s}, Level:{i_l}"] = str(level)
-        # if already pyramid image --> building the arrays
-        # elif no pyramid but connection exist --> replace the location, building the arrays
-        # elif no pyramid and no connection --> pyramid image generation, building connection using hash func and replace location, building arrays
         self.pyramid_generation_allowed = pyramid_generation_allowed
         if self.pyramid_generation_allowed:
             self.pyramid_validators(self.image)
@@ -516,56 +503,20 @@ class tiff_loader:
             tif (tifffile.TiffFile): The TIFF file object.
         """
         hash_value = calculate_hash(self.file_ino + self.modification_time)
-        pyramids_images_store = self.pyramids_images_store
-        pyramids_images_store_dir = (
-            pyramids_images_store + hash_value[0:2] + "/" + hash_value[2:4] + "/"
+        pyramid_image_location = pyramid_artifact_path(
+            self.pyramids_images_store,
+            hash_value,
+            self.extension_type,
         )
-        suffix = self.extension_type
-        pyramid_image_location = pyramids_images_store_dir + hash_value + suffix
-        if self.pyramid_dic.get(hash_value) and os.path.exists(pyramid_image_location):
-            self.datapath = self.pyramid_dic.get(hash_value)
-            # self.image = tifffile.TiffFile(pyramid_image_location)
-            logger.info("Location replaced by generated pyramid image")
+        if os.path.exists(pyramid_image_location):
+            logger.info("Using existing generated TIFF pyramid")
         else:
-            # Avoid other gunicore workers to build pyramids images
-            if os.path.exists(pyramid_image_location):
-                logger.info(
-                    "Pyramid image was already built by first worker and picked up now by others"
-                )
-                self.pyramid_dic[hash_value] = pyramid_image_location
-                self.datapath = pyramid_image_location
-                # self.image = tifffile.TiffFile(pyramid_image_location)
-            # 1 hash exists but the pyramid images(not loaded) are deleted during server running
-            # 2 no hash and no pyramid images (first time generation)
-            else:
-                # if tif.filename.lower().endswith("ome.tif"):
-                #     # write pyramids based on ome.tif
-                #     self.pyramid_building_process(
-                #         tif.series[0].levels[0],
-                #         2,
-                #         hash_value,
-                #         pyramids_images_store,
-                #         pyramids_images_store_dir,
-                #         pyramid_image_location,
-                #     )
-                # elif tif.filename.lower().endswith(".tif") or tif.filename.lower().endswith(".tiff"):
-                #     # write pyramids based on tif
-                #     self.pyramid_building_process(
-                #         tif.series[0],
-                #         2,
-                #         hash_value,
-                #         pyramids_images_store,
-                #         pyramids_images_store_dir,
-                #         pyramid_image_location,
-                #     )
-                    self.pyramid_building_process(
-                        tif.series[0].levels[0],
-                        2,
-                        hash_value,
-                        pyramids_images_store,
-                        pyramids_images_store_dir,
-                        pyramid_image_location,
-                    )
+            self.pyramid_building_process(
+                tif.series[0].levels[0],
+                2,
+                pyramid_image_location,
+            )
+        self.datapath = pyramid_image_location
         self.image = self.validate_tif_file(pyramid_image_location)
         self.is_pyramidal = True
 
@@ -573,9 +524,6 @@ class tiff_loader:
         self,
         first_series,
         factor,
-        hash_value,
-        pyramids_images_store,
-        pyramids_images_store_dir,
         pyramid_image_location,
     ):
         """
@@ -584,19 +532,21 @@ class tiff_loader:
         Args:
             first_series (tifffile.TiffPageSeries): The first series of the TIFF file.
             factor (int): The downscaling factor.
-            hash_value (str): Hash value of the file.
-            pyramids_images_store (str): Path to the pyramid images store.
-            pyramids_images_store_dir (str): Directory for storing pyramid images.
             pyramid_image_location (str): Final location of the pyramid image.
         """
+        pyramids_images_store_dir = os.path.dirname(pyramid_image_location)
         os.makedirs(pyramids_images_store_dir, exist_ok=True)
-        file_temp = pyramid_image_location.replace(hash_value, "temp_" + hash_value)
-        file_temp_lock = file_temp + ".lock"
-        file_lock = FileLock(file_temp_lock)
+        file_temp = os.path.join(
+            pyramids_images_store_dir,
+            "temp_" + os.path.basename(pyramid_image_location),
+        )
+        file_lock = FileLock(pyramid_image_location + ".lock")
         try:
             with file_lock.acquire():
                 logger.info("File lock acquired.")
                 if not os.path.exists(pyramid_image_location):
+                    if os.path.exists(file_temp):
+                        os.remove(file_temp)
                     logger.success(f"==> pyramid image is building...")
                     start_time = time.time()
                     subresolutions = self.divide_time(
@@ -670,28 +620,22 @@ class tiff_loader:
                     logger.success(
                         f"actual pyramid generation {self.datapath} time:{execution_time - load_time}"
                     )
-                    os.rename(file_temp, pyramid_image_location)
+                    os.replace(file_temp, pyramid_image_location)
                     logger.success(
                         f"{self.datapath} connected to ==> {pyramid_image_location}"
                     )
                     logger.success(
                         f"pyramid image building complete {self.datapath} total execution time: {execution_time}"
                     )
-                    if (
-                        get_directory_size(pyramids_images_store)
-                        > self.allowed_store_size_byte
-                    ):
-                        delete_oldest_files(
-                            pyramids_images_store, self.allowed_store_size_byte
-                        )
                 else:
                     logger.info("file detected!")
                     if os.path.exists(file_temp):
                         os.remove(file_temp)
-            self.pyramid_dic[hash_value] = pyramid_image_location
-            self.datapath = pyramid_image_location
         except Exception as e:
-            logger.error(f"An error occurred during generation process: {e}")
+            if os.path.exists(file_temp):
+                os.remove(file_temp)
+            logger.exception(f"An error occurred during generation process: {e}")
+            raise
         finally:
             # self.image = tifffile.TiffFile(pyramid_image_location)
             # Ensure any allocated memory or resources are released

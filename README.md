@@ -48,9 +48,9 @@ All image loaders expose logical `TCZYX` data. TIFF/JP2 sample axes such as RGB
 
 ## Installation
 
-The current development environment uses Python 3.12 on Linux. The package
-metadata declares Python 3.8 or newer, but deployments should use a clean,
-pinned environment and run the test suite before release.
+BrAinPI requires Python 3.12. The development environment and Docker images use
+Python 3.12; deployments should use a clean, pinned environment and run the
+test suite before release.
 
 ```bash
 git clone https://github.com/CBI-PITT/BrAinPI.git
@@ -85,7 +85,7 @@ At minimum, review these sections in `settings.ini`:
 - `[auth]`: authentication and path-restriction policy
 - `[disk_cache]`: platform-specific cache directory and size
 - `[neuroglancer]`: viewer URL and advertised chunk strategy
-- loader sections: generated-pyramid locations and size limits
+- loader sections: generated-pyramid locations and per-source generation limits
 
 Example path configuration:
 
@@ -169,11 +169,41 @@ cp docker/template_groups.ini docker/groups.ini
 
 Edit the renamed INI files for the deployment. They are ignored by Git, just
 like the plain/native `BrAinPI/settings.ini` and `BrAinPI/groups.ini` files.
+The Docker settings template exposes no dataset roots by default. Add only the
+container paths that this deployment is intended to serve, for example:
+
+```ini
+[dir_anon]
+public = /data/Public
+
+[dir_auth]
+protected = /data/Protected
+```
 
 `BRAINPI_DATA_DIR` must be an existing absolute host path. On Docker Desktop,
 make sure that directory is shared with Docker. The container mounts source
 datasets read-only at `/data`; generated pyramids and cache entries use Docker
 named volumes.
+
+Generated pyramids have no automatic store quota and are never deleted by the
+application. `pyramids_images_allowed_generation_size_gb` limits only the size
+of an individual source eligible for on-demand generation. Workers derive each
+artifact path directly from the source identity and check that path on demand;
+they do not scan the pyramid volume at startup. Administrators must monitor and
+maintain the `brainpi-pyramids` volume. Stop the BrainPI service before removing
+generated artifacts so every Gunicorn worker releases its open dataset objects,
+then start it again after maintenance:
+
+```bash
+docker compose stop brainpi
+docker volume ls
+# Inspect and remove only the intended generated pyramid artifacts.
+docker compose start brainpi
+```
+
+`docker compose down -v` deletes both named volumes and must not be used for
+routine pyramid maintenance. The disk cache remains separately bounded by its
+`[disk_cache]` LRU size setting.
 
 In `docker/settings.ini`, keep Neuroglancer as a separate Compose service and
 point generated viewer links at the browser-reachable frontend URL:
@@ -208,11 +238,13 @@ Gunicorn worker from trying to launch another frontend process.
 Docker configuration templates are in `docker/template_settings.ini` and
 `docker/template_groups.ini`. Copy and rename them as shown above, then fill in
 deployment-specific values. The templates intentionally contain no LDAP
-server, domain, usernames, or group membership. Without LDAP settings, the
-service and anonymous paths remain available, while login and authenticated
-paths are unavailable. Keep `[all]` in the groups file even when it has no
-members. `BRAINPI_SETTINGS_FILE` and `BRAINPI_GROUPS_FILE` in `.env` may point
-Compose at differently named host files when needed.
+server, domain, usernames, group membership, or enabled dataset roots. The
+service starts with empty `[dir_anon]` and `[dir_auth]` sections, but no data is
+listed until deployment-specific aliases are added. Without LDAP settings,
+login and authenticated paths remain unavailable. Keep `[all]` in the groups
+file even when it has no members. `BRAINPI_SETTINGS_FILE` and
+`BRAINPI_GROUPS_FILE` in `.env` may point Compose at differently named host
+files when needed.
 The following environment variables override their corresponding INI values:
 
 - `BRAINPI_SETTINGS` and `BRAINPI_GROUPS`: paths inside the container.

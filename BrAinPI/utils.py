@@ -28,8 +28,6 @@ from logger_tools import logger
 # from watchdog.observers import Observer
 
 import s3_utils
-from pathlib import Path
-import shutil
 
 import flask
 from flask import (
@@ -80,49 +78,21 @@ def load_dataset(config, path):
     """Load or reuse a dataset with the appropriate local or S3 cache key."""
     return config.loadDataset(dataset_cache_key(path), path)
 
-def get_directory_size(directory):
+def pyramid_artifact_path(store, hash_value, suffix):
+    """Return the deterministic generated-pyramid path for a source hash.
+
+    The two hash-prefix directories distribute artifacts without requiring a
+    startup scan or an in-memory hash-to-path index.
     """
-    Calculate the total size of all files in a directory.
-
-    Args:
-        directory (str): The directory path.
-
-    Returns:
-        int: The total size of the directory in bytes.
-    """
-    total_size = 0
-    for dirpath, dirnames, filenames in os.walk(directory):
-        for f in filenames:
-            fp = os.path.join(dirpath, f)
-            total_size += os.path.getsize(fp)
-    return total_size
-
-
-def delete_oldest_files(directory, size_limit):
-    """
-    Delete the oldest files in a directory until the total size is within the specified limit.
-
-    Args:
-        directory (str): The directory path.
-        size_limit (int): The maximum allowable size in bytes.
-    """
-    items = sorted(Path(directory).glob("*"), key=os.path.getctime)
-    total_size = get_directory_size(directory)
-
-    # Delete oldest items until the total size is within the size limit
-    for item in items:
-        if total_size <= size_limit:
-            break
-        if item.is_file():
-            item_size = os.path.getsize(item)
-            os.remove(item)
-            total_size -= item_size
-            logger.success(f"Deleted file {item} of size {item_size} bytes")
-        elif item.is_dir():
-            dir_size = get_directory_size(item)
-            shutil.rmtree(item)
-            total_size -= dir_size
-            logger.success(f"Deleted directory {item} of size {dir_size} bytes")
+    if not store:
+        raise ValueError("Pyramid storage is not configured.")
+    store = os.path.abspath(os.path.expanduser(store))
+    return os.path.join(
+        store,
+        hash_value[:2],
+        hash_value[2:4],
+        hash_value + suffix,
+    )
 
 def format_file_size(in_bytes):
     '''

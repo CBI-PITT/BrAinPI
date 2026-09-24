@@ -56,12 +56,6 @@ class nd2_loader:
     def __init__(
         self,
         file_location,
-        pyramid_generation_allowed=False,
-        pyramid_images_connection={},
-        pyramids_images_allowed_store_size_gb=100,
-        pyramids_images_allowed_generation_size_gb=10,
-        pyramids_images_store=None,
-        extension_type=".nd2",
         ResolutionLevelLock=None,
         squeeze_output=True,
         cache=None,
@@ -73,10 +67,6 @@ class nd2_loader:
         self.cache = cache
         self.squeeze = squeeze_output
         self.metaData = {}
-        self.allowed_store_size_gb = float(pyramids_images_allowed_store_size_gb)
-        self.allowed_file_size_gb = float(pyramids_images_allowed_generation_size_gb)
-        self.pyramids_images_store = pyramids_images_store
-        self.extension_type = extension_type
         self.max_chunk_edge = int(max_chunk_edge)
         self.lut_sample_slices = int(lut_sample_slices)
         self.lut_percentiles = tuple(lut_percentiles)

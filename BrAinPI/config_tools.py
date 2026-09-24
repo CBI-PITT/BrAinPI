@@ -87,7 +87,6 @@ def get_config(file='settings.ini',allow_no_value=True):
     if pyramid_root:
         pyramid_root = os.path.abspath(pyramid_root)
         pyramid_locations = {
-            "pyramids_images_location": pyramid_root,
             "tif_loader": os.path.join(pyramid_root, "tif"),
             "nifti_loader": os.path.join(pyramid_root, "nifti"),
             "jp2_loader": os.path.join(pyramid_root, "jp2"),
@@ -95,52 +94,10 @@ def get_config(file='settings.ini',allow_no_value=True):
         for section, path in pyramid_locations.items():
             if not config.has_section(section):
                 config.add_section(section)
-            option = "location" if section == "pyramids_images_location" else "pyramids_images_store"
-            config.set(section, option, path)
+            config.set(section, "pyramids_images_store", path)
     return config
-    
-def get_pyramid_images_connection(settings):
-    """
-    Build a connection mapping for pyramid image directories and files.
 
-    This function walks through a specified directory (from settings) to locate 
-    NIfTI and TIFF files/directories based on their extensions. It builds a 
-    mapping of unique hash values (derived from files) to their corresponding paths.
 
-    Args:
-        settings (configparser.ConfigParser): A configuration object containing
-                                              location of generated pyramid files.
-
-    Returns:
-        dict: A dictionary where keys are hash values (derived from file or directory names
-              without extensions) and values are their full paths.
-    """
-    connection = {}
-    dict_extension = set()
-    file_extension = set()
-    directory = settings.get('pyramids_images_location', 'location')
-    tif_extension = settings.get('tif_loader', 'extension_type')
-    nifti_extension = settings.get('nifti_loader', 'extension_type')
-    jp2_extension = settings.get('jp2_loader', 'extension_type')
-    dict_extension.update([nifti_extension])
-    file_extension.update([tif_extension,jp2_extension])
-    for root, dirs, files in os.walk(directory):
-        for dir in dirs:
-            dir_matching_ext = next((ext for ext in dict_extension if dir.endswith(ext)), None)
-            if dir_matching_ext:
-                dir_extension_index = dir.rfind(dir_matching_ext)
-                hash_value = dir[:dir_extension_index]
-                dir_path = os.path.join(root, dir)
-                connection[hash_value] = dir_path
-        for file in files:
-            file_matching_ext = next((ext for ext in file_extension if file.endswith(ext)), None)
-            if file_matching_ext:
-                file_extension_index = file.rfind(file_matching_ext)
-                hash_value = file[:file_extension_index]
-                file_path = os.path.join(root, file)
-                connection[hash_value] = file_path
-    # print(connection)
-    return connection
 class config:
     """Manage open datasets, cache state, and initialization locks per worker.
 
@@ -156,13 +113,13 @@ class config:
             "least-recently-used"  #R/W (maybe a performace hit but probably best cache option)
         Initialize the `config` object.
 
-        This method sets up the necessary configurations, establishes connections to pyramid images,
-        and initializes a persistent cache for efficient data management.
+        This method loads settings and initializes a persistent cache. Generated
+        pyramid paths are derived lazily from each source identity; startup does
+        not scan the pyramid store.
 
         Args:
             opendata (dict): A dictionary to store open datasets, with keys as dataset identifiers and values as dataset objects.
             settings (configparser.ConfigParser): Loaded configuration settings from `settings.ini`.
-            pyramid_images_connection (dict): A mapping of hash values to pyramid image paths, built from configuration settings.
             cache (diskcache.FanoutCache): A persistent cache object for managing dataset resources efficiently.
         """
         self.opendata = {}
@@ -170,7 +127,6 @@ class config:
         self._dataset_locks = {}
         self._dataset_locks_guard = threading.Lock()
         self.settings = get_config('settings.ini')
-        self.pyramid_images_connection = get_pyramid_images_connection(self.settings)
         from cache_tools import get_cache
         self.cache = get_cache()
 
@@ -277,12 +233,14 @@ class config:
             import tiff_loader
             self.opendata[key] = tiff_loader.tiff_loader(
                 dataPath,
-                True,
-                self.pyramid_images_connection, 
-                self.settings.get("tif_loader", "pyramids_images_allowed_store_size_gb"),
-                self.settings.get("tif_loader", "pyramids_images_allowed_generation_size_gb"),
-                self.settings.get("tif_loader", "pyramids_images_store"),
-                self.settings.get("tif_loader", "extension_type"),
+                pyramid_generation_allowed=True,
+                pyramids_images_allowed_generation_size_gb=self.settings.get(
+                    "tif_loader", "pyramids_images_allowed_generation_size_gb"
+                ),
+                pyramids_images_store=self.settings.get(
+                    "tif_loader", "pyramids_images_store"
+                ),
+                extension_type=self.settings.get("tif_loader", "extension_type"),
                 squeeze=False,
                 cache=self.cache,
                 )
@@ -298,12 +256,14 @@ class config:
         elif dataPath.lower().endswith('.nii.zarr') or dataPath.lower().endswith('.nii.gz') or dataPath.lower().endswith('.nii'):
             import nifti_loader
             self.opendata[key] = nifti_loader.nifti_zarr_loader(
-                dataPath, 
-                self.pyramid_images_connection,
-                self.settings.get("nifti_loader", "pyramids_images_allowed_store_size_gb"),
-                self.settings.get("nifti_loader", "pyramids_images_allowed_generation_size_gb"),
-                self.settings.get("nifti_loader", "pyramids_images_store"),
-                self.settings.get("nifti_loader", "extension_type"),
+                dataPath,
+                pyramids_images_allowed_generation_size_gb=self.settings.get(
+                    "nifti_loader", "pyramids_images_allowed_generation_size_gb"
+                ),
+                pyramids_images_store=self.settings.get(
+                    "nifti_loader", "pyramids_images_store"
+                ),
+                extension_type=self.settings.get("nifti_loader", "extension_type"),
                 zarr_store_type=LocalStore,
                 squeeze=False,
                 cache=self.cache)
@@ -312,12 +272,14 @@ class config:
             import jp2_loader
             self.opendata[key] = jp2_loader.jp2_loader(
                 dataPath,
-                True,
-                self.pyramid_images_connection,
-                self.settings.get("jp2_loader", "pyramids_images_allowed_store_size_gb"),
-                self.settings.get("jp2_loader", "pyramids_images_allowed_generation_size_gb"),
-                self.settings.get("jp2_loader", "pyramids_images_store"),
-                self.settings.get("jp2_loader", "extension_type"),
+                pyramid_generation_allowed=True,
+                pyramids_images_allowed_generation_size_gb=self.settings.get(
+                    "jp2_loader", "pyramids_images_allowed_generation_size_gb"
+                ),
+                pyramids_images_store=self.settings.get(
+                    "jp2_loader", "pyramids_images_store"
+                ),
+                extension_type=self.settings.get("jp2_loader", "extension_type"),
                 squeeze=False,
                 cache=self.cache
                 )

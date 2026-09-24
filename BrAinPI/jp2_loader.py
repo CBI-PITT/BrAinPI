@@ -29,7 +29,11 @@ import tiff_loader
 from logger_tools import logger
 from loader_axes import samples_as_channels
 from loader_indexing import normalize_data_key
-from utils import calculate_hash, delete_oldest_files, get_directory_size, loader_cache_key
+from utils import (
+    calculate_hash,
+    loader_cache_key,
+    pyramid_artifact_path,
+)
 
 
 # Match the established JP2 loader: fewer, larger Glymur reads are much faster
@@ -246,8 +250,6 @@ class jp2_loader:
         self,
         location,
         pyramid_generation_allowed=False,
-        pyramid_images_connection=None,
-        pyramids_images_allowed_store_size_gb=100,
         pyramids_images_allowed_generation_size_gb=2,
         pyramids_images_store=None,
         extension_type=".ome.tif",
@@ -263,12 +265,10 @@ class jp2_loader:
         self.verbose = verbose
         self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
         self.pyramid_generation_allowed = pyramid_generation_allowed
-        self.pyramid_dic = pyramid_images_connection if pyramid_images_connection is not None else {}
         self.pyramids_images_store = (
             os.path.expanduser(pyramids_images_store) if pyramids_images_store else None
         )
         self.extension_type = extension_type
-        self.allowed_store_size_byte = float(pyramids_images_allowed_store_size_gb) * 1024**3
         self.allowed_file_size_byte = float(pyramids_images_allowed_generation_size_gb) * 1024**3
 
         self.file_stat = os.stat(location)
@@ -297,13 +297,14 @@ class jp2_loader:
         if not self.pyramids_images_store:
             raise ValueError("JP2 pyramid storage is not configured.")
         hash_value = calculate_hash(self.file_ino + self.modification_time)
-        directory = os.path.join(
-            self.pyramids_images_store, hash_value[:2], hash_value[2:4]
+        return hash_value, pyramid_artifact_path(
+            self.pyramids_images_store,
+            hash_value,
+            self.extension_type,
         )
-        return hash_value, os.path.join(directory, hash_value + self.extension_type)
 
     def _open_tiff_backing(self):
-        hash_value, pyramid_path = self._pyramid_path()
+        _hash_value, pyramid_path = self._pyramid_path()
         if not os.path.exists(pyramid_path):
             if self.file_size > self.allowed_file_size_byte:
                 raise ValueError(
@@ -316,18 +317,11 @@ class jp2_loader:
                 if not os.path.exists(pyramid_path):
                     logger.info(f"Generating TIFF pyramid for JP2: {self.location}")
                     generate_tiff_pyramid(self.location, pyramid_path, self.image_type)
-                    if get_directory_size(self.pyramids_images_store) > self.allowed_store_size_byte:
-                        delete_oldest_files(
-                            self.pyramids_images_store, self.allowed_store_size_byte
-                        )
 
-        self.pyramid_dic[hash_value] = pyramid_path
         self.datapath = pyramid_path
         self.tif_obj = tiff_loader.tiff_loader(
             pyramid_path,
             pyramid_generation_allowed=False,
-            pyramid_images_connection=self.pyramid_dic,
-            pyramids_images_allowed_store_size_gb=self.allowed_store_size_byte / 1024**3,
             pyramids_images_allowed_generation_size_gb=self.allowed_file_size_byte / 1024**3,
             pyramids_images_store=self.pyramids_images_store,
             extension_type=self.extension_type,
