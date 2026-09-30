@@ -20,7 +20,11 @@ from utils import (
     pyramid_artifact_path,
 )
 from loader_indexing import normalize_data_key
-from loader_axes import plan_tczyx_source_read, samples_as_channels
+from loader_axes import (
+    execute_array_read,
+    plan_tczyx_read,
+    tczyx_shape_from_source,
+)
 
 
 def _packed_color_metadata(photometric, samples_per_pixel, extra_samples=()):
@@ -44,8 +48,8 @@ class tiff_loader:
     A class to load, validate, and process TIFF image files.
 
     This class supports pyramid image generation, metadata extraction, and multi-resolution
-    slicing of TIFF images. It integrates with caching systems to improve performance and
-    supports handling large datasets.
+    slicing of TIFF images. Original input state remains in ``source_*``, generated state
+    remains in ``pyramid_*``, and reads use ``active_*`` without replacing either reader.
     """
     def __init__(
         self,
@@ -74,37 +78,38 @@ class tiff_loader:
         self.cache = cache
         self.squeeze = squeeze
         # self.settings = settings
-        self.datapath = file_location
-        # location is the original file location
-        self.location = file_location
+        self.source_path = os.fspath(file_location)
+        self.active_path = self.source_path
+        self.pyramid_path = None
+        self.uses_pyramid = False
         self.metaData = {}
-        self.file_stat = os.stat(file_location)
-        self.file_ino = str(self.file_stat.st_ino)
-        self.modification_time = str(self.file_stat.st_mtime)
-        self.file_size = self.file_stat.st_size
+        self.source_stat = os.stat(self.source_path)
+        self.source_ino = str(self.source_stat.st_ino)
+        self.source_mtime = str(self.source_stat.st_mtime)
+        self.source_size = self.source_stat.st_size
+        self.source_hash = calculate_hash(self.source_ino + self.source_mtime)
         self.allowed_file_size_gb = float(pyramids_images_allowed_generation_size_gb)
         self.allowed_file_size_byte = self.allowed_file_size_gb * 1024 * 1024 * 1024
         self.pyramids_images_store = pyramids_images_store
         self.extension_type = extension_type
         self.ResolutionLevelLock = 0 if ResolutionLevelLock is None else ResolutionLevelLock
-        self.image = self.validate_tif_file(self.datapath)
-        self.filename, self.filename_extension = self.file_extension_split(self.image)
-        self.tags = self.image.pages[0].tags
-        self.photometric = self.image.pages[0].photometric
-        self.compression = self.image.pages[0].compression
+        self.source_reader = self.validate_tif_file(self.source_path)
+        self.pyramid_reader = None
+        self.active_reader = self.source_reader
+        self.filename, self.filename_extension = self.file_extension_split(self.source_reader)
+        self.tags = self.source_reader.pages[0].tags
+        self.photometric = self.source_reader.pages[0].photometric
+        self.compression = self.source_reader.pages[0].compression
         # Extract width and height
         self.height = self.tags["ImageLength"].value
         self.width = self.tags["ImageWidth"].value
         # logger.info(self.width,self.height)
-        # self.series = len(self.image.series)
-        self.is_pyramidal = self.image.series[0].is_pyramidal
-        # logger.info("series", self.series)
-        # logger.info("levels", len(self.image.series[0].levels))
-        if self.image.pages[0].is_tiled:
+        self.is_pyramidal = self.source_reader.series[0].is_pyramidal
+        if self.source_reader.pages[0].is_tiled:
             # Get the tile size
             self.tile_size = (
-                self.image.pages[0].tilewidth,
-                self.image.pages[0].tilelength
+                self.source_reader.pages[0].tilewidth,
+                self.source_reader.pages[0].tilelength
             )
         else:
             logger.info("Assigning tile size (128, 128)")
@@ -112,15 +117,14 @@ class tiff_loader:
 
         self.arrays = {}
 
-        self.type = self.image.series[0].axes
+        self.type = self.source_reader.series[0].axes
         if "C" in self.type and "S" in self.type:
             raise TypeError(
                 f"TIFF axes {self.type!r} contain both C and S; this layout is unsupported"
             )
-        self._standard_axes = {"T":0, "C":1, "Z":2, "Y":3, "X":4}
         self.axes_pos_dic = self.axes_pos_extract(self.type)
         self.axes_value_dic = self.axes_value_extract(
-            self.type, self.image.series[0].shape
+            self.type, self.source_reader.series[0].shape
         )
         self.source_channels = self.axes_value_dic.get("C", 1)
         self.samples_per_pixel = self.axes_value_dic.get("S", 1)
@@ -128,7 +132,7 @@ class tiff_loader:
         packed_color, packed_color_samples, alpha_associated = _packed_color_metadata(
             self.photometric,
             self.samples_per_pixel,
-            self.image.pages[0].extrasamples,
+            self.source_reader.pages[0].extrasamples,
         )
         # ``S`` represents interleaved color samples here. A source ``C`` axis,
         # even one with four channels, remains ordinary scientific channel data.
@@ -157,15 +161,18 @@ class tiff_loader:
         logger.info(self.type)
         logger.info(f"axes_pos_dic, {self.axes_pos_dic}")
         logger.info(f"axes_value_dic, {self.axes_value_dic}")
-        for i_s, s in enumerate(self.image.series):
+        for i_s, s in enumerate(self.source_reader.series):
             logger.info(f"Series {i_s}: {s}")
             for i_l, level in enumerate(s.levels):
                 logger.info(f"Level {i_l}: {level}")
                 # self.metaData[f"Series:{i_s}, Level:{i_l}"] = str(level)
         self.pyramid_generation_allowed = pyramid_generation_allowed
         if self.pyramid_generation_allowed:
-            self.pyramid_validators(self.image)
-        self.metaData['datapath'] = self.datapath
+            self.pyramid_validators(self.source_reader)
+        self.metaData['source_path'] = self.source_path
+        self.metaData['pyramid_path'] = self.pyramid_path
+        self.metaData['active_path'] = self.active_path
+        self.metaData['uses_pyramid'] = self.uses_pyramid
         self.metaData['source_axes'] = self.type
         self.metaData['source_channels'] = self.source_channels
         self.metaData['samples_per_pixel'] = self.samples_per_pixel
@@ -173,8 +180,8 @@ class tiff_loader:
         self.metaData['packed_rgb'] = self.packed_rgb
         self.metaData['packed_color_samples'] = self.packed_color_samples
         self.metaData['alpha_associated'] = self.alpha_associated
-        self.ResolutionLevels = len(self.image.series[0].levels) if self.is_pyramidal else len(self.image.series)
-        layers = self.image.series[0].levels if self.is_pyramidal else self.image.series
+        self.ResolutionLevels = len(self.active_reader.series[0].levels) if self.is_pyramidal else len(self.active_reader.series)
+        layers = self.active_reader.series[0].levels if self.is_pyramidal else self.active_reader.series
 
         for r in range(self.ResolutionLevels):
             array = layers[r]
@@ -188,10 +195,8 @@ class tiff_loader:
                 self.metaData[r, t, c, 'shape'] = (1, 1, shape_z, shape_y, shape_x)
                 
                 # Collect resolution and dataset info
-                # xy_resolution = self.image.pages[0].get_resolution()
                 # x_pixel_perunit = xy_resolution[0]
                 # y_pixel_perunit = xy_resolution[1]
-                # unit = self.image.pages[0].resolutionunit  # 2 = inch, 3 = cm
                 # sx = self.res_to_um(x_pixel_perunit, unit)
                 # sy = self.res_to_um(y_pixel_perunit, unit)
                 # self.metaData[r, t, c, 'resolution'] = ((sy*2**r+sx*2**r)/2, sy*2**r, sx*2**r)
@@ -211,7 +216,6 @@ class tiff_loader:
                 
                 self.change_resolution_lock(self.ResolutionLevelLock)
                 # logger.info(self.t)
-                # del self.image
                 # gc.collect()
 
     def change_resolution_lock(self,ResolutionLevelLock):
@@ -234,29 +238,6 @@ class tiff_loader:
         self.chunks = self.metaData[self.ResolutionLevelLock,0,0,'chunks']
         self.resolution = self.metaData[self.ResolutionLevelLock,0,0,'resolution']
         self.dtype = self.metaData[self.ResolutionLevelLock,0,0,'dtype']
-
-    def _sort_axes(self, arr: np.ndarray, current_order: str,
-              standard_axes: dict[str, int]) -> np.ndarray:
-        """
-        Normalize source axes to TCZYX and fold samples into channels.
-
-        Parameters
-        ----------
-        arr : np.ndarray
-            Input array.
-        current_order : str
-            Axis labels of `arr`, e.g. "ZCYX".
-        standard_axes : dict[str, int]
-            Mapping axis label → desired position
-            (default: {"T":0, "C":1, "Z":2, "Y":3, "X":4})
-
-        Returns
-        -------
-        np.ndarray
-            Five-dimensional TCZYX view/copy of `arr`.
-        """
-        return samples_as_channels(arr, current_order)
-
 
     def __getitem__(self,key):
         """
@@ -313,27 +294,31 @@ class tiff_loader:
         incomingSlices = (r, t, c, z, y, x)
         logger.info(incomingSlices)
         if self.cache is not None:
-            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
+            key = loader_cache_key(self.source_ino, self.source_mtime, incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
                 logger.info(f"loader cache found: {incomingSlices}")
                 return result
         # Plan the complete TCZYX -> source-axis mapping before the only data
         # read. Ordinary C and packed S selections are pushed down directly.
-        zarr_array = None
-        if self.is_pyramidal:
-            zarr_array = self.image.aszarr(series=0, level=r)
-        else:
-            zarr_array = self.image.aszarr(series=r, level=0)
-        zarr_store = zarr.open(zarr_array)
-        source_key, post_channel_key = plan_tczyx_source_read(
-            (t, c, z, y, x), self.type, zarr_store.shape
+        arrays = getattr(self, "arrays", None)
+        if arrays is None:
+            arrays = self.arrays = {}
+        zarr_store = arrays.get(r)
+        if zarr_store is None:
+            if self.is_pyramidal:
+                zarr_source = self.active_reader.aszarr(series=0, level=r)
+            else:
+                zarr_source = self.active_reader.aszarr(series=r, level=0)
+            zarr_store = zarr.open(zarr_source)
+            arrays[r] = zarr_store
+
+        logical_shape = tczyx_shape_from_source(self.type, zarr_store.shape)
+        plan = plan_tczyx_read(
+            (t, c, z, y, x), logical_shape, self.type, zarr_store.shape
         )
-        logger.info(f"source key {source_key}, source axes {self.type}")
-        zarr_result = zarr_store[source_key]
-        result = self._sort_axes(zarr_result,self.type,self._standard_axes)
-        if post_channel_key is not None:
-            result = result[:, post_channel_key, :, :, :]
+        logger.info(f"source key {plan.read_key}, source axes {self.type}")
+        result = execute_array_read(zarr_store, plan)
         # Here for python > 3.11, to use the unpack operator *
         # result = zarr_store[
         #     *(tp),
@@ -344,7 +329,6 @@ class tiff_loader:
         # numpy_array = np.random.randint(0, 255, size=(256, 256, 3), dtype=np.uint8)
         # return numpy_array
 
-        # cache_key = f"{self.file_ino + self.modification_time}-{r}-{t}-{c}-{z}-{y}-{x}"
         if self.cache is not None:
             # print("Cache Status:")
             # shards_limit = self.cache.size_limit / (1024 * 1024 * 1024)  # Convert size_limit to GB
@@ -357,7 +341,7 @@ class tiff_loader:
             # print(f"  Total size limit: {total_size} GB")
             # print(f"  Current size: {current_size} GB\n") 
             self.cache.set(
-                key, result, expire=None, tag=self.file_ino + self.modification_time, retry=True
+                key, result, expire=None, tag=self.source_ino + self.source_mtime, retry=True
             )
             logger.info(f"loader cache saved")
         return result
@@ -410,10 +394,6 @@ class tiff_loader:
         if inspector_result:
             return
         else:
-            # logger.info(f'{self.file_size},{self.allowed_file_size_byte}')
-            if self.file_size > self.allowed_file_size_byte:
-                logger.info(f"File '{self.filename}' can not generate pyramid structure. Due to resource constrait, {self.allowed_file_size_gb}GB and below are acceptable for generation process.")
-                raise Exception(f"File '{self.filename}' can not generate pyramid structure. Due to resource constrait, {self.allowed_file_size_gb}GB and below are acceptable for generation process.")
             self.pyramid_builders(tif)
             return
 
@@ -502,22 +482,30 @@ class tiff_loader:
         Args:
             tif (tifffile.TiffFile): The TIFF file object.
         """
-        hash_value = calculate_hash(self.file_ino + self.modification_time)
         pyramid_image_location = pyramid_artifact_path(
             self.pyramids_images_store,
-            hash_value,
+            self.source_hash,
             self.extension_type,
         )
         if os.path.exists(pyramid_image_location):
             logger.info("Using existing generated TIFF pyramid")
         else:
+            if self.source_size > self.allowed_file_size_byte:
+                raise ValueError(
+                    f"File '{self.filename}' cannot generate a pyramid: "
+                    f"{self.source_size} bytes exceeds the configured "
+                    f"{self.allowed_file_size_byte} byte limit."
+                )
             self.pyramid_building_process(
                 tif.series[0].levels[0],
                 2,
                 pyramid_image_location,
             )
-        self.datapath = pyramid_image_location
-        self.image = self.validate_tif_file(pyramid_image_location)
+        self.pyramid_path = pyramid_image_location
+        self.pyramid_reader = self.validate_tif_file(self.pyramid_path)
+        self.uses_pyramid = True
+        self.active_path = self.pyramid_path
+        self.active_reader = self.pyramid_reader
         self.is_pyramidal = True
 
     def pyramid_building_process(
@@ -557,9 +545,9 @@ class tiff_loader:
                     end_load = time.time()
                     load_time = end_load - start_load
                     logger.success(
-                        f"loading first series or level {self.datapath} time: {load_time}"
+                        f"loading first series or level {self.source_path} time: {load_time}"
                     )
-                    xy_resolution = self.image.pages[0].resolution  # micrometer
+                    xy_resolution = self.source_reader.pages[0].resolution  # micrometer
                     # prefix = 'py_'
                     # suffix = '.ome.tif'
                     # pyramids_images_store = self.settings.get('tif_loader', 'pyramids_images_store')
@@ -582,7 +570,7 @@ class tiff_loader:
                             photometric=self.photometric,
                             tile=self.tile_size,
                             compression=self.compression,
-                            resolutionunit=self.image.pages[0].resolutionunit,
+                            resolutionunit=self.source_reader.pages[0].resolutionunit,
                         )
 
                         tif.write(
@@ -618,14 +606,14 @@ class tiff_loader:
                     end_time = time.time()
                     execution_time = end_time - start_time
                     logger.success(
-                        f"actual pyramid generation {self.datapath} time:{execution_time - load_time}"
+                        f"actual pyramid generation {self.source_path} time:{execution_time - load_time}"
                     )
                     os.replace(file_temp, pyramid_image_location)
                     logger.success(
-                        f"{self.datapath} connected to ==> {pyramid_image_location}"
+                        f"{self.source_path} connected to ==> {pyramid_image_location}"
                     )
                     logger.success(
-                        f"pyramid image building complete {self.datapath} total execution time: {execution_time}"
+                        f"pyramid image building complete {self.source_path} total execution time: {execution_time}"
                     )
                 else:
                     logger.info("file detected!")
@@ -637,7 +625,6 @@ class tiff_loader:
             logger.exception(f"An error occurred during generation process: {e}")
             raise
         finally:
-            # self.image = tifffile.TiffFile(pyramid_image_location)
             # Ensure any allocated memory or resources are released
             if "data" in locals():
                 del data

@@ -8,6 +8,8 @@ are rejected.
 import zarr, os, itertools
 import numpy as np
 import shutil
+import subprocess
+import sys
 import time
 import nibabel as nib
 from filelock import FileLock
@@ -17,12 +19,16 @@ from zarr.abc.store import (
     Store
 )
 from typing import Union
-from niizarr import nii2zarr
 StoreLike = Union[ Store, MutableMapping]
 from logger_tools import logger
+from loader_axes import (
+    empty_tczyx,
+    execute_array_read,
+    finalize_tczyx,
+    plan_tczyx_read,
+)
 from loader_indexing import normalize_data_key
 import gc
-import multiprocessing
 from utils import (
     calculate_hash,
     loader_cache_key,
@@ -30,27 +36,36 @@ from utils import (
 )
 
 
-def separate_process_generation(inp, out, time_axe):
-    """
-    Generate a Zarr dataset from a NIfTI file in a separate process.
-
-    This function converts a NIfTI file into a Zarr dataset. The conversion process is handled
-    using the `nii2zarr` function, which supports multi-resolution image storage.
-
-    Args:
-        inp (str): The file path to the input NIfTI file.
-        out (str): The directory path where the output Zarr dataset will be stored.
-        time_axe (bool): If True, the time axis is ignored during the conversion process.
-    """
-    nii2zarr(inp, out, no_time=time_axe)
+def run_generation_subprocess(inp, out, time_axe):
+    """Run NIfTI conversion in a fresh interpreter, safe from gthread forks."""
+    worker = os.path.join(os.path.dirname(__file__), "nifti_generation_worker.py")
+    command = [sys.executable, worker, os.fspath(inp), os.fspath(out)]
+    if time_axe:
+        command.append("--no-time")
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        details = completed.stderr.strip() or completed.stdout.strip()
+        message = (
+            f"NIfTI pyramid generator exited with code {completed.returncode}"
+        )
+        if details:
+            message = f"{message}\n{details}"
+        raise RuntimeError(message)
 
 class nifti_zarr_loader:
     """
-    A loader class for handling NIfTI files with pyramid generation using Zarr format.
+    Load NIfTI while retaining its nibabel ``source_reader`` separately from
+    the generated Zarr ``pyramid_reader`` selected through ``active_reader``.
     """
     def __init__(
         self,
         location,
+        pyramid_generation_allowed=False,
         pyramids_images_allowed_generation_size_gb=2,
         pyramids_images_store=None,
         extension_type=".nii.zarr",
@@ -65,6 +80,11 @@ class nifti_zarr_loader:
 
         Args:
             location (str): Path to the NIfTI file.
+            pyramid_generation_allowed (bool): Whether a raw ``.nii`` or
+                ``.nii.gz`` source may be converted to a generated Zarr
+                pyramid. When false, raw NIfTI is exposed lazily as one native
+                resolution through nibabel; existing ``.nii.zarr`` sources do
+                not require this permission.
             pyramids_images_allowed_generation_size_gb (float): Maximum allowed size for pyramid generation in GB. Defaults to 2.
             pyramids_images_store (str, optional): Directory for storing pyramid images. Defaults to None.
             extension_type (str, optional): File extension for the generated pyramid images. Defaults to ".nii.zarr".
@@ -74,16 +94,24 @@ class nifti_zarr_loader:
             squeeze (bool, optional): Whether to remove singleton dimensions from arrays. Defaults to True.
             cache (object, optional): Cache object for storing slices. Defaults to None.
         """
-        self.location = location
-        self.datapath = location
+        self.source_path = os.fspath(location)
+        self.pyramid_generation_allowed = pyramid_generation_allowed
+        self.active_path = self.source_path
+        self.pyramid_path = None
+        self.uses_pyramid = False
+        self.source_reader = None
+        self.pyramid_reader = None
+        self.active_reader = None
+        self.is_native_nifti = False
         self.ResolutionLevelLock = (
             0 if ResolutionLevelLock is None else ResolutionLevelLock
         )
-        self.file_stat = os.stat(location)
-        self.filename = os.path.split(self.datapath)[1]
-        self.file_ino = str(self.file_stat.st_ino)
-        self.modification_time = str(self.file_stat.st_mtime)
-        self.file_size = self.file_stat.st_size
+        self.source_stat = os.stat(self.source_path)
+        self.filename = os.path.split(self.source_path)[1]
+        self.source_ino = str(self.source_stat.st_ino)
+        self.source_mtime = str(self.source_stat.st_mtime)
+        self.source_size = self.source_stat.st_size
+        self.source_hash = calculate_hash(self.source_ino + self.source_mtime)
         self.allowed_file_size_gb = float(pyramids_images_allowed_generation_size_gb)
         self.allowed_file_size_byte = self.allowed_file_size_gb * 1024 * 1024 * 1024
         self.pyramids_images_store = pyramids_images_store
@@ -93,15 +121,21 @@ class nifti_zarr_loader:
         self.cache = cache
         self.metaData = {}
         # Go through pyramid generation process for nii.gz files
-        if self.datapath.endswith(".nii.gz") or self.datapath.endswith(".nii"):
-            self.validate_nifti_file(self.datapath)
-            self.pyramid_builders(self.datapath)
+        if self.source_path.endswith(".nii.gz") or self.source_path.endswith(".nii"):
+            self.source_reader = self.validate_nifti_file(self.source_path)
+            if not self.pyramid_generation_allowed:
+                self._initialize_native_nifti()
+                return
+            self.pyramid_builders()
         # Open zarr store
         self.zarr_store = zarr_store_type  # Only relevant for non-s3 datasets
-        store = self.zarr_store_type(
-            self.datapath
-        )
+        store = self.zarr_store_type(self.active_path)
         zgroup = zarr.open(store)
+        if self.uses_pyramid:
+            self.pyramid_reader = zgroup
+        else:
+            self.source_reader = zgroup
+        self.active_reader = zgroup
         self.zattrs = zgroup.attrs
 
         if "omero" in self.zattrs:
@@ -117,8 +151,8 @@ class nifti_zarr_loader:
         # self.axes = self.multiscales[0]['axes']
         if len(self.axes) < 3:
             raise Exception()
+        self.source_axes = "".join(axis["name"] for axis in self.axes).upper()
         self.axes_pos_dic = {"t": None, "c": None, "z": None, "y": None, "x": None}
-        self._standard_axes = {"t":0, "c":1, "z":2, "y":3, "x":4}
         self.space_unit = None
         for index, axe in enumerate(self.axes):
             self.axes_pos_dic[axe["name"]] = index
@@ -127,8 +161,12 @@ class nifti_zarr_loader:
         logger.info(self.axes_pos_dic)
         logger.info(self.multiscales)
         logger.info(self.space_unit)
-        del zgroup
         del store
+
+        self.metaData["source_path"] = self.source_path
+        self.metaData["pyramid_path"] = self.pyramid_path
+        self.metaData["active_path"] = self.active_path
+        self.metaData["uses_pyramid"] = self.uses_pyramid
 
         try:
             self.multiscale_datasets = self.multiscales[0]["datasets"]
@@ -273,50 +311,110 @@ class nifti_zarr_loader:
         self.change_resolution_lock(self.ResolutionLevelLock)
         # logger.info(self.metaData)
 
+    def _initialize_native_nifti(self):
+        """Expose a raw NIfTI through its lazy nibabel ArrayProxy."""
+        source_shape = tuple(self.source_reader.shape)
+        if not 3 <= len(source_shape) <= 5:
+            raise TypeError(
+                f"Native NIfTI shape {source_shape!r} is unsupported; "
+                "expected XYZ, XYZT, or XYZTC."
+            )
+        self.source_axes = "XYZTC"[: len(source_shape)]
+        self.active_reader = self.source_reader
+        self.active_path = self.source_path
+        self.is_native_nifti = True
+        self.uses_pyramid = False
+        self.ResolutionLevels = 1
+        self.TimePoints = source_shape[3] if len(source_shape) >= 4 else 1
+        self.Channels = source_shape[4] if len(source_shape) >= 5 else 1
+        self.shape = (
+            self.TimePoints,
+            self.Channels,
+            source_shape[2],
+            source_shape[1],
+            source_shape[0],
+        )
+        self.ndim = 5
+        self.dtype = np.dtype(self.source_reader.get_data_dtype())
+        zooms = tuple(float(value) for value in self.source_reader.header.get_zooms())
+        # NIfTI spatial units are millimeters unless the header declares another
+        # unit. BrAinPI advertises spatial resolution in micrometers.
+        spatial_unit, _time_unit = self.source_reader.header.get_xyzt_units()
+        unit_scale = {
+            "meter": 1_000_000.0,
+            "mm": 1_000.0,
+            "micron": 1.0,
+            "unknown": 1_000.0,
+        }.get(spatial_unit, 1_000.0)
+        self.resolution = tuple(
+            zooms[index] * unit_scale for index in (2, 1, 0)
+        )
+        self.chunks = (
+            1,
+            1,
+            1,
+            min(256, self.shape[-2]),
+            min(256, self.shape[-1]),
+        )
+        self.metaData.update(
+            {
+                "source_path": self.source_path,
+                "pyramid_path": None,
+                "active_path": self.active_path,
+                "uses_pyramid": False,
+                "source_axes": self.source_axes,
+            }
+        )
+        for timepoint, channel in itertools.product(
+            range(self.TimePoints), range(self.Channels)
+        ):
+            self.metaData[0, timepoint, channel, "shape"] = self.shape
+            self.metaData[0, timepoint, channel, "resolution"] = self.resolution
+            self.metaData[0, timepoint, channel, "chunks"] = self.chunks
+            self.metaData[0, timepoint, channel, "dtype"] = self.dtype
+            self.metaData[0, timepoint, channel, "ndim"] = self.ndim
+
     def validate_nifti_file(self, file_path):
-        """
-        Validate the provided NIfTI file.
+        """Open and retain the original NIfTI image.
 
         Args:
             file_path (str): Path to the NIfTI file.
 
-        Raises:
-            Exception: If the file size exceeds the allowed limit.
+        Returns:
+            nibabel.spatialimages.SpatialImage: Original source reader. The
+            per-source generation-size limit is checked only if no reusable
+            pyramid exists.
         """
-        if self.file_size > self.allowed_file_size_byte:
-                logger.info(f"File '{self.filename}' can not generate pyramid structure. Due to resource constrait, {self.allowed_file_size_gb}GB and below are acceptable for generation process.")
-                raise Exception(f"File '{self.filename}' can not generate pyramid structure. Due to resource constrait, {self.allowed_file_size_gb}GB and below are acceptable for generation process.")
-        img = nib.load(file_path)
-        # try:
-            # Attempt to load the file
-            # img = nib.load(file_path)
-        # except Exception as e:
-            # logger.error(f"File '{file_path}' is not a valid nifti file. Error: {e}")
-            # raise
-            # raise Exception(f"File '{file_path}' is not a valid nifti file. Error: {e}")
+        return nib.load(file_path)
 
-    def pyramid_builders(self, nifti_file_location):
+    def pyramid_builders(self):
         """
         Build a pyramid structure for the NIfTI file.
 
-        Args:
-            nifti_file_location (str): Path to the NIfTI file.
+        The original NIfTI path and identity are read from ``source_*``.
         """
-        hash_value = calculate_hash(self.file_ino + self.modification_time)
         pyramid_image_location = pyramid_artifact_path(
             self.pyramids_images_store,
-            hash_value,
+            self.source_hash,
             self.extension_type,
         )
         if os.path.exists(pyramid_image_location):
             logger.info("Using existing generated NIfTI pyramid")
-            self.datapath = pyramid_image_location
         else:
+            if self.source_size > self.allowed_file_size_byte:
+                raise ValueError(
+                    f"File '{self.filename}' cannot generate a pyramid: "
+                    f"{self.source_size} bytes exceeds the configured "
+                    f"{self.allowed_file_size_byte} byte limit."
+                )
             self.pyramid_building_process(
-                nifti_file_location,
+                self.source_path,
                 False,
                 pyramid_image_location,
             )
+        self.pyramid_path = pyramid_image_location
+        self.uses_pyramid = True
+        self.active_path = self.pyramid_path
 
     def pyramid_building_process(
         self,
@@ -353,23 +451,14 @@ class nifti_zarr_loader:
                         os.remove(file_temp)
                     logger.success(f"==> Pyramid image is building...")
                     start_time = time.time()
-                    # nii2zarr(nifti_file_location,file_temp, no_time=time_axe)
-
-                    # thread = threading.Thread(target=niigz2niizarr,args=(nifti_file_location,file_temp,time_axe))
-                    # thread.start()
-                    # thread.join()
-                    # print("thread complete!")
-
-                    process = multiprocessing.Process(target=separate_process_generation, args=(nifti_file_location, file_temp, time_axe))
-                    process.start()
-                    process.join()
-                    if process.exitcode != 0:
-                        raise RuntimeError(
-                            f"NIfTI pyramid generator exited with code {process.exitcode}"
-                        )
+                    run_generation_subprocess(
+                        nifti_file_location,
+                        file_temp,
+                        time_axe,
+                    )
                     logger.success("Process complete!")
 
-                    end_time= time.time()
+                    end_time = time.time()
                     execution_time = end_time - start_time
                     os.replace(file_temp, pyramid_image_location)
                     logger.success(
@@ -383,7 +472,6 @@ class nifti_zarr_loader:
                     if os.path.exists(file_temp):
                         logger.warning('file_temp exist!')
                         shutil.rmtree(file_temp)
-            self.datapath = pyramid_image_location
         except Exception as e:
             if os.path.isdir(file_temp):
                 shutil.rmtree(file_temp)
@@ -458,18 +546,13 @@ class nifti_zarr_loader:
 
         if self.squeeze:
             return np.squeeze(array)
-        else:
-            for key in self._standard_axes:
-                if self.axes_pos_dic.get(key) is None:
-                    array = np.expand_dims(array, axis=self._standard_axes[key])
-            logger.info(array.shape)
-            return array
+        return array
 
     def _get_memorize_cache(
         self, name=None, typed=False, expire=None, tag=None, ignore=()
     ):
         if tag is None:
-            tag = self.datapath
+            tag = self.active_path
         return (
             self.cache.memorize(
                 name=name, typed=typed, expire=expire, tag=tag, ignore=ignore
@@ -497,30 +580,53 @@ class nifti_zarr_loader:
         incomingSlices = (r, t, c, z, y, x)
         logger.info(incomingSlices)
         if self.cache is not None:
-            # key = f"{self.datapath}_getSlice_{str(incomingSlices)}"
-            # key = self.datapath + '_getSlice_' + str(incomingSlices)
-            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
+            key = loader_cache_key(self.source_ino, self.source_mtime, incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
                 logger.info(f"loader cache found")
                 return result
-        list_tp = [0] * len(self.axes)
-        if self.axes_pos_dic.get("t") != None:
-            list_tp[self.axes_pos_dic.get("t")] = t
-        if self.axes_pos_dic.get("c") != None:
-            list_tp[self.axes_pos_dic.get("c")] = c
-        if self.axes_pos_dic.get("z") != None:
-            list_tp[self.axes_pos_dic.get("z")] = z
-        if self.axes_pos_dic.get("y") != None:
-            list_tp[self.axes_pos_dic.get("y")] = y
-        if self.axes_pos_dic.get("x") != None:
-            list_tp[self.axes_pos_dic.get("x")] = x
-        tp = tuple(list_tp)
-        # logger.success(tp)
-        result = self.arrays[r][tp]
+        if self.is_native_nifti:
+            if r != 0:
+                raise ValueError("Native NIfTI exposes only resolution level 0.")
+            plan = plan_tczyx_read(
+                (t, c, z, y, x),
+                self.shape,
+                self.source_axes,
+                self.source_reader.shape,
+            )
+            result = execute_array_read(
+                self.source_reader.dataobj, plan, dtype=self.dtype
+            )
+            if self.cache is not None:
+                self.cache.set(
+                    key,
+                    result,
+                    expire=None,
+                    tag=self.source_ino + self.source_mtime,
+                    retry=True,
+                )
+                logger.info("native NIfTI loader cache saved")
+            return result
+        source_array = self.arrays[r]
+        logical_shape = (
+            self.TimePoints,
+            self.Channels,
+            *self.metaData[r, 0, 0, "shape"][-3:],
+        )
+        plan = plan_tczyx_read(
+            (t, c, z, y, x),
+            logical_shape,
+            self.source_axes,
+            source_array.shape,
+        )
         structured_field = self._structured_fields[r]
-        if structured_field is not None:
-            result = result[structured_field]
+        if plan.empty:
+            result = empty_tczyx(plan, self.metaData[r, 0, 0, "dtype"])
+        else:
+            source_result = source_array[plan.read_key]
+            if structured_field is not None:
+                source_result = source_result[structured_field]
+            result = finalize_tczyx(source_result, plan)
         # if len(result.shape) < 4:
         #     result = np.expand_dims(result, axis=0)
         # result = result.astype('uint16')
@@ -536,12 +642,11 @@ class nifti_zarr_loader:
             # print(f"  Number of shards: {shards_len}")
             # print(f"  Total size limit: {total_size} GB")
             # print(f"  Current size: {current_size} GB\n") 
-            self.cache.set(key, result, expire=None, tag=self.file_ino + self.modification_time, retry=True)
+            self.cache.set(key, result, expire=None, tag=self.source_ino + self.source_mtime, retry=True)
             logger.info(f"loader cache saved")
             # test = True
             # while test:
             #     # logger.info('Caching slice')
-            #     self.cache.set(key, result, expire=None, tag=self.datapath, retry=True)
             #     if result == self.getSlice(*incomingSlices):
             #         test = False
 
@@ -558,7 +663,7 @@ class nifti_zarr_loader:
         Returns:
             str: The file path corresponding to the resolution level.
         """
-        return os.path.join(self.datapath, self.dataset_paths[res])
+        return os.path.join(self.active_path, self.dataset_paths[res])
 
     def open_array(self, res):
         """

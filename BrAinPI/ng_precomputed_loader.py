@@ -12,6 +12,7 @@ import os
 
 import numpy as np
 from logger_tools import logger
+from loader_axes import empty_tczyx, finalize_tczyx, plan_tczyx_read
 from loader_indexing import normalize_data_key
 from neuroglancer_scripts.chunk_encoding import RawChunkEncoder
 from utils import loader_cache_key
@@ -145,9 +146,7 @@ class ng_precomputed_loader:
             numpy.ndarray: Requested region in TCZYX order.
 
         Raises:
-            ValueError: If the scale is invalid or stepped spatial slicing is
-            requested.
-            IndexError: If a nonzero time point is requested.
+            ValueError: If the scale is invalid.
         """
         if r >= self.ResolutionLevels:
             raise ValueError("Layer is larger than the number of ResolutionLevels")
@@ -162,23 +161,29 @@ class ng_precomputed_loader:
                 logger.info("ng precomputed loader cache found")
                 return cached
 
-        t_indices = np.arange(self.TimePoints)[t]
-        if t_indices.size == 0:
-            return np.empty((0, 0, 0, 0, 0), dtype=self.dtype)
-        if np.any(t_indices != 0):
-            raise IndexError("Neuroglancer precomputed loader only supports a single timepoint at index 0.")
-
-        c_indices = np.atleast_1d(np.arange(self.Channels)[c])
         size_z = self.metaData[r, 0, 0, "shape"][-3]
         size_y = self.metaData[r, 0, 0, "shape"][-2]
         size_x = self.metaData[r, 0, 0, "shape"][-1]
-        z_start, z_stop, z_step = z.indices(size_z)
-        y_start, y_stop, y_step = y.indices(size_y)
-        x_start, x_stop, x_step = x.indices(size_x)
-        if z_step != 1 or y_step != 1 or x_step != 1:
-            raise ValueError("Stepped slicing is not supported for Neuroglancer precomputed data.")
+        logical_shape = (1, self.Channels, size_z, size_y, size_x)
+        plan = plan_tczyx_read(
+            (t, c, z, y, x), logical_shape, "TCZYX", logical_shape
+        )
+        if plan.empty:
+            return empty_tczyx(plan, self.dtype)
 
-        out_shape = (len(t_indices), len(c_indices), z_stop - z_start, y_stop - y_start, x_stop - x_start)
+        t_read, c_read, z_read, y_read, x_read = plan.read_key
+        c_indices = list(range(c_read.start, c_read.stop))
+        z_start, z_stop = z_read.start, z_read.stop
+        y_start, y_stop = y_read.start, y_read.stop
+        x_start, x_stop = x_read.start, x_read.stop
+
+        out_shape = (
+            t_read.stop - t_read.start,
+            len(c_indices),
+            z_stop - z_start,
+            y_stop - y_start,
+            x_stop - x_start,
+        )
         out = np.zeros(out_shape, dtype=self.dtype)
 
         chunk_z = self.metaData[r, 0, 0, "chunks"][-3]
@@ -217,6 +222,7 @@ class ng_precomputed_loader:
                         src_x0:src_x1,
                     ]
 
+        out = finalize_tczyx(out, plan)
         if self.cache is not None:
             self.cache.set(
                 cache_key,

@@ -27,7 +27,7 @@ from filelock import FileLock
 
 import tiff_loader
 from logger_tools import logger
-from loader_axes import samples_as_channels
+from loader_axes import empty_tczyx, finalize_tczyx, plan_tczyx_read
 from loader_indexing import normalize_data_key
 from utils import (
     calculate_hash,
@@ -244,7 +244,7 @@ def generate_tiff_pyramid(source_path, destination_path, image_type):
 
 
 class jp2_loader:
-    """BrAinPI loader for JP2 images, backed by a generated TIFF pyramid."""
+    """Load JP2 with distinct source, generated-pyramid, and active readers."""
 
     def __init__(
         self,
@@ -258,8 +258,11 @@ class jp2_loader:
         squeeze=True,
         cache=None,
     ):
-        self.location = location
-        self.datapath = location
+        self.source_path = os.fspath(location)
+        self.active_path = self.source_path
+        self.pyramid_path = None
+        self.uses_pyramid = False
+        self.pyramid_reader = None
         self.squeeze = squeeze
         self.cache = cache
         self.verbose = verbose
@@ -271,19 +274,21 @@ class jp2_loader:
         self.extension_type = extension_type
         self.allowed_file_size_byte = float(pyramids_images_allowed_generation_size_gb) * 1024**3
 
-        self.file_stat = os.stat(location)
-        self.file_ino = str(self.file_stat.st_ino)
-        self.modification_time = str(self.file_stat.st_mtime)
-        self.file_size = self.file_stat.st_size
-        self.jp2_img = glymur.Jp2k(location)
+        self.source_stat = os.stat(self.source_path)
+        self.source_ino = str(self.source_stat.st_ino)
+        self.source_mtime = str(self.source_stat.st_mtime)
+        self.source_size = self.source_stat.st_size
+        self.source_hash = calculate_hash(self.source_ino + self.source_mtime)
+        self.source_reader = glymur.Jp2k(self.source_path)
+        self.active_reader = self.source_reader
         glymur.set_option("lib.num_threads", 4)
-        self.component_count = _component_count(self.jp2_img)
-        self.image_type = detect_jp2_image_type(self.jp2_img)
-        self.tile_size = _tile_shape(self.jp2_img)
+        self.component_count = _component_count(self.source_reader)
+        self.image_type = detect_jp2_image_type(self.source_reader)
+        self.tile_size = _tile_shape(self.source_reader)
 
         logger.info(
-            f"JP2 {location} detected as {self.image_type}: "
-            f"source shape={self.jp2_img.shape}, components={self.component_count}, "
+            f"JP2 {self.source_path} detected as {self.image_type}: "
+            f"source shape={self.source_reader.shape}, components={self.component_count}, "
             f"axes={_jp2_axes(self.image_type)}"
         )
 
@@ -296,39 +301,43 @@ class jp2_loader:
     def _pyramid_path(self):
         if not self.pyramids_images_store:
             raise ValueError("JP2 pyramid storage is not configured.")
-        hash_value = calculate_hash(self.file_ino + self.modification_time)
-        return hash_value, pyramid_artifact_path(
+        return pyramid_artifact_path(
             self.pyramids_images_store,
-            hash_value,
+            self.source_hash,
             self.extension_type,
         )
 
     def _open_tiff_backing(self):
-        _hash_value, pyramid_path = self._pyramid_path()
+        pyramid_path = self._pyramid_path()
         if not os.path.exists(pyramid_path):
-            if self.file_size > self.allowed_file_size_byte:
+            if self.source_size > self.allowed_file_size_byte:
                 raise ValueError(
-                    f"JP2 file is too large to generate a pyramid: {self.file_size} bytes "
+                    f"JP2 file is too large to generate a pyramid: {self.source_size} bytes "
                     f"exceeds the configured {self.allowed_file_size_byte} byte limit."
                 )
             os.makedirs(os.path.dirname(pyramid_path), exist_ok=True)
             lock = FileLock(pyramid_path + ".lock")
             with lock:
                 if not os.path.exists(pyramid_path):
-                    logger.info(f"Generating TIFF pyramid for JP2: {self.location}")
-                    generate_tiff_pyramid(self.location, pyramid_path, self.image_type)
+                    logger.info(f"Generating TIFF pyramid for JP2: {self.source_path}")
+                    generate_tiff_pyramid(self.source_path, pyramid_path, self.image_type)
 
-        self.datapath = pyramid_path
-        self.tif_obj = tiff_loader.tiff_loader(
-            pyramid_path,
+        self.pyramid_path = pyramid_path
+        self.pyramid_reader = tiff_loader.tiff_loader(
+            self.pyramid_path,
             pyramid_generation_allowed=False,
             pyramids_images_allowed_generation_size_gb=self.allowed_file_size_byte / 1024**3,
             pyramids_images_store=self.pyramids_images_store,
             extension_type=self.extension_type,
             ResolutionLevelLock=self.ResolutionLevelLock,
             squeeze=self.squeeze,
-            cache=self.cache,
+            # The outer JP2 loader owns caching so keys always use the original
+            # JP2 identity rather than the generated TIFF artifact identity.
+            cache=None,
         )
+        self.uses_pyramid = True
+        self.active_path = self.pyramid_path
+        self.active_reader = self.pyramid_reader
         self._copy_tiff_metadata()
 
     def _copy_tiff_metadata(self):
@@ -336,20 +345,27 @@ class jp2_loader:
             "shape", "ndim", "chunks", "resolution", "dtype", "TimePoints",
             "ResolutionLevels", "Channels", "ResolutionLevelLock",
         ):
-            setattr(self, name, getattr(self.tif_obj, name))
-        self.metaData = dict(self.tif_obj.metaData)
+            setattr(self, name, getattr(self.pyramid_reader, name))
+        self.metaData = dict(self.pyramid_reader.metaData)
+        self.metaData["source_path"] = self.source_path
+        self.metaData["pyramid_path"] = self.pyramid_path
+        self.metaData["active_path"] = self.active_path
+        self.metaData["uses_pyramid"] = self.uses_pyramid
         self.metaData["jp2_image_type"] = self.image_type
         self.metaData["jp2_component_count"] = self.component_count
         self.metaData["packed_rgb"] = self.image_type == "rgb"
         self.metaData["samples_folded_into_channels"] = self.image_type == "rgb"
 
     def _set_direct_metadata(self):
-        height, width = self.jp2_img.shape[:2]
+        height, width = self.source_reader.shape[:2]
         self.TimePoints = 1
         self.Channels = self.component_count
         self.ResolutionLevels = _level_count(height, width, self.tile_size)
         self.metaData = {
-            "datapath": self.datapath,
+            "source_path": self.source_path,
+            "pyramid_path": self.pyramid_path,
+            "active_path": self.active_path,
+            "uses_pyramid": self.uses_pyramid,
             "jp2_image_type": self.image_type,
             "jp2_component_count": self.component_count,
             "packed_rgb": self.image_type == "rgb",
@@ -369,7 +385,7 @@ class jp2_loader:
                     float(scale),
                 )
                 self.metaData[resolution, timepoint, channel, "chunks"] = chunks
-                self.metaData[resolution, timepoint, channel, "dtype"] = self.jp2_img.dtype
+                self.metaData[resolution, timepoint, channel, "dtype"] = self.source_reader.dtype
                 self.metaData[resolution, timepoint, channel, "ndim"] = 5
 
     def change_resolution_lock(self, resolution_level_lock):
@@ -381,8 +397,8 @@ class jp2_loader:
         Raises:
             ValueError: If the requested level does not exist.
         """
-        if hasattr(self, "tif_obj"):
-            self.tif_obj.change_resolution_lock(resolution_level_lock)
+        if self.uses_pyramid:
+            self.pyramid_reader.change_resolution_lock(resolution_level_lock)
             self._copy_tiff_metadata()
             return
         if not 0 <= resolution_level_lock < self.ResolutionLevels:
@@ -396,9 +412,6 @@ class jp2_loader:
         self.dtype = self.metaData[resolution_level_lock, 0, 0, "dtype"]
 
     def __getitem__(self, key):
-        if hasattr(self, "tif_obj"):
-            return self.tif_obj[key]
-
         resolution = self.ResolutionLevelLock
         if isinstance(key, tuple) and len(key) == 6:
             resolution, key = key[0], key[1:]
@@ -422,48 +435,73 @@ class jp2_loader:
         Returns:
             numpy.ndarray: Selection with loader dimensions retained.
         """
-        if hasattr(self, "tif_obj"):
-            return self.tif_obj.getSlice(r, t, c, z, y, x)
         incomingSlices = (r, t, c, z, y, x)
         cache_key = None
         cache = getattr(self, "cache", None)
         if cache is not None:
             cache_key = loader_cache_key(
-                self.file_ino, self.modification_time, incomingSlices
+                self.source_ino, self.source_mtime, incomingSlices
             )
             result = cache.get(cache_key, default=None, retry=True)
             if result is not None:
                 logger.info("JP2 loader cache found")
                 return result
-        if z.start not in (None, 0) or z.stop not in (None, 1):
-            raise IndexError("JP2 images have only one Z plane.")
+        if self.uses_pyramid:
+            result = self.pyramid_reader.getSlice(r, t, c, z, y, x)
+            if cache is not None:
+                cache.set(
+                    cache_key,
+                    result,
+                    expire=None,
+                    tag=self.source_ino + self.source_mtime,
+                    retry=True,
+                )
+                logger.info("JP2 loader cache saved")
+            return result
         scale = 2**r
-        height, width = self.jp2_img.shape[:2]
-        y_start, y_stop, y_step = y.indices(math.ceil(height / scale))
-        x_start, x_stop, x_step = x.indices(math.ceil(width / scale))
-        source_key = (
-            slice(y_start * scale, min(y_stop * scale, height), scale * y_step),
-            slice(x_start * scale, min(x_stop * scale, width), scale * x_step),
+        height, width = self.source_reader.shape[:2]
+        level_height = math.ceil(height / scale)
+        level_width = math.ceil(width / scale)
+        source_axes = "YXS" if self.component_count > 1 else "YX"
+        source_shape = (
+            (level_height, level_width, self.component_count)
+            if self.component_count > 1
+            else (level_height, level_width)
         )
-        if self.component_count > 1:
-            # Glymur applies the component slice after OpenJPEG decoding, but
-            # including it here still guarantees one source query per key and
-            # avoids a second loader-side channel selection/read.
-            source_key = (*source_key, c)
-            decoded = self.jp2_img[source_key]
-            result = samples_as_channels(decoded, "YXS")
-            result = result[t, :, z]
+        plan = plan_tczyx_read(
+            (t, c, z, y, x),
+            (1, self.component_count, 1, level_height, level_width),
+            source_axes,
+            source_shape,
+        )
+        if plan.empty:
+            result = empty_tczyx(plan, self.dtype)
         else:
-            decoded = self.jp2_img[source_key]
-            result = samples_as_channels(decoded, "YX")
-            result = result[t, c, z]
+            y_read = plan.read_key[0]
+            x_read = plan.read_key[1]
+            source_key = (
+                slice(
+                    y_read.start * scale,
+                    min(y_read.stop * scale, height),
+                    scale,
+                ),
+                slice(
+                    x_read.start * scale,
+                    min(x_read.stop * scale, width),
+                    scale,
+                ),
+            )
+            if self.component_count > 1:
+                source_key = (*source_key, plan.read_key[2])
+            decoded = self.source_reader[source_key]
+            result = finalize_tczyx(decoded, plan)
 
         if cache is not None:
             cache.set(
                 cache_key,
                 result,
                 expire=None,
-                tag=self.file_ino + self.modification_time,
+                tag=self.source_ino + self.source_mtime,
                 retry=True,
             )
             logger.info("JP2 loader cache saved")

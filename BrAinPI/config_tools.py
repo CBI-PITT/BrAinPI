@@ -257,6 +257,7 @@ class config:
             import nifti_loader
             self.opendata[key] = nifti_loader.nifti_zarr_loader(
                 dataPath,
+                pyramid_generation_allowed=True,
                 pyramids_images_allowed_generation_size_gb=self.settings.get(
                     "nifti_loader", "pyramids_images_allowed_generation_size_gb"
                 ),

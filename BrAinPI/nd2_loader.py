@@ -15,6 +15,7 @@ import numpy as np
 import limnd2
 
 from logger_tools import logger
+from loader_axes import empty_tczyx, finalize_tczyx, plan_tczyx_read
 from loader_indexing import normalize_data_key
 from utils import loader_cache_key
 
@@ -427,39 +428,25 @@ class nd2_loader:
         size_y = down_attrs.height
         size_x = down_attrs.uiWidth
 
-        t_slice = self._normalize_slice(t, self.TimePoints)
-        c_slice = self._normalize_slice(c, self.Channels)
-        z_slice = self._normalize_slice(z, self.z)
-        y_slice = self._normalize_slice(y, size_y)
-        x_slice = self._normalize_slice(x, size_x)
+        logical_shape = (self.TimePoints, self.Channels, self.z, size_y, size_x)
+        plan = plan_tczyx_read(
+            (t, c, z, y, x), logical_shape, "TCZYX", logical_shape
+        )
+        if plan.empty:
+            return empty_tczyx(plan, down_attrs.dtype)
 
-        t_idx = list(range(t_slice.start, t_slice.stop, t_slice.step))
-        c_idx = list(range(c_slice.start, c_slice.stop, c_slice.step))
-        z_idx = list(range(z_slice.start, z_slice.stop, z_slice.step))
-        y_idx = list(range(y_slice.start, y_slice.stop, y_slice.step))
-        x_idx = list(range(x_slice.start, x_slice.stop, x_slice.step))
+        t_slice, c_slice, z_slice, y_slice, x_slice = plan.read_key
+
+        t_idx = list(range(t_slice.start, t_slice.stop))
+        c_idx = list(range(c_slice.start, c_slice.stop))
+        z_idx = list(range(z_slice.start, z_slice.stop))
+        y_idx = list(range(y_slice.start, y_slice.stop))
+        x_idx = list(range(x_slice.start, x_slice.stop))
 
         output = np.zeros(
             (len(t_idx), len(c_idx), len(z_idx), len(y_idx), len(x_idx)),
             dtype=down_attrs.dtype,
         )
-
-        if not (t_idx and c_idx and z_idx and y_idx and x_idx):
-            total_time = time.perf_counter() - slice_start
-            _nd2_loader_log.debug(
-                "getSlice r=%s t=%s c=%s z=%s y=%s x=%s total=%.4fs image_calls=%d image_time=%.4fs cache_hit=%s",
-                r,
-                t,
-                c,
-                z,
-                y,
-                x,
-                total_time,
-                image_call_count,
-                image_call_time,
-                cache_hit,
-            )
-            return output
 
         y0 = y_idx[0]
         y1 = y_idx[-1] + 1
@@ -484,11 +471,10 @@ class nd2_loader:
                     continue
                 if frame.ndim == 2:
                     frame = frame[:, :, np.newaxis]
-                if y_slice.step != 1 or x_slice.step != 1:
-                    frame = frame[:: y_slice.step, :: x_slice.step, :]
                 frame = frame[:, :, c_idx]
                 output[ti, :, zi, :, :] = np.moveaxis(frame, -1, 0)
 
+        output = finalize_tczyx(output, plan)
         if self.cache is not None:
             self.cache.set(
                 cache_key,
@@ -550,22 +536,6 @@ class nd2_loader:
             if char in dic:
                 dic[char] = shape[index]
         return dic
-
-    def _normalize_slice(self, slc: slice, size: int) -> slice:
-        if not isinstance(slc, slice):
-            slc = slice(slc, slc + 1, None)
-        step = 1 if slc.step is None else slc.step
-        if step <= 0:
-            raise ValueError("Negative or zero slice steps are not supported.")
-        start = 0 if slc.start is None else slc.start
-        stop = size if slc.stop is None else slc.stop
-        if start < 0:
-            start += size
-        if stop < 0:
-            stop += size
-        start = max(0, min(size, start))
-        stop = max(0, min(size, stop))
-        return slice(start, stop, step)
 
     def _set_time_key_metadata(self, time_key_names, time_keys) -> None:
         """

@@ -6,6 +6,7 @@ import os
 import re
 from v3dpy.terafly import TeraflyInterface
 from logger_tools import logger
+from loader_axes import empty_tczyx, finalize_tczyx, plan_tczyx_read
 from loader_indexing import normalize_data_key
 from utils import loader_cache_key
 
@@ -130,6 +131,8 @@ class terafly_loader:
         Args:
             ResolutionLevelLock (int): The resolution level to lock.
         """
+        if not 0 <= ResolutionLevelLock < self.ResolutionLevels:
+            raise ValueError("Layer is larger than the number of ResolutionLevels")
         self.ResolutionLevelLock = ResolutionLevelLock
         # self.shape = self.metaData[self.ResolutionLevelLock, 0, 0, "shape"]
         self.shape = (
@@ -158,7 +161,7 @@ class terafly_loader:
         # print(key)
         if isinstance(key, tuple) and len(key) == 6:
             res = key[0]
-            if res >= self.ResolutionLevels:
+            if not 0 <= res < self.ResolutionLevels:
                 raise ValueError("Layer is larger than the number of ResolutionLevels")
             key = tuple([x for x in key[1::]])
         # print(res)
@@ -169,16 +172,11 @@ class terafly_loader:
 
         array = self.getSlice(r=res, t=key[0], c=key[1], z=key[2], y=key[3], x=key[4])
 
-        if self.squeeze:
-            return np.squeeze(array)
-        else:
-            while len(array.shape) < 5:
-                array = np.expand_dims(array, axis=0)
-            return array
+        return np.squeeze(array) if self.squeeze else array
 
     def getSlice(self, r, t, c, z, y, x):
         """
-        Retrieve a 3D chunk of data for the specified coordinates.
+        Retrieve a TCZYX selection for the specified coordinates.
 
         Args:
             r (int): Resolution level.
@@ -189,42 +187,54 @@ class terafly_loader:
             x (slice): X-axis slice.
 
         Returns:
-            np.ndarray: The requested 3D chunk of data.
+            np.ndarray: The requested data in strict ``TCZYX`` order.
         """
+
+        if not 0 <= r < self.ResolutionLevels:
+            raise ValueError("Layer is larger than the number of ResolutionLevels")
 
         incomingSlices = (r, t, c, z, y, x)
         # key = f"{self.location}_getSlice_{str(incomingSlices)}"
         if self.cache is not None:
             # key = self.location + '_getSlice_' + str(incomingSlices)
-            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
+            key = loader_cache_key(
+                self.file_ino, self.modification_time, incomingSlices
+            )
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
                 logger.info(f"loader cache found")
                 return result
 
-        x_start = x.start
-        x_stop = x.stop
-        y_start = y.start
-        y_stop = y.stop
-        z_start = z.start
-        z_stop = z.stop
-        if all(
-            coord is None
-            for coord in [x_start, x_stop, y_start, y_stop, z_start, z_stop]
-        ):
-            dim_x_y_z = self.array[r].get_dim()[0:3]
-            x_start = 0
-            x_stop = dim_x_y_z[0]
-            y_start = 0
-            y_stop = dim_x_y_z[1]
-            z_start = 0
-            z_stop = dim_x_y_z[2]
-        # print(x_start, x_stop, y_start, y_stop, z_start, z_stop)
-
-        # returns the specific chuncks with all channels if available
-        result = self.array[r].get_sub_volume(
-            x_start, x_stop, y_start, y_stop, z_start, z_stop
+        dim_x, dim_y, dim_z = self.array[r].get_dim()[0:3]
+        logical_shape = (self.TimePoints, self.Channels, dim_z, dim_y, dim_x)
+        source_shape = (self.Channels, dim_z, dim_y, dim_x)
+        plan = plan_tczyx_read(
+            (t, c, z, y, x), logical_shape, "CZYX", source_shape
         )
+        if plan.empty:
+            result = empty_tczyx(plan, self.dtype)
+            if self.cache is not None:
+                self.cache.set(
+                    key,
+                    result,
+                    expire=None,
+                    tag=self.file_ino + self.modification_time,
+                    retry=True,
+                )
+            return result
+
+        _channel_read, z_read, y_read, x_read = plan.read_key
+        source_result = np.asarray(self.array[r].get_sub_volume(
+            x_read.start,
+            x_read.stop,
+            y_read.start,
+            y_read.stop,
+            z_read.start,
+            z_read.stop,
+        ))
+        if source_result.ndim == 3:
+            source_result = np.expand_dims(source_result, axis=0)
+        result = finalize_tczyx(source_result, plan)
 
         # print(result.shape)
         if self.cache is not None:

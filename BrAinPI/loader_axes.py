@@ -1,5 +1,6 @@
-"""Axis conversion helpers shared by image loaders."""
+"""Axis planning and conversion helpers shared by image loaders."""
 
+from dataclasses import dataclass
 import numpy as np
 
 
@@ -7,33 +8,117 @@ STANDARD_AXES = "TCZYX"
 SUPPORTED_SOURCE_AXES = set(STANDARD_AXES + "S")
 
 
-def plan_tczyx_source_read(logical_key, source_axes, source_shape):
-    """Map one logical ``TCZYX`` key to one source-array read.
+@dataclass(frozen=True)
+class NormalizedSlice:
+    """Resolved form of one slice against a concrete axis length."""
 
-    The returned channel selector is only needed for the implicit singleton
-    channel of sources without C/S. Sources containing both C and S are
-    deliberately unsupported because their flattened channel selections cannot
-    always be represented by one exact source slice.
+    start: int
+    stop: int
+    step: int
+    length: int
 
-    Args:
-        logical_key: Five slices in logical ``TCZYX`` order.
-        source_axes: Axis labels describing the source array.
-        source_shape: Shape of the source array.
+    @property
+    def signature(self):
+        return self.start, self.stop, self.step
 
-    Returns:
-        tuple: ``(source_key, post_channel_key)``. ``source_key`` performs the
-        only source read; ``post_channel_key`` selects an implicit singleton
-        channel when the source has neither ``C`` nor ``S``.
 
-    Raises:
-        ValueError: If axes are inconsistent, duplicated, unsupported, or
-        contain both ``C`` and ``S``.
-    """
-    source_axes = str(source_axes).upper()
-    source_shape = tuple(source_shape)
+@dataclass(frozen=True)
+class ReadPlan:
+    """One logical TCZYX request mapped to a source-array read."""
+
+    logical_key: tuple
+    logical_shape: tuple
+    normalized_key: tuple
+    output_shape: tuple
+    source_axes: str
+    source_shape: tuple
+    read_key: tuple
+    post_read_key: tuple
+    empty: bool
+
+    @property
+    def cache_signature(self):
+        return tuple(item.signature for item in self.normalized_key)
+
+
+def normalize_tczyx_selection(logical_key, logical_shape):
+    """Resolve a five-dimensional logical selection without dropping axes."""
     logical_key = tuple(logical_key)
+    logical_shape = tuple(int(size) for size in logical_shape)
     if len(logical_key) != len(STANDARD_AXES):
         raise ValueError("A logical loader key must contain five TCZYX slices")
+    if len(logical_shape) != len(STANDARD_AXES):
+        raise ValueError("A logical loader shape must contain five TCZYX sizes")
+
+    normalized = []
+    for selector, size in zip(logical_key, logical_shape):
+        if not isinstance(selector, slice):
+            raise TypeError("Logical loader selectors must be slices")
+        start, stop, step = selector.indices(size)
+        normalized.append(
+            NormalizedSlice(start, stop, step, len(range(start, stop, step)))
+        )
+    return tuple(normalized)
+
+
+def selection_shape(logical_key, logical_shape):
+    """Return the retained TCZYX shape for a logical selection."""
+    return tuple(
+        item.length
+        for item in normalize_tczyx_selection(logical_key, logical_shape)
+    )
+
+
+def tczyx_shape_from_source(source_axes, source_shape):
+    """Return the logical TCZYX shape represented by a source layout."""
+    source_axes = str(source_axes).upper()
+    source_shape = tuple(int(size) for size in source_shape)
+    if len(source_axes) != len(source_shape):
+        raise ValueError(
+            f"Source shape {source_shape!r} does not match axes {source_axes!r}"
+        )
+    if len(set(source_axes)) != len(source_axes):
+        raise ValueError(f"Axes must be unique, received {source_axes!r}")
+    unsupported = set(source_axes) - SUPPORTED_SOURCE_AXES
+    if unsupported:
+        raise ValueError(f"Unsupported source axes: {sorted(unsupported)!r}")
+    if "C" in source_axes and "S" in source_axes:
+        raise ValueError(
+            f"Source axes {source_axes!r} contain both C and S; this layout is unsupported"
+        )
+    sizes = dict(zip(source_axes, source_shape))
+    return tuple(
+        sizes.get("C", sizes.get("S", 1))
+        if axis == "C"
+        else sizes.get(axis, 1)
+        for axis in STANDARD_AXES
+    )
+
+
+def _contiguous_read_for_slice(item):
+    """Return a forward source slice and post-read step for one selection."""
+    if item.length == 0:
+        return slice(0, 0), slice(0, 0)
+    last = item.start + (item.length - 1) * item.step
+    read_start = min(item.start, last)
+    read_stop = max(item.start, last) + 1
+    post = slice(None) if item.step == 1 else slice(None, None, item.step)
+    return slice(read_start, read_stop), post
+
+
+def plan_tczyx_read(logical_key, logical_shape, source_axes, source_shape):
+    """Plan one backend-safe contiguous read for arbitrary source axes.
+
+    Every source read uses forward, unit-step slices. Positive and negative
+    logical steps are applied to the smallest enclosing source region after
+    I/O. Missing logical axes must have size one and are handled without I/O.
+    TIFF/JP2 sample axis ``S`` is treated as logical channel ``C``.
+    """
+    source_axes = str(source_axes).upper()
+    source_shape = tuple(int(size) for size in source_shape)
+    logical_shape = tuple(int(size) for size in logical_shape)
+    normalized = normalize_tczyx_selection(logical_key, logical_shape)
+
     if len(source_axes) != len(source_shape):
         raise ValueError(
             f"Source shape {source_shape!r} does not match axes {source_axes!r}"
@@ -48,29 +133,74 @@ def plan_tczyx_source_read(logical_key, source_axes, source_shape):
             f"Source axes {source_axes!r} contain both C and S; this layout is unsupported"
         )
 
-    logical = dict(zip(STANDARD_AXES, logical_key))
-    source_key = [slice(None)] * len(source_axes)
-    for axis in "TZYX":
-        if axis in source_axes:
-            source_key[source_axes.index(axis)] = logical[axis]
+    logical_positions = {axis: index for index, axis in enumerate(STANDARD_AXES)}
+    present_logical_axes = {
+        "C" if axis == "S" else axis for axis in source_axes
+    }
+    for axis, logical_position in logical_positions.items():
+        if axis not in present_logical_axes and logical_shape[logical_position] != 1:
+            raise ValueError(
+                f"Source axes {source_axes!r} omit {axis}, but logical size is "
+                f"{logical_shape[logical_position]} instead of 1"
+            )
 
-    c_position = source_axes.find("C")
-    s_position = source_axes.find("S")
-    channel_key = logical["C"]
-    post_channel_key = None
+    read_key = []
+    post_read_key = []
+    for source_axis, source_size in zip(source_axes, source_shape):
+        logical_axis = "C" if source_axis == "S" else source_axis
+        item = normalized[logical_positions[logical_axis]]
+        expected_size = logical_shape[logical_positions[logical_axis]]
+        if source_size != expected_size:
+            raise ValueError(
+                f"Source axis {source_axis} has size {source_size}, but logical "
+                f"axis {logical_axis} has size {expected_size}"
+            )
+        read_slice, post_slice = _contiguous_read_for_slice(item)
+        read_key.append(read_slice)
+        post_read_key.append(post_slice)
 
-    if c_position >= 0:
-        # Ordinary channel data: push the logical channel slice directly into C.
-        source_key[c_position] = channel_key
-    elif s_position >= 0:
-        # Packed samples such as RGB YXS: logical C maps directly to source S.
-        source_key[s_position] = channel_key
-    else:
-        # A source without C/S has one implicit channel. Apply the logical
-        # channel key after singleton axes are inserted.
-        post_channel_key = channel_key
+    output_shape = tuple(item.length for item in normalized)
+    return ReadPlan(
+        logical_key=tuple(logical_key),
+        logical_shape=logical_shape,
+        normalized_key=normalized,
+        output_shape=output_shape,
+        source_axes=source_axes,
+        source_shape=source_shape,
+        read_key=tuple(read_key),
+        post_read_key=tuple(post_read_key),
+        empty=0 in output_shape,
+    )
 
-    return tuple(source_key), post_channel_key
+
+def empty_tczyx(plan, dtype):
+    """Create an empty result for a read plan without touching the backend."""
+    return np.empty(plan.output_shape, dtype=np.dtype(dtype))
+
+
+def finalize_tczyx(source_result, plan):
+    """Apply post-read stepping and canonicalize one result to TCZYX."""
+    array = np.asarray(source_result)
+    if array.ndim != len(plan.source_axes):
+        raise ValueError(
+            f"Backend returned {array.ndim} dimensions for source axes "
+            f"{plan.source_axes!r}"
+        )
+    array = array[plan.post_read_key]
+    result = samples_as_channels(array, plan.source_axes)
+    if result.shape != plan.output_shape:
+        raise RuntimeError(
+            f"TCZYX normalization produced {result.shape}, expected "
+            f"{plan.output_shape} for source axes {plan.source_axes!r}"
+        )
+    return result
+
+
+def execute_array_read(source_array, plan, dtype=None):
+    """Execute a planned NumPy/Zarr-style read and return strict TCZYX."""
+    if plan.empty:
+        return empty_tczyx(plan, dtype or source_array.dtype)
+    return finalize_tczyx(source_array[plan.read_key], plan)
 
 
 def samples_as_channels(array, axes):

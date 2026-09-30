@@ -24,6 +24,7 @@ from typing import Union
 Path = Union[str, bytes, None]
 StoreLike = Union[ Store, MutableMapping]
 from logger_tools import logger
+from loader_axes import STANDARD_AXES, execute_array_read, plan_tczyx_read
 from loader_indexing import normalize_data_key
 from utils import loader_cache_key
 # import s3fs
@@ -54,6 +55,7 @@ class ome_zarr_loader:
         """
         # assert StoreLike is s3fs.S3Map or any([issubclass(zarr_store_type,x) for x in StoreLike.__args__]), 'zarr_store_type is not a zarr storage class'
 
+        location = os.fsdecode(os.fspath(location))
         self.location = location
         self.s3 = False
         # if 's3://' in location:
@@ -102,8 +104,20 @@ class ome_zarr_loader:
         )
         self.axes = self.multiscale['axes']
         self.axes_pos_dic = self.axes_pos_extract(self.multiscale)
+        self.source_axes = "".join(
+            (axis if isinstance(axis, str) else axis["name"]).lower()
+            for axis in self.axes
+        ).upper()
+        if len(set(self.source_axes)) != len(self.source_axes):
+            raise ValueError(f"OME-Zarr axes must be unique: {self.source_axes!r}")
+        unsupported_axes = set(self.source_axes) - set(STANDARD_AXES)
+        if unsupported_axes:
+            raise ValueError(
+                f"Unsupported OME-Zarr axes: {sorted(unsupported_axes)!r}"
+            )
+        self.metaData["source_axes"] = self.source_axes
+        self.metaData["output_axes"] = "TCZYX"
         # logger.info(f"Axes positions: {self.axes_pos_dic}")
-        self._standard_axes = {"t":0, "c":1, "z":2, "y":3, "x":4}
         logger.info(self.multiscales)
         del zgroup
         del store
@@ -136,6 +150,11 @@ class ome_zarr_loader:
         self.arrays = {}
         for r in range(self.ResolutionLevels):
             array = self.open_array(r)
+            if array.ndim != len(self.source_axes):
+                raise ValueError(
+                    f"OME-Zarr resolution {r} has shape {array.shape!r}, but axes "
+                    f"are {self.source_axes!r}"
+                )
             if r == 0:
                 if self.axes_pos_dic['t'] is not None:
                     self.TimePoints = array.shape[self.axes_pos_dic['t']]
@@ -211,12 +230,14 @@ class ome_zarr_loader:
         }
         for index, a in enumerate(axes):
             if isinstance(a, str):
-                if a in dic:
-                    dic[a] = index
+                axis_name = a.lower()
+                if axis_name in dic:
+                    dic[axis_name] = index
                 
             else:
-                if a["name"] in dic:
-                    dic[a["name"]] = index
+                axis_name = a["name"].lower()
+                if axis_name in dic:
+                    dic[axis_name] = index
         return dic  # mapping from axis name to array dimension index
 
     def spatial_values_um(self, values, missing_value):
@@ -258,6 +279,8 @@ class ome_zarr_loader:
         Args:
             ResolutionLevelLock (int): The resolution level to lock.
         """
+        if not 0 <= ResolutionLevelLock < self.ResolutionLevels:
+            raise ValueError("Layer is larger than the number of ResolutionLevels")
         self.ResolutionLevelLock = ResolutionLevelLock
         # self.shape = self.metaData[self.ResolutionLevelLock,0,0,'shape']
         self.shape = (
@@ -288,7 +311,7 @@ class ome_zarr_loader:
         logger.info(key)
         if isinstance(key, tuple) and len(key) == 6:
             res = key[0]
-            if res >= self.ResolutionLevels:
+            if not 0 <= res < self.ResolutionLevels:
                 raise ValueError('Layer is larger than the number of ResolutionLevels')
             key = tuple([x for x in key[1::]])
         logger.info(res)
@@ -307,14 +330,7 @@ class ome_zarr_loader:
                         x = key[4]
                         )
         
-        if self.squeeze:
-            return np.squeeze(array)
-        else:
-            for key in self._standard_axes:
-                if self.axes_pos_dic.get(key) is None:
-                    array = np.expand_dims(array, axis=self._standard_axes[key])
-            logger.info(array.shape)
-            return array
+        return np.squeeze(array) if self.squeeze else array
         
     
     def _get_memorize_cache(self, name=None, typed=False, expire=None, tag=None, ignore=()):
@@ -329,7 +345,7 @@ class ome_zarr_loader:
     
     def getSlice(self,r,t,c,z,y,x):
         """
-        Retrieve a 3D chunk of data for the specified coordinates.
+        Retrieve a TCZYX selection for the specified coordinates.
 
         Args:
             r (int): Resolution level.
@@ -340,32 +356,32 @@ class ome_zarr_loader:
             x (slice): X-axis slice.
 
         Returns:
-            np.ndarray: The requested 3D chunk of data.
+            np.ndarray: The requested data in strict ``TCZYX`` order.
         """
+        if not 0 <= r < self.ResolutionLevels:
+            raise ValueError("Layer is larger than the number of ResolutionLevels")
         incomingSlices = (r,t,c,z,y,x)
         logger.info(incomingSlices)
         if self.cache is not None:
-            key = loader_cache_key(self.file_ino, self.modification_time, incomingSlices)
+            key = loader_cache_key(
+                self.file_ino, self.modification_time, incomingSlices
+            )
             # key = self.location + '_getSlice_' + str(incomingSlices)
             result = self.cache.get(key, default=None, retry=True)
             if result is not None:
                 logger.info(f'loader cache found')
                 return result
-        list_tp = [0] * len(self.multiscales[0]['axes'])
-        if self.axes_pos_dic['t'] is not None:
-            list_tp[self.axes_pos_dic['t']] = t
-        if self.axes_pos_dic['c'] is not None:
-            list_tp[self.axes_pos_dic['c']] = c
-        if self.axes_pos_dic['z'] is not None:
-            list_tp[self.axes_pos_dic['z']] = z
-        if self.axes_pos_dic['y'] is not None:
-            list_tp[self.axes_pos_dic['y']] = y
-        if self.axes_pos_dic['x'] is not None:
-            list_tp[self.axes_pos_dic['x']] = x
-        tp = tuple(list_tp)
-        logger.info(tp)
-        result = self.arrays[r][tp]
-        # result = self.arrays[r][t,c,z,y,x]
+        source_array = self.arrays[r]
+        spatial_shape = self.metaData[r, 0, 0, "shape"][-3:]
+        logical_shape = (self.TimePoints, self.Channels, *spatial_shape)
+        plan = plan_tczyx_read(
+            (t, c, z, y, x),
+            logical_shape,
+            self.source_axes,
+            source_array.shape,
+        )
+        logger.info(plan.read_key)
+        result = execute_array_read(source_array, plan)
 
         if self.cache is not None:
             # print("Cache Status:")

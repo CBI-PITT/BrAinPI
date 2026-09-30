@@ -445,9 +445,9 @@ def setup_openseadragon(app, config):
                 #     )
                 #     img_obj = config.opendata[datapath_key]
                 # logger.info(img_obj.metadata.get('datapath'))
-                source_datapath = img_obj.metadata.get('datapath')
-                if source_datapath and not utils.is_s3_path(source_datapath):
-                    if not os.path.exists(source_datapath):
+                active_path = getattr(img_obj, "active_path", None)
+                if active_path and not utils.is_s3_path(active_path):
+                    if not os.path.exists(active_path):
                         logger.info("files may be deleted, doing regeneration...")
                         del config.opendata[datapath_key]
                         datapath_key = utils.load_dataset(config, datapath)
