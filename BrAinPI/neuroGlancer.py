@@ -472,17 +472,19 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
     brainpi_url = config.settings.get("app", "url")
     ngURL = config.settings.get("neuroglancer", "url")
 
-    # Start server simply to build viewer state
-    token = "qwertysplithereqwertysplithereqwerty"
-    viewer = neuroglancer.UnsynchronizedViewer(token=token)
-    source = "precomputed://" + brainpi_url + compatible_file_link
-
-    with viewer.txn() as s:
-        # name = compatible_file_link.split('/')[-1].split('.')[0]
-        name = os.path.split(compatible_file_link)[-1]
-        s.layers[name] = neuroglancer.ImageLayer(
-            source=source, tab="rendering", shader=ng_shader(open_dataset_with_ng_json)
-        )
+    source = (
+        "precomputed://"
+        + brainpi_url.rstrip("/")
+        + "/"
+        + compatible_file_link.lstrip("/")
+    )
+    state = neuroglancer.ViewerState()
+    name = os.path.split(compatible_file_link)[-1]
+    state.layers[name] = neuroglancer.ImageLayer(
+        source=source,
+        tab="rendering",
+        shader=ng_shader(open_dataset_with_ng_json),
+    )
 
     # Neuroglancer CoordinateSpace
     # https://github.com/google/neuroglancer/blob/2200afbb85ab69550eeb3d2e089154d0ebc8a647/python/neuroglancer/coordinate_space.py#L146
@@ -496,33 +498,26 @@ def make_ng_link(open_dataset_with_ng_json, compatible_file_link, config=None):
         ),
         units=("", "um", "um", "um"),
     )
-    viewer.state.dimensions = coord
+    state.dimensions = coord
     # I think this is units (microns) scale / pixel
-    viewer.state.crossSectionScale = 50
+    state.crossSectionScale = 50
     # ~ crossSectionScale*600 produces the same size projection x-section
-    viewer.state.projection_scale = viewer.state.crossSectionScale * 600
+    state.projection_scale = state.crossSectionScale * 600
 
-    viewer.state.selected_layer.layer = name
-    viewer.state.selected_layer.visible = True
-    viewer.state.prefetch = True
-    viewer.state.concurrent_downloads = 100
-    viewer.state.layout.type = "xy"  # Options: ['xy', 'yz', 'xz', 'xy-3d', 'yz-3d', 'xz-3d', '4panel', '3d'] default=4panel
-
-    url = viewer.get_viewer_url()
-    state = url.split("/v/" + token + "/")[-1]
+    state.selected_layer.layer = name
+    state.selected_layer.visible = True
+    state.prefetch = True
+    state.concurrent_downloads = 100
+    state.layout = "xy"  # Options: xy, yz, xz, xy-3d, yz-3d, xz-3d, 4panel, 3d.
 
     ## If source URL is not secure, use the non-secure version of neuroglancer
     if "https://" in source == False:
         ngURL = ngURL.replace("https://", "http://")
 
-    outURL = ngURL + state
+    # Encode the complete state directly into the URL fragment without
+    # starting a temporary Neuroglancer server inside a Gunicorn worker.
+    outURL = neuroglancer.url_state.to_url(state, prefix=ngURL)
     logger.info(outURL)
-
-    # Cleanup to unsure that the neuroglancer server is no longer running
-    if neuroglancer.server.is_server_running():
-        neuroglancer.server.stop()
-    del viewer
-    del neuroglancer
 
     return outURL
 
@@ -638,7 +633,12 @@ def _make_native_ng_link(info, compatible_file_link, config=None):
     """
     brainpi_url = config.settings.get("app", "url")
     ngURL = config.settings.get("neuroglancer", "url")
-    source = "precomputed://" + brainpi_url + compatible_file_link
+    source = (
+        "precomputed://"
+        + brainpi_url.rstrip("/")
+        + "/"
+        + compatible_file_link.lstrip("/")
+    )
     name = os.path.split(compatible_file_link)[-1]
     kind = _native_ng_dataset_kind(info)
 
@@ -873,13 +873,6 @@ def setup_neuroglancer(app, config):
     Returns:
         Flask: The modified Flask application with Neuroglancer endpoints.
     """
-    # get_server will only open 1 server if it does not already exist.
-    if config.settings.getboolean("neuroglancer", "use_local_server"):
-        from neuroglancer_server import get_server
-
-        ng_server = get_server()
-        config.ng_server = ng_server
-
     # Establish file_pattern once so it isn't created on each request.
     file_pattern = "[0-9]+-[0-9]+_[0-9]+-[0-9]+_[0-9]+-[0-9]+"
 
@@ -1487,62 +1480,3 @@ the disadvantage, however, that chunk data is not shared at all by the 3 views
 # b = b.replace('true','True')
 # b = b.replace('false','False')
 # b = eval(b)
-
-
-#################################################################################################################
-## Note on interacting with neuroglancer python package to manipulate viewer
-#################################################################################################################
-
-# # This code enables the python neuroglancer package to start a viewer server that IS SYNCRONIZED to the python process
-# # In this way any change to the remote viewer is captured by the python process and any change to the viewer is
-# # imediately effects the remote viewer.
-#
-# import neuroglancer
-# neuroglancer.server.set_server_bind_address('128.182.82.56')
-# viewer = neuroglancer.Viewer()
-#
-#
-# # This code enables the python neuroglancer package to start a viewer server that is not syncronized to the python process
-# # In this way an independant view can be designed and then the only requirement is that the server remains active.
-# # It appears that an unlimited number of views can be shared off of the same server.
-# import neuroglancer
-#
-# # ip should be the domain/ip to the server
-# ip = '128.182.82.56'
-#
-# # token enables you to define a path to the server (http://{ip}/v/{token}
-# token = test
-#
-# neuroglancer.server.set_server_bind_address(ip)
-#
-# #UnsynchronizedViewer allows the server to accept any JSON state
-# viewer = neuroglancer.UnsynchronizedViewer(token='test')
-#
-# # Define custom shaders
-# shader="""
-# 	void main() {
-# 	emitRGB(vec3(toNormalized(getDataValue(0)),
-# 	toNormalized(getDataValue(1)),
-# 	toNormalized(getDataValue(2))));
-# 	}
-#     """
-#
-# #tab = 'source','rendering','annotations'
-# with viewer.txn() as s:
-#     s.layers['image'] = neuroglancer.ImageLayer(
-# 	source='precomputed://http://c02.bil.psc.edu:5002/ng/proj/rf1hillman/2023_01_19_largeSlab_NPBB299_2_tiff_corrected.omezans',
-# 	tab='rendering', shader=shader
-# 	)
-#
-# #Enable/Disable prefetch
-# viewer.state.prefetch=False
-#
-# #Change concurrent downloads
-# viewer.state.concurrent_downloads=100 # 100 is default
-#
-# # Controlling the view in neuroglancer
-# # Visual side panel:
-#
-# #Select specific layer by name:
-# viewer.state.selected_layer.layer = 'image'
-# viewer.state.selected_layer.visible = True

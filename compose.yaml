@@ -30,7 +30,8 @@ services:
 
   neuroglancer:
     # Reuse the image built by the brainpi service. Compose builds it once and
-    # starts this frontend as a separate, independently supervised process.
+    # starts the local frontend by default as a separate, independently
+    # supervised process. BrAinPI/Gunicorn never starts this process itself.
     image: brainpi:local
     command: ["python", "neuroglancer_server.py"]
     restart: unless-stopped
