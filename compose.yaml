@@ -13,6 +13,7 @@ services:
       BRAINPI_SETTINGS: /etc/brainpi/settings.ini
       BRAINPI_GROUPS: /etc/brainpi/groups.ini
       BRAINPI_PUBLIC_URL: ${BRAINPI_PUBLIC_URL:-http://localhost:5001/}
+      BRAINPI_NG_PUBLIC_URL: ${BRAINPI_NG_PUBLIC_URL:-http://localhost:9999/v/base/}
       BRAINPI_SECRET_KEY: ${BRAINPI_SECRET_KEY:?Set BRAINPI_SECRET_KEY in .env}
       BRAINPI_CACHE_DIR: /var/cache/brainpi
       BRAINPI_PYRAMIDS_DIR: /var/lib/brainpi/pyramids

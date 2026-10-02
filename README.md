@@ -156,8 +156,9 @@ plain/native BrAinPI service:
 python BrAinPI/neuroglancer_server.py
 ```
 
-Google's hosted viewer remains optional: set `[neuroglancer] url` to
-`https://neuroglancer-demo.appspot.com/` when a local frontend is not wanted.
+Google's hosted viewer remains optional: set `BRAINPI_NG_PUBLIC_URL`, or the
+fallback `[neuroglancer] url`, to `https://neuroglancer-demo.appspot.com/` when
+a local frontend is not wanted.
 For access from another machine, bind the standalone frontend to `0.0.0.0` and
 set `url` to the server's browser-reachable hostname instead of `localhost`.
 
@@ -236,11 +237,17 @@ Use a plain URL in the INI file; Markdown `[text](url)` syntax is invalid. If
 users open BrAinPI from other computers, replace `localhost` with the server's
 hostname or public HTTPS URL. Both services reuse the same `brainpi:local`
 image. BrAinPI/Gunicorn never starts a frontend process automatically. To use
-Google's hosted viewer instead, set `[neuroglancer] url` to
-`https://neuroglancer-demo.appspot.com/`; the local Compose service may then be
-stopped separately with `docker compose stop neuroglancer`. On a fresh
-hosted-viewer deployment, `docker compose up --build -d brainpi` starts only
-BrAinPI.
+Google's hosted viewer instead, set this in `.env`:
+
+```dotenv
+BRAINPI_NG_PUBLIC_URL=https://neuroglancer-demo.appspot.com/
+```
+
+The local Compose service is not selected by that URL, so stop an existing one
+with `docker compose stop neuroglancer`. On a fresh hosted-viewer deployment,
+`docker compose up --build -d brainpi` starts only BrAinPI. A bare
+`docker compose up` always starts both services and would leave an unused local
+viewer running while generated links continue to use the hosted viewer.
 
 ### Docker ports and public URLs
 
@@ -257,7 +264,7 @@ between them:
 | `[neuroglancer] local_ip` | Standalone viewer bind address inside its container | `0.0.0.0` |
 | `[neuroglancer] local_port` | Standalone viewer listening port inside its container; normally do not change it | `9999` |
 | `BRAINPI_NG_PORT` in `.env` | Publishes a host port to container port `9999` | `9999:9999` |
-| `[neuroglancer] url` | Browser-reachable viewer base URL used in generated links | `http://localhost:9999/v/base/` |
+| `BRAINPI_NG_PUBLIC_URL` in `.env` | Browser-reachable viewer base URL; overrides `[neuroglancer] url` | `http://localhost:9999/v/base/` |
 
 The two `.env` port variables only change Docker's host-side published ports.
 They do not rewrite either public URL. For example, publishing BrAinPI on host
@@ -269,17 +276,11 @@ BRAINPI_PUBLIC_URL=http://localhost:8000/
 ```
 
 Publishing the local viewer on host port 10999 keeps its container listener on
-9999 and requires a matching browser URL in `docker/settings.ini`:
+9999 and requires the matching public URL:
 
 ```dotenv
 BRAINPI_NG_PORT=10999
-```
-
-```ini
-[neuroglancer]
-local_ip = 0.0.0.0
-local_port = 9999
-url = http://localhost:10999/v/base/
+BRAINPI_NG_PUBLIC_URL=http://localhost:10999/v/base/
 ```
 
 `localhost` means the computer running the browser, not necessarily the Docker
@@ -288,11 +289,12 @@ name or IP address they can reach. Behind a TLS reverse proxy, use the external
 `https://` URLs and ports exposed by that proxy even though the containers keep
 listening internally on HTTP ports 5001 and 9999.
 
-Generated viewer links use `[neuroglancer] url` for the frontend and embed
-`BRAINPI_PUBLIC_URL` as the precomputed data source. The user's browser connects
-to both addresses directly. Do not put Compose-only DNS names such as
-`http://brainpi:5001/` or `http://neuroglancer:9999/` in these public URL
-settings; those names resolve between containers but not in a normal browser.
+Generated viewer links use `BRAINPI_NG_PUBLIC_URL` (or its INI fallback) for
+the frontend and embed `BRAINPI_PUBLIC_URL` as the precomputed data source. The
+user's browser connects to both addresses directly. Do not put Compose-only DNS
+names such as `http://brainpi:5001/` or `http://neuroglancer:9999/` in these
+public URL settings; those names resolve between containers but not in a normal
+browser.
 
 Docker configuration templates are in `docker/template_settings.ini` and
 `docker/template_groups.ini`. Copy and rename them as shown above, then fill in
@@ -313,6 +315,8 @@ containers:
 - `BRAINPI_SECRET_KEY`: overrides the Flask session and signed-URL secret.
 - `BRAINPI_PUBLIC_URL`: overrides `[app] url` with the browser-reachable base
   URL.
+- `BRAINPI_NG_PUBLIC_URL`: overrides `[neuroglancer] url` with the
+  browser-reachable frontend base URL.
 - `BRAINPI_CACHE_DIR`: overrides the Unix disk-cache path.
 - `BRAINPI_PYRAMIDS_DIR`: overrides all generated-pyramid roots beneath one
   writable parent directory.

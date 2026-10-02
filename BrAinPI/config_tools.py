@@ -74,6 +74,7 @@ def get_config(file='settings.ini',allow_no_value=True):
     environment_overrides = {
         "BRAINPI_SECRET_KEY": ("auth", "secret_key"),
         "BRAINPI_PUBLIC_URL": ("app", "url"),
+        "BRAINPI_NG_PUBLIC_URL": ("neuroglancer", "url"),
         "BRAINPI_CACHE_DIR": ("disk_cache", "location_unix"),
     }
     for env_name, (section, option) in environment_overrides.items():
