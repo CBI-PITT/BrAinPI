@@ -30,8 +30,10 @@
                     <img class="browser-brand-icon" src="{{ url_for('static', filename='images/brainpi_icon.png') }}" alt="" aria-hidden="true">
                     <span><strong>{{ current_path['header'] }}</strong><small>Data browser</small></span>
                 </a>
+                {% if current_path.get('logo') %}
                 <span class="browser-brand-divider" aria-hidden="true"></span>
-                <img class="browser-cbi-logo" src="{{ url_for('static', filename='images/cbi_logo.png') }}" alt="Center for Biologic Imaging">
+                <img class="browser-institution-logo" src="{{ url_for('static', filename=current_path['logo']) }}" alt="Institution logo">
+                {% endif %}
             </div>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#browserNavigation" aria-controls="browserNavigation" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
