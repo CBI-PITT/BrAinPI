@@ -138,7 +138,7 @@ gunicorn \
   -b 0.0.0.0:5001 \
   --chdir BrAinPI \
   wsgi:app \
-  -w 20 \
+  -w 8 \
   --threads 2 \
   --timeout 1800
 ```
@@ -167,6 +167,12 @@ set `url` to the server's browser-reachable hostname instead of `localhost`.
 The repository includes a Linux-based Docker deployment that runs on Docker
 Engine and Docker Desktop for Linux, macOS, and Windows. Configuration, source
 datasets, generated pyramids, and disk cache are kept outside the image.
+The Docker image starts Gunicorn with 8 workers and 2 threads per worker.
+Adjust concurrency to the memory available for the datasets being served.
+On ARM64, the builder uses signed plain `char` so the pinned
+`v3d-py-helper` C++ extension compiles. It also provides HDF5 build libraries
+if `h5py` needs to be built from source; the pinned `h5py` version has a
+Python 3.12 ARM64 wheel.
 
 Create the local environment file and edit the data path and secret:
 
@@ -193,6 +199,13 @@ protected = /data/Protected
 make sure that directory is shared with Docker. The container mounts source
 datasets read-only at `/data`; generated pyramids and cache entries use Docker
 named volumes.
+
+JP2 pyramid generation stages the entire decoded image in memory. The decoded
+image can be much larger than the `.jp2` file, so even the default worker count
+may exceed Docker's memory limit for large sources. Repeated worker `SIGKILL`
+messages during JP2 conversion are a sign to check Docker memory allocation
+and conversion concurrency. The per-source generation size limit checks the
+compressed file size, not decoded memory use.
 
 Generated pyramids have no automatic store quota and are never deleted by the
 application. `pyramids_images_allowed_generation_size_gb` limits only the size

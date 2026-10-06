@@ -1,12 +1,16 @@
 # syntax=docker/dockerfile:1
 FROM python:3.12-slim-bookworm AS builder
 
+# v3d-py-helper's generated C++ initializes plain char with negative values.
+# ARM64 defaults char to unsigned, so compile it as signed on every platform.
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
+    CFLAGS=-fsigned-char \
+    CXXFLAGS=-fsigned-char \
     SETUPTOOLS_SCM_PRETEND_VERSION_FOR_BRAINPI=0.0.0+docker
 
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends build-essential git ca-certificates \
+    && apt-get install --yes --no-install-recommends build-essential git ca-certificates pkg-config libhdf5-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -34,7 +38,7 @@ ENV PYTHONUNBUFFERED=1 \
     NUMEXPR_NUM_THREADS=1
 
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates libgomp1 libopenjp2-7 \
+    && apt-get install --yes --no-install-recommends ca-certificates libgomp1 libopenjp2-7 libhdf5-103-1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid "${BRAINPI_GID}" brainpi \
     && useradd --uid "${BRAINPI_UID}" --gid "${BRAINPI_GID}" --create-home brainpi \
@@ -54,4 +58,4 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/healthz', timeout=3)"]
 
-CMD ["gunicorn", "--worker-class", "gthread", "--workers", "12", "--threads", "4", "--timeout", "1800", "--graceful-timeout", "60", "--bind", "0.0.0.0:5001", "wsgi:app"]
+CMD ["gunicorn", "--worker-class", "gthread", "--workers", "8", "--threads", "2", "--timeout", "1800", "--graceful-timeout", "60", "--bind", "0.0.0.0:5001", "wsgi:app"]
