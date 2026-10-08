@@ -1,0 +1,10 @@
+# Enable with: docker compose -f compose.yaml -f compose.ipa.yaml up -d
+services:
+  brainpi:
+    volumes:
+      - type: bind
+        source: ${BRAINPI_IPA_CA_FILE:-./docker/ca.crt}
+        target: /etc/ipa/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false

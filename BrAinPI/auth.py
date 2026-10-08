@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Flask-Login setup with optional Windows-domain LDAP authentication."""
+"""Flask-Login setup with optional FreeIPA and Windows-domain LDAP authentication."""
 
 '''
 Windows domain auth:
@@ -20,6 +20,9 @@ from flask import (render_template,
                    redirect, 
                    url_for,
                    abort)
+
+import os
+import traceback
 
 from flask_login import (LoginManager, 
                          login_user, 
@@ -133,28 +136,45 @@ def setup_auth(app):
         ## Check user against domain server
         user = False # Default to False for security
         if 'auth' in settings and not settings.getboolean('auth','bypass_auth'):
-            # With ConfigParser(allow_no_value=True), both ``key =`` and a
-            # valueless ``key`` are valid, but the latter is returned as None.
-            domain_server = (settings.get('auth', 'domain_server', fallback='') or '').strip()
-            domain_port = (settings.get('auth', 'domain_port', fallback='') or '').strip()
-            domain_name = (settings.get('auth', 'domain_name', fallback='') or '').strip()
+            # FreeIPA is attempted first; rejected credentials and connection
+            # failures fall back to the configured Windows-domain server.
+            ipa_enabled = settings.getboolean('auth', 'ipa_auth', fallback=False)
+            if ipa_enabled:
+                ipa_server = (settings.get('auth', 'ipa_server', fallback='') or '').strip()
+                ipa_server = ipa_server or 'ipa.cbiserver.pitt.edu'
+                ipa_tls = settings.getboolean('auth', 'ipa_use_tls', fallback=True)
+                ipa_ca = (settings.get('auth', 'ipa_ca_file', fallback='') or '').strip() or None
+                try:
+                    user = ipa_authenticate(username, password,
+                                            server=ipa_server,
+                                            use_tls=ipa_tls,
+                                            ca_file=ipa_ca)
+                except ConnectionError:
+                    app.logger.warning('FreeIPA connection failed; trying domain authentication',
+                                       exc_info=True)
+                    user = False
 
-            # An empty public/container template must not accidentally attempt
-            # authentication against localhost or construct an invalid LDAP
-            # URL. Anonymous routes remain usable when LDAP is not configured.
-            if not all((domain_server, domain_port, domain_name)):
-                app.logger.warning('LDAP login requested, but LDAP is not configured')
-                flash('Authentication is not configured for this deployment.')
-                return redirect(url_for('login'))
+            if user is not True:
+                # With allow_no_value=True, valueless INI keys return None.
+                domain_server = (settings.get('auth', 'domain_server', fallback='') or '').strip()
+                domain_port = (settings.get('auth', 'domain_port', fallback='') or '').strip()
+                domain_name = (settings.get('auth', 'domain_name', fallback='') or '').strip()
 
-            user = domain_auth(username,
-                               password,
-                               domain_server=r"ldap://{}:{}".format(
-                                   domain_server,
-                                   domain_port
-                                   ),
-                               domain=domain_name
-                               ) # Return bool True/False if auth succeeds/fails and None if error
+                # IPA-only deployments must not need AD settings. If IPA failed,
+                # reject the login rather than attempting an invalid LDAP URL.
+                if not all((domain_server, domain_port, domain_name)):
+                    if ipa_enabled:
+                        flash('Your credentials could not be verified. Please try again.')
+                    else:
+                        app.logger.warning('LDAP login requested, but LDAP is not configured')
+                        flash('Authentication is not configured for this deployment.')
+                    return redirect(url_for('login'))
+
+                user = domain_auth(username,
+                                   password,
+                                   domain_server=r"ldap://{}:{}".format(
+                                       domain_server, domain_port),
+                                   domain=domain_name)
             
             if user == False:
                 flash('''Your credentials are not valid''')
@@ -322,5 +342,79 @@ def domain_auth(user_name,password,domain_server=r"ldap://localhost:389",domain=
             return False
     except:
         print('An error occured while connecting to the domain server')
+        traceback.print_exc()
         return None
-     
+
+
+def _ipa_host(server_string):
+    '''
+    Extract the bare hostname from a server string, e.g.
+    'ldaps://ipa.cbiserver.pitt.edu:636' -> 'ipa.cbiserver.pitt.edu'
+    '''
+    return server_string.replace("ldaps://", "").replace("ldap://", "").split("/")[0].split(":")[0]
+
+
+def _ipa_base_dn(host):
+    '''
+    Derive the FreeIPA base DN from the server hostname, e.g.
+    'ipa.cbiserver.pitt.edu' -> 'dc=cbiserver,dc=pitt,dc=edu'
+    '''
+    parts = host.split(".")
+    domain = ".".join(parts[1:]) if len(parts) > 1 else parts[0]
+    return ",".join("dc=" + label for label in domain.split("."))
+
+
+def ipa_authenticate(user_name, password, server="ipa.cbiserver.pitt.edu", use_tls=True, ca_file=None):
+    '''
+    Attempts to authenticate a user against FreeIPA over LDAP.
+    The bind itself performs the authentication.
+
+    ca_file is an optional path to the FreeIPA CA bundle (e.g. /etc/ipa/ca.crt)
+    used to verify the LDAPS certificate; the system trust store usually does
+    NOT contain the FreeIPA CA, so without it TLS verification fails.
+
+    Return True if auth succeeded
+    Return False if auth was rejected (invalid credentials or unknown user)
+    Raise ConnectionError if the server is unreachable or the LDAP session fails
+    '''
+
+    from ldap3 import Server, Connection, ALL
+    from ldap3.core.exceptions import (LDAPBindError,
+                                       LDAPException,
+                                       LDAPInvalidCredentialsResult)
+
+    host = _ipa_host(server)
+    bind_dn = "uid={},cn=users,cn=accounts,{}".format(user_name, _ipa_base_dn(host))
+    if ca_file and not os.path.exists(ca_file):
+        print('[ipa-auth] WARNING: ca_file {} does not exist on this host'.format(ca_file))
+    try:
+        if ca_file:
+            import ssl
+            from ldap3 import Tls
+            ldap_server = Server(host,
+                                 port=636 if use_tls else 389,
+                                 use_ssl=use_tls,
+                                 tls=Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=ca_file),
+                                 get_info=ALL)
+        else:
+            ldap_server = Server(host, port=636 if use_tls else 389, use_ssl=use_tls, get_info=ALL)
+        print('[ipa-auth] binding as {} to {}:{}'.format(bind_dn, host, 636 if use_tls else 389))
+
+        conn = Connection(ldap_server,
+                          user=bind_dn,
+                          password=password,
+                          auto_bind=True,
+                          raise_exceptions=True)
+    except (LDAPInvalidCredentialsResult, LDAPBindError):
+        print('[ipa-auth] FreeIPA rejected credentials for {}'.format(bind_dn))
+        return False
+    except LDAPException as exc:
+        print('[ipa-auth] LDAP session to {} failed: {}'.format(host, exc))
+        traceback.print_exc()
+        raise ConnectionError('LDAP connection to {} failed: {}'.format(host, exc)) from exc
+
+    try:
+        conn.unbind()
+    except LDAPException:
+        pass
+    return True

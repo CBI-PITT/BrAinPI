@@ -44,7 +44,9 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-BrAinPI/_tests/
+BrAinPI/_tests/*
+!BrAinPI/_tests/test_ipa_auth.py
+!BrAinPI/_tests/test_auth_login.py
 htmlcov/
 .tox/
 .coverage
@@ -66,6 +68,10 @@ local_settings.py
 
 # Flask instance folder
 instance/
+
+# Deployment-specific IPA CA bundles
+docker/ca.crt
+docker/ipa-ca.crt
 
 # Sphinx documentation
 docs/_build/

@@ -314,11 +314,53 @@ Docker configuration templates are in `docker/template_settings.ini` and
 deployment-specific values. The templates intentionally contain no LDAP
 server, domain, usernames, group membership, or enabled dataset roots. The
 service starts with empty `[dir_anon]` and `[dir_auth]` sections, but no data is
-listed until deployment-specific aliases are added. Without LDAP settings,
+listed until deployment-specific aliases are added. Without IPA or AD-LDAP settings,
 login and authenticated paths remain unavailable. Keep `[all]` in the groups
 file even when it has no members. `BRAINPI_SETTINGS_FILE` and
 `BRAINPI_GROUPS_FILE` in `.env` may point Compose at differently named host
 files when needed.
+
+FreeIPA authentication can be enabled in the settings file's `[auth]` section:
+
+```ini
+ipa_auth = True
+ipa_server = ipa.example.org
+ipa_use_tls = True
+ipa_ca_file = /etc/ipa/ca.crt
+```
+
+IPA is attempted first. A successful IPA login does not require AD-LDAP settings.
+Rejected credentials or an IPA connection failure fall back to AD-LDAP when
+`domain_server`, `domain_port`, and `domain_name` are configured; otherwise the
+login is rejected. IPA is disabled by default, preserving existing AD-LDAP login.
+The IPA base DN is derived from the server hostname (for example,
+`ipa.example.org` becomes `dc=example,dc=org`). `ipa_use_tls = True` uses LDAPS
+on port 636; `False` uses LDAP on port 389. `ipa_ca_file` is optional and, when
+set, enables certificate validation using that CA bundle.
+
+For Docker deployments using the IPA CA, place the certificate at
+`docker/ca.crt` and enable the optional Compose file:
+
+```bash
+docker compose -f compose.yaml -f compose.ipa.yaml up -d brainpi
+```
+
+This mounts the certificate read-only at `/etc/ipa/ca.crt`; set
+`ipa_use_tls = True` and `ipa_ca_file = /etc/ipa/ca.crt` in the deployment's
+settings file. For a different host certificate path, set `BRAINPI_IPA_CA_FILE`
+in `.env`. A missing host file makes deployment fail rather than creating an
+empty directory. The certificate is ignored by Git and must be supplied on
+each deployment machine. Use the same two `-f` arguments for subsequent
+Compose operations on this deployment, including updates and log inspection:
+
+```bash
+docker compose -f compose.yaml -f compose.ipa.yaml logs -f --tail=100 brainpi
+```
+
+Deployments without the CA mount continue to use `docker compose up -d`.
+Set `ipa_auth = False` when IPA is unused. For IPA deployments without this
+mount, use another readable CA path or leave `ipa_ca_file` empty; the current
+implementation skips certificate validation when that setting is empty.
 
 Compose also supplies these application-level environment variables inside the
 containers:
