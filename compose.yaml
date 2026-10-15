@@ -7,6 +7,11 @@ services:
         BRAINPI_GID: ${BRAINPI_GID:-10001}
     image: brainpi:local
     restart: unless-stopped
+    # Applied to the container processes, including Gunicorn workers.
+    ulimits:
+      nofile:
+        soft: ${BRAINPI_NOFILE:-500000}
+        hard: ${BRAINPI_NOFILE:-500000}
     ports:
       - "${BRAINPI_PORT:-5001}:5001"
     environment:

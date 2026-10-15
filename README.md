@@ -148,6 +148,47 @@ deployment. Each worker owns its loader objects; the configured disk cache is
 shared. Run BrAinPI behind a reverse proxy in production and configure request
 timeouts and maximum response sizes for large chunks.
 
+### Open-file limits and cache errors
+
+BrAinPI workers can hold many dataset files, network sockets, and DiskCache
+database connections open. A per-process open-file limit (`nofile`) of 1024
+may be insufficient for production workloads. Check the actual worker's limit
+and usage on the machine running the service, rather than relying only on the
+limit reported by an unrelated terminal:
+
+```bash
+pgrep -af gunicorn
+# Replace 12345 with an actual Gunicorn worker PID.
+prlimit --pid 12345 --nofile
+ls /proc/12345/fd | wc -l
+```
+
+For a plain/native Linux deployment started from a shell, raise the limit
+before starting Python or Gunicorn in that same shell:
+
+```bash
+ulimit -Sn
+ulimit -Hn
+ulimit -n 500000
+# Start the application using the commands above in this shell.
+```
+
+The shell's hard limit must permit this value; changing an unrelated shell
+does not update an already-running service. For a systemd-managed deployment,
+set `LimitNOFILE=500000` in the unit's `[Service]` section, reload the systemd
+configuration, and restart the service. Choose a limit appropriate for the
+deployment and investigate steadily growing descriptor usage rather than
+only increasing the limit.
+
+Descriptor exhaustion normally reports `[Errno 24] Too many open files`.
+DiskCache also suppresses directory-creation `OSError` exceptions before
+attempting to write a `.val` cache file. A subsequent `[Errno 2] No such file
+or directory` therefore does not identify the original failure by itself.
+If cache errors persist, also check free disk space, free inodes (`df -h` and
+`df -i` on the cache path), directory permissions, mount availability, and
+external cleanup jobs. Do not delete the active cache directory while workers
+are using it. For the container limit, see the Docker instructions below.
+
 Gunicorn workers never start a Neuroglancer frontend. The default settings point
 to a local frontend, which must be run as one standalone process alongside the
 plain/native BrAinPI service:
@@ -199,6 +240,38 @@ protected = /data/Protected
 make sure that directory is shared with Docker. The container mounts source
 datasets read-only at `/data`; generated pyramids and cache entries use Docker
 named volumes.
+
+The `brainpi` Compose service sets both soft and hard `nofile` limits to
+**500000 per process** by default. This applies to Gunicorn workers and is
+independent of the shell limit on the host. Override it in `.env` if needed:
+
+```dotenv
+BRAINPI_NOFILE=500000
+```
+
+Apply the configuration to an existing deployment by recreating the BrAinPI
+container; no image rebuild is required for this limit change:
+
+```bash
+docker compose up -d --force-recreate brainpi
+docker compose exec brainpi sh -c 'ulimit -Sn; ulimit -Hn'
+```
+
+When using the IPA certificate mount, keep the same Compose file selection:
+
+```bash
+docker compose -f compose.yaml -f compose.ipa.yaml up -d --force-recreate brainpi
+docker compose -f compose.yaml -f compose.ipa.yaml exec brainpi sh -c 'ulimit -Sn; ulimit -Hn'
+```
+
+The two checks should print the configured value for the soft and hard limits.
+A plain `docker compose restart` does not apply changed resource limits. If
+Docker rejects the requested value, check the Docker daemon/host (or Docker
+Desktop VM) limits with the administrator. Compose's
+[`ulimits` setting](https://docs.docker.com/reference/compose-file/services/#ulimits)
+controls runtime limits; this setting is not passed to the application as an
+environment variable. The separate Neuroglancer service retains its existing
+limits.
 
 JP2 pyramid generation stages the entire decoded image in memory. The decoded
 image can be much larger than the `.jp2` file, so even the default worker count
