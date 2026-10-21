@@ -197,7 +197,7 @@ def load_full_image_by_chunks(jp2_img, image_type, component_count):
     return pixels
 
 
-def generate_tiff_pyramid(source_path, destination_path, image_type):
+def generate_tiff_pyramid(source_path, destination_path, image_type, storage_manager=None):
     """Create an atomic TIFF pyramid from one staged in-memory JP2 image."""
     jp2_img = glymur.Jp2k(source_path)
     component_count = _component_count(jp2_img)
@@ -237,7 +237,10 @@ def generate_tiff_pyramid(source_path, destination_path, image_type):
                     metadata=metadata if level == 0 else None,
                 )
                 logger.success(f"JP2 pyramid level {level}: TIFF write complete.")
-        os.replace(temporary_tiff, destination_path)
+        if storage_manager is None:
+            os.replace(temporary_tiff, destination_path)
+        else:
+            storage_manager.publish(temporary_tiff, destination_path)
         logger.success(f"JP2 pyramid: saved {destination_path}.")
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -257,8 +260,10 @@ class jp2_loader:
         verbose=None,
         squeeze=True,
         cache=None,
+        storage_manager=None,
     ):
         self.source_path = os.fspath(location)
+        self.storage_manager = storage_manager
         self.active_path = self.source_path
         self.pyramid_path = None
         self.uses_pyramid = False
@@ -320,7 +325,12 @@ class jp2_loader:
             with lock:
                 if not os.path.exists(pyramid_path):
                     logger.info(f"Generating TIFF pyramid for JP2: {self.source_path}")
-                    generate_tiff_pyramid(self.source_path, pyramid_path, self.image_type)
+                    storage = getattr(self, "storage_manager", None)
+                    if storage is None:
+                        generate_tiff_pyramid(self.source_path, pyramid_path, self.image_type)
+                    else:
+                        generate_tiff_pyramid(self.source_path, pyramid_path, self.image_type,
+                                              storage_manager=storage)
 
         self.pyramid_path = pyramid_path
         self.pyramid_reader = tiff_loader.tiff_loader(
@@ -339,6 +349,11 @@ class jp2_loader:
         self.active_path = self.pyramid_path
         self.active_reader = self.pyramid_reader
         self._copy_tiff_metadata()
+
+    def close(self):
+        """Close the nested TIFF loader as well as direct JP2 references."""
+        from pyramid_storage import close_resources
+        close_resources(self)
 
     def _copy_tiff_metadata(self):
         for name in (

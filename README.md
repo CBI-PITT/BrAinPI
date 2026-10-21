@@ -1,18 +1,198 @@
 # BrAinPI
 
-BrAinPI (pronounced “Brain Pie”) is a Flask service for browsing and serving
-large, multiscale microscopy datasets. It presents supported source formats
-through three viewer-facing interfaces:
+BrAinPI (pronounced “Brain Pie”) browses and serves large microscopy datasets
+through Neuroglancer, OpenSeadragon, and virtual OME-Zarr v2 endpoints. It
+supports local files and public, anonymous S3 OME-Zarr stores.
 
-- Neuroglancer precomputed (`/ng/`)
-- OpenSeadragon pages and PNG tiles (`/osd/`)
-- a virtual OME-Zarr v2 hierarchy (`/omezarr/`)
+## Installation
 
-Datasets remain in their source format. BrAinPI opens them through a common
-five-dimensional `TCZYX` loader interface and generates metadata or chunks on
-demand. Local files and public, anonymous S3 OME-Zarr stores are supported.
+Get the code:
+
+```bash
+git clone https://github.com/CBI-PITT/BrAinPI.git
+cd BrAinPI
+```
+
+Choose [Docker](#docker) for a container deployment, or
+[native Python](#native-python) for a local development environment.
+
+### Docker
+
+Requires Git and Docker with the Compose plugin. Run the commands from the
+repository root. Docker supplies Python and the native image libraries.
+
+**1. Create deployment files.** For a new installation:
+
+```bash
+cp .env.example .env
+cp docker/template_settings.ini docker/settings.ini
+cp docker/template_groups.ini docker/groups.ini
+```
+
+**2. Set the data directory and secret in `.env`.** Use an existing absolute
+host path and replace the example secret with a newly generated random value:
+
+```dotenv
+BRAINPI_DATA_DIR=/absolute/path/to/public-data
+BRAINPI_SECRET_KEY=replace-with-a-long-random-secret
+```
+
+The host data directory is mounted read-only at `/data`. To list that directory
+in the anonymous browser, add this alias to `docker/settings.ini`:
+
+```ini
+[dir_anon]
+data = /data
+```
+
+The templates start with no dataset aliases and no configured login backend.
+For authenticated browsing, see [authentication](docs/deployment.md#authentication).
+
+**3. Build once, then start both services.** The application and local
+Neuroglancer frontend share the same image:
+
+```bash
+docker compose build brainpi
+docker compose up -d
+docker compose ps
+curl http://localhost:5001/healthz
+```
+
+Open **[http://localhost:5001/browser/](http://localhost:5001/browser/)**.
+The local Neuroglancer frontend runs at
+[http://localhost:9999/v/base/](http://localhost:9999/v/base/).
+
+For access from another computer, set `BRAINPI_PUBLIC_URL` and
+`BRAINPI_NG_PUBLIC_URL` in `.env` to that server's browser-reachable URLs.
+See [ports and public URLs](docs/deployment.md#ports-and-public-urls) for port
+changes, HTTPS proxies, and the optional hosted viewer.
+
+Source data stays on the host. Disk cache and generated pyramids persist in
+separate Docker volumes; the default combined pyramid limit is **50 GiB**.
+
+### Native Python
+
+Requires Python 3.12 on Linux or macOS; use Docker on Windows. From the cloned
+repository root, create an environment and install OpenJPEG and BrAinPI:
+
+```bash
+conda create -y -n brainpi python=3.12
+conda activate brainpi
+conda install -c conda-forge openjpeg glymur=0.13.6
+python -m pip install -e .
+cp BrAinPI/template_settings.ini BrAinPI/settings.ini
+cp BrAinPI/template_groups.ini BrAinPI/groups.ini
+```
+
+In `BrAinPI/settings.ini`, set `[auth] secret_key`, `[app] url`,
+`[neuroglancer] url`, and a writable `[pyramid_store] path`. Native dataset
+aliases use host paths:
+
+```ini
+[dir_anon]
+data = /absolute/path/to/public-data
+```
+
+Start the application:
+
+```bash
+gunicorn --chdir BrAinPI --worker-class gthread \
+  --workers 8 --threads 2 --timeout 1800 \
+  --bind 0.0.0.0:5001 wsgi:app
+```
+
+Start the local Neuroglancer frontend in a second terminal with the same
+Conda environment:
+
+```bash
+python BrAinPI/neuroglancer_server.py
+```
+
+Open [http://localhost:5001/browser/](http://localhost:5001/browser/).
+For Flask development, use `python BrAinPI/brain_api_main.py` instead of
+Gunicorn. See the [deployment guide](docs/deployment.md) for concurrency,
+file-descriptor limits, and production setup.
+
+## Running
+
+Common Docker operations:
+
+```bash
+docker compose logs -f --tail=100 brainpi
+docker compose restart brainpi neuroglancer
+docker compose down
+```
+
+`restart` reloads edited INI settings. After changing `.env`, ports, mounts, or
+resource limits, recreate the containers with `docker compose up -d --force-recreate`.
+After changing application code or dependencies, rebuild with
+`docker compose build brainpi`, then recreate the containers.
+
+`docker compose down` preserves the cache and pyramid volumes. Adding `-v`
+deletes them. If using the IPA certificate overlay, include the same
+`-f compose.yaml -f compose.ipa.yaml` selection in subsequent commands.
+
+## Configuration
+
+Docker reads `docker/settings.ini` and `docker/groups.ini`; native startup
+reads the corresponding files under `BrAinPI/`. These deployment files and
+`.env` are ignored by Git. Keep your existing files when updating an installation.
+
+| Setting | Purpose |
+|---|---|
+| `[dir_anon]`, `[dir_auth]` | Dataset aliases for anonymous and authenticated browsing. |
+| `[auth]`, `groups.ini` | FreeIPA/AD-LDAP login and browser group restrictions. |
+| `[pyramid_store]` | One root for `tif/`, `nifti/`, `jp2/`, and state files; 50 GiB default quota. |
+| `[disk_cache]` | Independent response/chunk cache location, size, and eviction policy. |
+| `[app] url`, `[neuroglancer] url` | Browser-reachable service and viewer URLs. |
+| Loader sections | Per-source generation size limits and generated artifact suffixes. |
+
+Pyramid storage is managed automatically. At its limit, BrAinPI closes cached
+image objects and removes the oldest generated pyramids, targeting 70% of
+recorded usage. The current cleanup barrier temporarily returns HTTP 503 for
+most new requests, including IMS and browser requests. Details and exceptions
+are in [storage management](docs/storage.md#automatic-cleanup).
+
+Members of `[all]` in `groups.ini` see a **Storage** button after **Sign out**.
+One click reports cache and pyramid usage; page loading does not trigger a scan.
+
+Browser group restrictions do not by themselves protect the viewer-facing
+`/ng/`, `/osd/`, and `/omezarr/` data routes. Verify access control at your proxy
+or application boundary before exposing restricted dataset aliases. Use HTTPS
+for authenticated browser sessions.
+
+## Further documentation
+
+- [Deployment and troubleshooting](docs/deployment.md): Docker mounts, ports,
+  public URLs, authentication, certificate mounts, environment variables, and
+  file-descriptor/memory issues.
+- [Storage management](docs/storage.md): cache configuration, the pyramid
+  ledger, automatic cleanup, manual maintenance, and cache invalidation.
+- [Viewer and API reference](docs/viewer-reference.md): endpoint URLs, link
+  discovery, OME-Zarr variants, pixel conversion, and viewer behavior.
+
+## Supported sources
+
+| Source | Extensions or layout | Notes |
+|---|---|---|
+| Imaris | `.ims` | Multiscale image data; Imaris annotations are not exposed. |
+| OME-Zarr | `.ome.zarr`, `.zarr` | Local `.ome.zarr` directories and anonymous, read-only `s3://` stores; OME multiscales metadata is required. |
+| Alternative Zarr stores | `.omezans`, `.omehans` | Archived and HDF5-backed nested stores supplied by `zarr_stores`. |
+| TIFF / OME-TIFF | `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.ome-tif`, `.ome-tiff` | Existing pyramids are reused; optional generated pyramids are stored according to `settings.ini`. |
+| JPEG 2000 | `.jp2` | Requires OpenJPEG through Glymur. RGB/YCC declarations are distinguished from independent components. |
+| Nikon ND2 | `.nd2` | Read through `limnd2`. |
+| NIfTI | `.nii`, `.nii.gz`, `.nii.zarr` | NIfTI files may be converted to a cached multiscale Zarr representation. |
+| TeraFly | directory ending in `.terafly` | The current loader supports one image channel. |
+| Neuroglancer precomputed | directory ending in `.pcd` | Raw image volumes can be loaded by `/ng/` and the virtual OME-Zarr endpoint; native annotation and segmentation datasets are passed through by `/ng/`. |
+
+All image loaders expose logical `TCZYX` data. TIFF/JP2 sample axes such as RGB
+`YXS` are folded into the logical channel axis.
 
 ## Architecture
+
+All image loaders expose a common five-dimensional `TCZYX` interface. Metadata
+and chunks are produced on demand; sources that need additional pyramid levels
+can use generated artifacts without changing the original dataset.
 
 ```text
 configured local/S3 path
@@ -28,554 +208,6 @@ configured local/S3 path
                                               + compressed chunks
 ```
 
-
-## Supported sources
-
-| Source | Extensions or layout | Notes |
-|---|---|---|
-| Imaris | `.ims` | Multiscale image data; Imaris annotations are not exposed. |
-| OME-Zarr | `.ome.zarr`, `.zarr` | Local stores and anonymous, read-only `s3://` stores; OME multiscales metadata is required. |
-| Alternative Zarr stores | `.omezans`, `.omehans` | Archived and HDF5-backed nested stores supplied by `zarr_stores`. |
-| TIFF / OME-TIFF | `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.ome-tif`, `.ome-tiff` | Existing pyramids are reused; optional generated pyramids are stored according to `settings.ini`. |
-| JPEG 2000 | `.jp2` | Requires OpenJPEG through Glymur. RGB/YCC declarations are distinguished from independent components. |
-| Nikon ND2 | `.nd2` | Read through `limnd2`. |
-| NIfTI | `.nii`, `.nii.gz`, `.nii.zarr` | NIfTI files may be converted to a cached multiscale Zarr representation. |
-| TeraFly | directory ending in `.terafly` | The current loader supports one image channel. |
-| Neuroglancer precomputed | directory ending in `.pcd` | Raw image volumes can be loaded by `/ng/` and the virtual OME-Zarr endpoint; native annotation and segmentation datasets are passed through by `/ng/`. |
-
-All image loaders expose logical `TCZYX` data. TIFF/JP2 sample axes such as RGB
-`YXS` are folded into the logical channel axis.
-
-## Installation
-
-BrAinPI requires Python 3.12. The development environment and Docker images use
-Python 3.12; deployments should use a clean, pinned environment and run the
-test suite before release.
-
-```bash
-git clone https://github.com/CBI-PITT/BrAinPI.git
-cd BrAinPI
-
-conda create -y -n brainpi python=3.12
-conda activate brainpi
-pip install -e .
-```
-
-Glymur requires the native OpenJPEG library. If it is not provided by the host
-system, install it from conda-forge:
-
-```bash
-conda install -c conda-forge openjpeg glymur=0.13.6
-```
-
-## Configuration
-
-Create local configuration files before starting the service:
-
-```bash
-cp BrAinPI/template_settings.ini BrAinPI/settings.ini
-cp BrAinPI/template_groups.ini BrAinPI/groups.ini
-```
-
-At minimum, review these sections in `settings.ini`:
-
-- `[app]`: public service URL, name, logging mode, templates and static assets
-- `[dir_anon]`: path aliases visible to anonymous browser users
-- `[dir_auth]`: path aliases shown to authenticated users
-- `[auth]`: authentication and path-restriction policy
-- `[disk_cache]`: platform-specific cache directory and size
-- `[neuroglancer]`: viewer URL and advertised chunk strategy
-- loader sections: generated-pyramid locations and per-source generation limits
-
-Example path configuration:
-
-```ini
-[dir_anon]
-world = /h20/Public/world
-public_s3 = s3://example-public-bucket/data
-
-[dir_auth]
-research = /h20/Restricted/research
-```
-
-Viewer endpoints currently construct links from the complete configured path
-map so that generated links are shareable. Treat `/ng/`, `/osd/`, and
-`/omezarr/` as public data-serving routes unless an upstream proxy or an
-application authorization layer restricts them. Do not register sensitive
-datasets until the deployment’s access policy has been verified.
-
-### Disk cache
-
-Leave the platform location empty to disable disk caching:
-
-```ini
-[disk_cache]
-location_win
-location_unix = /fast/cache/brainpi
-cacheSizeGB = 100
-evictionPolicy = least-recently-used
-shards = 16
-timeout = 0.010
-```
-
-Use a native absolute path for the host operating system. A Windows path such
-as `Z:\cache` is a relative filename on Linux and will create an unintended
-directory inside the working tree.
-
-## Running
-
-Development server:
-
-```bash
-python BrAinPI/brain_api_main.py
-```
-
-Gunicorn example:
-
-```bash
-gunicorn \
-  --worker-class gthread \
-  -b 0.0.0.0:5001 \
-  --chdir BrAinPI \
-  wsgi:app \
-  -w 8 \
-  --threads 2 \
-  --timeout 1800
-```
-
-Worker count, cache size and file-descriptor limits must be sized for the
-deployment. Each worker owns its loader objects; the configured disk cache is
-shared. Run BrAinPI behind a reverse proxy in production and configure request
-timeouts and maximum response sizes for large chunks.
-
-### Open-file limits and cache errors
-
-BrAinPI workers can hold many dataset files, network sockets, and DiskCache
-database connections open. A per-process open-file limit (`nofile`) of 1024
-may be insufficient for production workloads. Check the actual worker's limit
-and usage on the machine running the service, rather than relying only on the
-limit reported by an unrelated terminal:
-
-```bash
-pgrep -af gunicorn
-# Replace 12345 with an actual Gunicorn worker PID.
-prlimit --pid 12345 --nofile
-ls /proc/12345/fd | wc -l
-```
-
-For a plain/native Linux deployment started from a shell, raise the limit
-before starting Python or Gunicorn in that same shell:
-
-```bash
-ulimit -Sn
-ulimit -Hn
-ulimit -n 500000
-# Start the application using the commands above in this shell.
-```
-
-The shell's hard limit must permit this value; changing an unrelated shell
-does not update an already-running service. For a systemd-managed deployment,
-set `LimitNOFILE=500000` in the unit's `[Service]` section, reload the systemd
-configuration, and restart the service. Choose a limit appropriate for the
-deployment and investigate steadily growing descriptor usage rather than
-only increasing the limit.
-
-Descriptor exhaustion normally reports `[Errno 24] Too many open files`.
-DiskCache also suppresses directory-creation `OSError` exceptions before
-attempting to write a `.val` cache file. A subsequent `[Errno 2] No such file
-or directory` therefore does not identify the original failure by itself.
-If cache errors persist, also check free disk space, free inodes (`df -h` and
-`df -i` on the cache path), directory permissions, mount availability, and
-external cleanup jobs. Do not delete the active cache directory while workers
-are using it. For the container limit, see the Docker instructions below.
-
-Gunicorn workers never start a Neuroglancer frontend. The default settings point
-to a local frontend, which must be run as one standalone process alongside the
-plain/native BrAinPI service:
-
-```bash
-python BrAinPI/neuroglancer_server.py
-```
-
-Google's hosted viewer remains optional: set `BRAINPI_NG_PUBLIC_URL`, or the
-fallback `[neuroglancer] url`, to `https://neuroglancer-demo.appspot.com/` when
-a local frontend is not wanted.
-For access from another machine, bind the standalone frontend to `0.0.0.0` and
-set `url` to the server's browser-reachable hostname instead of `localhost`.
-
-## Docker
-
-The repository includes a Linux-based Docker deployment that runs on Docker
-Engine and Docker Desktop for Linux, macOS, and Windows. Configuration, source
-datasets, generated pyramids, and disk cache are kept outside the image.
-The Docker image starts Gunicorn with 8 workers and 2 threads per worker.
-Adjust concurrency to the memory available for the datasets being served.
-On ARM64, the builder uses signed plain `char` so the pinned
-`v3d-py-helper` C++ extension compiles. It also provides HDF5 build libraries
-if `h5py` needs to be built from source; the pinned `h5py` version has a
-Python 3.12 ARM64 wheel.
-
-Create the local environment file and edit the data path and secret:
-
-```bash
-cp .env.example .env
-cp docker/template_settings.ini docker/settings.ini
-cp docker/template_groups.ini docker/groups.ini
-```
-
-Edit the renamed INI files for the deployment. They are ignored by Git, just
-like the plain/native `BrAinPI/settings.ini` and `BrAinPI/groups.ini` files.
-The Docker settings template exposes no dataset roots by default. Add only the
-container paths that this deployment is intended to serve, for example:
-
-```ini
-[dir_anon]
-public = /data/Public
-
-[dir_auth]
-protected = /data/Protected
-```
-
-`BRAINPI_DATA_DIR` must be an existing absolute host path. On Docker Desktop,
-make sure that directory is shared with Docker. The container mounts source
-datasets read-only at `/data`; generated pyramids and cache entries use Docker
-named volumes.
-
-The `brainpi` Compose service sets both soft and hard `nofile` limits to
-**500000 per process** by default. This applies to Gunicorn workers and is
-independent of the shell limit on the host. Override it in `.env` if needed:
-
-```dotenv
-BRAINPI_NOFILE=500000
-```
-
-Apply the configuration to an existing deployment by recreating the BrAinPI
-container; no image rebuild is required for this limit change:
-
-```bash
-docker compose up -d --force-recreate brainpi
-docker compose exec brainpi sh -c 'ulimit -Sn; ulimit -Hn'
-```
-
-When using the IPA certificate mount, keep the same Compose file selection:
-
-```bash
-docker compose -f compose.yaml -f compose.ipa.yaml up -d --force-recreate brainpi
-docker compose -f compose.yaml -f compose.ipa.yaml exec brainpi sh -c 'ulimit -Sn; ulimit -Hn'
-```
-
-The two checks should print the configured value for the soft and hard limits.
-A plain `docker compose restart` does not apply changed resource limits. If
-Docker rejects the requested value, check the Docker daemon/host (or Docker
-Desktop VM) limits with the administrator. Compose's
-[`ulimits` setting](https://docs.docker.com/reference/compose-file/services/#ulimits)
-controls runtime limits; this setting is not passed to the application as an
-environment variable. The separate Neuroglancer service retains its existing
-limits.
-
-JP2 pyramid generation stages the entire decoded image in memory. The decoded
-image can be much larger than the `.jp2` file, so even the default worker count
-may exceed Docker's memory limit for large sources. Repeated worker `SIGKILL`
-messages during JP2 conversion are a sign to check Docker memory allocation
-and conversion concurrency. The per-source generation size limit checks the
-compressed file size, not decoded memory use.
-
-Generated pyramids have no automatic store quota and are never deleted by the
-application. `pyramids_images_allowed_generation_size_gb` limits only the size
-of an individual source eligible for on-demand generation. Workers derive each
-artifact path directly from the source identity and check that path on demand;
-they do not scan the pyramid volume at startup. Administrators must monitor and
-maintain the `brainpi-pyramids` volume. Stop the BrainPI service before removing
-generated artifacts so every Gunicorn worker releases its open dataset objects,
-then start it again after maintenance:
-
-```bash
-docker compose stop brainpi
-docker volume ls
-# Inspect and remove only the intended generated pyramid artifacts.
-docker compose start brainpi
-```
-
-`docker compose down -v` deletes both named volumes and must not be used for
-routine pyramid maintenance. The disk cache remains separately bounded by its
-`[disk_cache]` LRU size setting.
-
-The default Docker deployment starts BrAinPI and one independently supervised
-local Neuroglancer frontend:
-
-```ini
-[neuroglancer]
-local_ip = 0.0.0.0
-local_port = 9999
-url = http://localhost:9999/v/base/
-```
-
-Build and start both services:
-
-```bash
-docker compose up --build -d
-docker compose ps
-curl http://localhost:5001/healthz
-curl http://localhost:9999/v/base/
-```
-
-Use a plain URL in the INI file; Markdown `[text](url)` syntax is invalid. If
-users open BrAinPI from other computers, replace `localhost` with the server's
-hostname or public HTTPS URL. Both services reuse the same `brainpi:local`
-image. BrAinPI/Gunicorn never starts a frontend process automatically. To use
-Google's hosted viewer instead, set this in `.env`:
-
-```dotenv
-BRAINPI_NG_PUBLIC_URL=https://neuroglancer-demo.appspot.com/
-```
-
-The local Compose service is not selected by that URL, so stop an existing one
-with `docker compose stop neuroglancer`. On a fresh hosted-viewer deployment,
-`docker compose up --build -d brainpi` starts only BrAinPI. A bare
-`docker compose up` always starts both services and would leave an unused local
-viewer running while generated links continue to use the hosted viewer.
-
-### Docker ports and public URLs
-
-Listening ports and browser-facing URLs serve different purposes. A listening
-port controls where a process accepts connections; a public URL is written into
-links returned to the browser. Docker adds a host-to-container port mapping
-between them:
-
-| Setting | Purpose | Default |
-|---|---|---|
-| Gunicorn bind in `Dockerfile` | BrAinPI port inside the container; normally do not change it | `0.0.0.0:5001` |
-| `BRAINPI_PORT` in `.env` | Publishes a host port to container port `5001` | `5001:5001` |
-| `BRAINPI_PUBLIC_URL` in `.env` | Browser-reachable BrAinPI base URL; overrides `[app] url` | `http://localhost:5001/` |
-| `[neuroglancer] local_ip` | Standalone viewer bind address inside its container | `0.0.0.0` |
-| `[neuroglancer] local_port` | Standalone viewer listening port inside its container; normally do not change it | `9999` |
-| `BRAINPI_NG_PORT` in `.env` | Publishes a host port to container port `9999` | `9999:9999` |
-| `BRAINPI_NG_PUBLIC_URL` in `.env` | Browser-reachable viewer base URL; overrides `[neuroglancer] url` | `http://localhost:9999/v/base/` |
-
-The two `.env` port variables only change Docker's host-side published ports.
-They do not rewrite either public URL. For example, publishing BrAinPI on host
-port 8000 requires both values below:
-
-```dotenv
-BRAINPI_PORT=8000
-BRAINPI_PUBLIC_URL=http://localhost:8000/
-```
-
-Publishing the local viewer on host port 10999 keeps its container listener on
-9999 and requires the matching public URL:
-
-```dotenv
-BRAINPI_NG_PORT=10999
-BRAINPI_NG_PUBLIC_URL=http://localhost:10999/v/base/
-```
-
-`localhost` means the computer running the browser, not necessarily the Docker
-host. When other computers use the deployment, set both public URLs to a DNS
-name or IP address they can reach. Behind a TLS reverse proxy, use the external
-`https://` URLs and ports exposed by that proxy even though the containers keep
-listening internally on HTTP ports 5001 and 9999.
-
-Generated viewer links use `BRAINPI_NG_PUBLIC_URL` (or its INI fallback) for
-the frontend and embed `BRAINPI_PUBLIC_URL` as the precomputed data source. The
-user's browser connects to both addresses directly. Do not put Compose-only DNS
-names such as `http://brainpi:5001/` or `http://neuroglancer:9999/` in these
-public URL settings; those names resolve between containers but not in a normal
-browser.
-
-Docker configuration templates are in `docker/template_settings.ini` and
-`docker/template_groups.ini`. Copy and rename them as shown above, then fill in
-deployment-specific values. The templates intentionally contain no LDAP
-server, domain, usernames, group membership, or enabled dataset roots. The
-service starts with empty `[dir_anon]` and `[dir_auth]` sections, but no data is
-listed until deployment-specific aliases are added. Without IPA or AD-LDAP settings,
-login and authenticated paths remain unavailable. Keep `[all]` in the groups
-file even when it has no members. `BRAINPI_SETTINGS_FILE` and
-`BRAINPI_GROUPS_FILE` in `.env` may point Compose at differently named host
-files when needed.
-
-FreeIPA authentication can be enabled in the settings file's `[auth]` section:
-
-```ini
-ipa_auth = True
-ipa_server = ipa.example.org
-ipa_use_tls = True
-ipa_ca_file = /etc/ipa/ca.crt
-```
-
-IPA is attempted first. A successful IPA login does not require AD-LDAP settings.
-Rejected credentials or an IPA connection failure fall back to AD-LDAP when
-`domain_server`, `domain_port`, and `domain_name` are configured; otherwise the
-login is rejected. IPA is disabled by default, preserving existing AD-LDAP login.
-The IPA base DN is derived from the server hostname (for example,
-`ipa.example.org` becomes `dc=example,dc=org`). `ipa_use_tls = True` uses LDAPS
-on port 636; `False` uses LDAP on port 389. `ipa_ca_file` is optional and, when
-set, enables certificate validation using that CA bundle.
-
-For Docker deployments using the IPA CA, place the certificate at
-`docker/ca.crt` and enable the optional Compose file:
-
-```bash
-docker compose -f compose.yaml -f compose.ipa.yaml up -d brainpi
-```
-
-This mounts the certificate read-only at `/etc/ipa/ca.crt`; set
-`ipa_use_tls = True` and `ipa_ca_file = /etc/ipa/ca.crt` in the deployment's
-settings file. For a different host certificate path, set `BRAINPI_IPA_CA_FILE`
-in `.env`. A missing host file makes deployment fail rather than creating an
-empty directory. The certificate is ignored by Git and must be supplied on
-each deployment machine. Use the same two `-f` arguments for subsequent
-Compose operations on this deployment, including updates and log inspection:
-
-```bash
-docker compose -f compose.yaml -f compose.ipa.yaml logs -f --tail=100 brainpi
-```
-
-Deployments without the CA mount continue to use `docker compose up -d`.
-Set `ipa_auth = False` when IPA is unused. For IPA deployments without this
-mount, use another readable CA path or leave `ipa_ca_file` empty; the current
-implementation skips certificate validation when that setting is empty.
-
-Compose also supplies these application-level environment variables inside the
-containers:
-
-- `BRAINPI_SETTINGS` and `BRAINPI_GROUPS`: select configuration files inside
-  the container; they do not modify INI values.
-- `BRAINPI_SECRET_KEY`: overrides the Flask session and signed-URL secret.
-- `BRAINPI_PUBLIC_URL`: overrides `[app] url` with the browser-reachable base
-  URL.
-- `BRAINPI_NG_PUBLIC_URL`: overrides `[neuroglancer] url` with the
-  browser-reachable frontend base URL.
-- `BRAINPI_CACHE_DIR`: overrides the Unix disk-cache path.
-- `BRAINPI_PYRAMIDS_DIR`: overrides all generated-pyramid roots beneath one
-  writable parent directory.
-- `BRAINPI_LOG_FILE`: optional file-log override. Plain production startup
-  defaults to `logfile.log`; Compose passes an empty value so Docker uses its
-  collected stdout logs instead.
-
-`BRAINPI_PORT` and `BRAINPI_NG_PORT` are interpreted by Compose itself and are
-not passed to the application as configuration overrides.
-
-For production, put the services behind a TLS reverse proxy and set both public
-URLs to their browser-reachable HTTPS addresses. Do not add protected datasets
-until authorization has been verified for the viewer-facing data endpoints.
-
-## Main endpoints
-
-| Endpoint | Purpose |
-|---|---|
-| `/browser/` | Auth-aware HTML browser for configured path aliases. |
-| `/browser_json/` | JSON representation of browser data. |
-| `/path_to_html_options/?path=<source>` | Return every viewer URL BrAinPI can construct for a source path. |
-| `/ng/<alias>/<dataset>` | Redirect to Neuroglancer or serve precomputed `info` and raw chunks. |
-| `/osd/<alias>/<dataset>` | Render OpenSeadragon or serve PNG tiles. `/osd/.../info` is intentionally unsupported. |
-| `/omezarr/<alias>/<dataset>.<variant>.ome.zarr` | Present the source as a virtual OME-Zarr v2 store. |
-| `/ng_supported_filetypes/` | Return extensions accepted by the Neuroglancer endpoint. |
-| `/opsd_supported_filetypes/` | Return extensions accepted by the OpenSeadragon endpoint. |
-
-### Link discovery
-
-The physical path passed to `path_to_html_options` must fall under a configured
-`[dir_anon]` or `[dir_auth]` root.
-
-```text
-http://localhost:5001/path_to_html_options/?path=/h20/Public/world/BrainA.ims
-```
-
-The response contains nullable entries. A null value means that the source is
-missing or the corresponding viewer does not support its type.
-
-| JSON key | Meaning |
-|---|---|
-| `neuroglancer` | Browser link for Neuroglancer. |
-| `neuroglancer_metadata` | Neuroglancer precomputed `info` URL. |
-| `openseadragon` | OpenSeadragon browser link. |
-| `omezarr` | Standard virtual OME-Zarr view. |
-| `omezarr_metadata` | Root `.zattrs` URL for the standard view. |
-| `omezarr_validator` | OME-NGFF validator URL for the standard view. |
-| `omezarr_8bit` | Virtual OME-Zarr view converted to `uint8`. |
-| `omezarr_8bit_metadata` | Root `.zattrs` URL for the 8-bit view. |
-| `omezarr_8bit_validator` | Validator URL for the 8-bit view. |
-| `omezarr_neuroglancer_optimized` | OME-Zarr view whose chunks include all logical channels. |
-| `omezarr_neuroglancer_optimized_validator` | Validator URL for the channel-combined view. |
-| `omezarr_8bit_neuroglancer_optimized` | Channel-combined and `uint8` OME-Zarr view. |
-| `omezarr_8bit_neuroglancer_optimized_validator` | Validator URL for the combined 8-bit view. |
-| `path` | Normalized source path supplied by the caller. |
-
-## Virtual OME-Zarr behavior
-
-The endpoint exposes a Zarr v2 group with OME multiscales metadata:
-
-```text
-<dataset>.ome.zarr/
-├── .zgroup
-├── .zattrs
-├── .zmetadata
-├── 0/.zarray
-├── 0/<t>.<c>.<z>.<y>.<x>
-└── 1/...
-```
-
-A virtual chunk shape can be placed before the OME-Zarr suffix:
-
-```text
-sample.ims.32x128x128.ome.zarr
-```
-
-The token represents `ZYX`; singleton `T` and `C` dimensions are added. Custom
-uncompressed chunks larger than 256 MiB are rejected.
-
-### 8-bit conversion
-
-The 8-bit variant converts pixels from the source dtype, independent of the
-minimum or maximum values in an individual chunk:
-
-- `uint8` is unchanged
-- booleans map to 0 or 255
-- wider unsigned integers are reduced by bit depth
-- negative signed integers clip to zero and the positive range maps to 8-bit
-- floating-point values are clipped to `[0, 1]`, with non-finite values handled
-
-OME channel metadata uses the same conversion rule as pixel chunks. This keeps
-equal source values consistent across chunk boundaries.
-
-## Neuroglancer behavior
-
-The `/ng/` endpoint creates precomputed `info` metadata and raw chunks on
-demand. Source `float16` and `float64` arrays are advertised and encoded as
-`float32`, keeping metadata and payload bytes consistent.
-
-When complete OMERO channel windows are available, the generated shader reuses
-them. Otherwise, the lowest resolution is sampled and the 1st/99th percentiles
-become the initial display window. Packed RGB sources receive an RGB shader;
-ordinary channels receive independent visibility, LUT, gamma and color controls.
-
-Native `.pcd` annotation and segmentation datasets are served without image
-conversion. Image-style `.pcd` datasets currently require raw encoding.
-
-## OpenSeadragon behavior
-
-OpenSeadragon receives PNG tiles. Non-`uint8` input is converted according to
-its dtype, not per-tile extrema, so identical source values produce identical
-PNG values in every tile. Channel display controls use OMERO windows when
-available and sampled 1st/99th percentile defaults otherwise.
-
-There is no public OpenSeadragon metadata endpoint. The browser page receives
-the internal channel and pyramid information it needs while being rendered.
-
-## Cache identity and invalidation
-
-Local single-file datasets use `inode + modification time` as their open-dataset
-identity. Loader slice caches use:
-
-```text
-file_ino + modification_time + str((resolution, t, c, z, y, x))
-```
-
-S3 datasets use their URL because no local inode exists. Updating data in place
-at the same S3 URL, or modifying a file inside a directory-backed dataset
-without changing the directory timestamp, may require explicit cache clearing
-or a worker restart.
-
 ## License
 
-BrAinPI is distributed under the BSD 3-Clause License.
+BrAinPI is distributed under the [BSD 3-Clause License](LICENCE).

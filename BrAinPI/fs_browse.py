@@ -998,6 +998,8 @@ def initiate_browseable(app,config):
         Flask: The modified Flask application with the added routes.
     """
     from brain_api_main import login_manager
+    from storage_status import can_view_storage, setup_storage_status
+    setup_storage_status(app, config)
     
     # base entrypoint must always begin and end with '/' --> /my_entry/
     base = '/browser/'
@@ -1023,6 +1025,7 @@ def initiate_browseable(app,config):
                 'fl_browse_table_dir.html',
                 current_path={**page_description, **current_path}, 
                 user=auth.user_info(),
+                can_view_storage=can_view_storage(),
                 gtag=config.settings.get('GA4', 'gtag')
                 )
         else:

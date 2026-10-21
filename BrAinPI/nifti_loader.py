@@ -29,6 +29,7 @@ from loader_axes import (
 )
 from loader_indexing import normalize_data_key
 import gc
+from contextlib import nullcontext
 from utils import (
     calculate_hash,
     loader_cache_key,
@@ -36,18 +37,22 @@ from utils import (
 )
 
 
-def run_generation_subprocess(inp, out, time_axe):
+def run_generation_subprocess(inp, out, time_axe, storage_manager=None):
     """Run NIfTI conversion in a fresh interpreter, safe from gthread forks."""
     worker = os.path.join(os.path.dirname(__file__), "nifti_generation_worker.py")
     command = [sys.executable, worker, os.fspath(inp), os.fspath(out)]
     if time_axe:
         command.append("--no-time")
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    lease = storage_manager.subprocess_lease() if storage_manager else nullcontext(None)
+    with lease as lease_fd:
+        options = {"pass_fds": (lease_fd,)} if lease_fd is not None else {}
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            **options,
+        )
     if completed.returncode != 0:
         details = completed.stderr.strip() or completed.stdout.strip()
         message = (
@@ -74,6 +79,7 @@ class nifti_zarr_loader:
         verbose=None,
         squeeze=True,
         cache=None,
+        storage_manager=None,
     ):
         """
         Initialize the nifti_zarr_loader object.
@@ -95,6 +101,7 @@ class nifti_zarr_loader:
             cache (object, optional): Cache object for storing slices. Defaults to None.
         """
         self.source_path = os.fspath(location)
+        self.storage_manager = storage_manager
         self.pyramid_generation_allowed = pyramid_generation_allowed
         self.active_path = self.source_path
         self.pyramid_path = None
@@ -451,16 +458,20 @@ class nifti_zarr_loader:
                         os.remove(file_temp)
                     logger.success(f"==> Pyramid image is building...")
                     start_time = time.time()
-                    run_generation_subprocess(
-                        nifti_file_location,
-                        file_temp,
-                        time_axe,
-                    )
+                    storage = getattr(self, "storage_manager", None)
+                    if storage is None:
+                        run_generation_subprocess(nifti_file_location, file_temp, time_axe)
+                    else:
+                        run_generation_subprocess(nifti_file_location, file_temp, time_axe,
+                                                  storage_manager=storage)
                     logger.success("Process complete!")
 
                     end_time = time.time()
                     execution_time = end_time - start_time
-                    os.replace(file_temp, pyramid_image_location)
+                    if storage is None:
+                        os.replace(file_temp, pyramid_image_location)
+                    else:
+                        storage.publish(file_temp, pyramid_image_location)
                     logger.success(
                         f"{nifti_file_location} connected to ==> {pyramid_image_location}"
                     )
@@ -485,6 +496,11 @@ class nifti_zarr_loader:
             gc.collect()
             logger.success("Resources cleaned up.")
             
+
+    def close(self):
+        """Release generated arrays, their stores, and the native source."""
+        from pyramid_storage import close_resources
+        close_resources(self)
 
     def zarr_store_type(self, path):
         """

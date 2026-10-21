@@ -60,6 +60,9 @@ APP_NAME = settings.get('app','name')
 # Establish FLASK app
 app = flask.Flask(__name__,template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config["DEBUG"] = settings.getboolean('app','debug')
+if config.pyramid_storage is not None:
+    from pyramid_storage import StorageMiddleware
+    app.wsgi_app = StorageMiddleware(app.wsgi_app, config)
 
 ## Initiate endpoints in other modules and attach them to app
 ## New endpoints can be added here

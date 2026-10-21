@@ -61,6 +61,7 @@ class tiff_loader:
         ResolutionLevelLock = None, 
         squeeze = True,
         cache=None,
+        storage_manager=None,
     ) -> None:
         """
         Initialize the tiff_loader object.
@@ -76,6 +77,7 @@ class tiff_loader:
             squeeze (bool, optional): Whether to squeeze singleton dimensions. Defaults to True.
         """
         self.cache = cache
+        self.storage_manager = storage_manager
         self.squeeze = squeeze
         # self.settings = settings
         self.source_path = os.fspath(file_location)
@@ -608,7 +610,11 @@ class tiff_loader:
                     logger.success(
                         f"actual pyramid generation {self.source_path} time:{execution_time - load_time}"
                     )
-                    os.replace(file_temp, pyramid_image_location)
+                    storage = getattr(self, "storage_manager", None)
+                    if storage is None:
+                        os.replace(file_temp, pyramid_image_location)
+                    else:
+                        storage.publish(file_temp, pyramid_image_location)
                     logger.success(
                         f"{self.source_path} connected to ==> {pyramid_image_location}"
                     )
@@ -629,6 +635,11 @@ class tiff_loader:
             if "data" in locals():
                 del data
             logger.success("Resources cleaned up.")
+
+    def close(self):
+        """Release TIFF readers and any Zarr stores sharing their handles."""
+        from pyramid_storage import close_resources
+        close_resources(self)
 
     def axe_compatibility_check(self):
         """

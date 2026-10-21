@@ -139,6 +139,30 @@ button.entry { width: 100%; padding: 0; border: 0; background: transparent; curs
   .browser-footer .footer-path { display: none; }
 }
 
+.storage-nav { position: relative; }
+.storage-trigger { display: flex; align-items: center; gap: 7px; border: 1px solid rgba(169,189,196,.2); margin-left: 6px; background: transparent; white-space: nowrap; }
+.storage-trigger[aria-expanded="true"] { background: rgba(255,255,255,.08); }
+.storage-trigger:disabled { opacity: .65; cursor: wait; }
+.storage-trigger:focus-visible { outline: 2px solid #8ddbc9; outline-offset: 3px; }
+.storage-popover { position: absolute; top: calc(100% + 14px); right: 0; width: 330px; max-width: calc(100vw - 32px); padding: 20px; color: var(--ink-800); background: #fff; border: 1px solid var(--ink-200); border-radius: 14px; box-shadow: var(--shadow); }
+.storage-popover[hidden] { display: none; }
+.storage-popover-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.storage-popover-heading strong { color: var(--ink-950); font-size: .9rem; }
+.storage-popover-heading > span { color: #6c808b; font-size: .65rem; white-space: nowrap; }
+.storage-usage-row + .storage-usage-row { margin-top: 18px; }
+.storage-usage-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: .8rem; }
+.storage-usage-label > strong { color: var(--ink-950); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.storage-usage-track { height: 5px; margin: 9px 0 5px; overflow: hidden; background: #eaf1f0; border-radius: 4px; }
+.storage-usage-track > span { display: block; width: 0; height: 100%; background: var(--accent); border-radius: inherit; transition: width .2s; }
+.storage-usage-row > small { color: #6c808b; font-size: .7rem; }
+.storage-management-note { margin: 17px 0 0; padding: 10px 12px; color: var(--ink-700); background: #f0f7f4; border-radius: 8px; font-size: .72rem; line-height: 1.5; }
+.storage-status-message { margin: 17px 0 0; padding-top: 12px; border-top: 1px solid #eaf1f0; color: #6c808b; font-size: .7rem; line-height: 1.5; }
+.storage-status-message[data-error="true"] { color: #aa3a3a; }
+@media (max-width: 991px) {
+  .storage-trigger { margin: 8px 0 0; }
+  .storage-popover { position: static; width: 100%; max-width: none; margin-top: 10px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }

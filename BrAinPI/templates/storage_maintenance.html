@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b2536">
+    <title>Storage maintenance · BrAinPI</title>
+    <link rel="icon" type="image/png" href="{{ static_prefix }}/images/brainpi_icon.png">
+    <link rel="stylesheet" href="{{ static_prefix }}/styles/app-theme.css">
+    <link rel="stylesheet" href="{{ static_prefix }}/styles/storage-maintenance.css?v=1">
+</head>
+<body class="status-shell maintenance-shell">
+    <div class="status-brand" aria-label="BrAinPI">
+        <img class="brand-icon" src="{{ static_prefix }}/images/brainpi_icon.png" alt="" aria-hidden="true">
+        <strong>BrAinPI</strong>
+    </div>
+
+    <main class="status-card maintenance-card" aria-labelledby="maintenance-title">
+        <div class="status-content">
+            <div class="maintenance-icon" aria-hidden="true">
+                <svg width="34" height="34" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="16" cy="8" rx="10" ry="4"/>
+                    <path d="M6 8v8c0 2.2 4.5 4 10 4s10-1.8 10-4V8M6 16v8c0 2.2 4.5 4 10 4s10-1.8 10-4v-8"/>
+                </svg>
+            </div>
+            <p class="status-kicker">Automatic storage management</p>
+            <h1 id="maintenance-title">Making room for<br>your images.</h1>
+            <p class="maintenance-description">BrAinPI is clearing older generated images to keep storage within its limit. Your original datasets are preserved.</p>
+            <div class="loading-track" role="progressbar" aria-label="Waiting for storage maintenance"><span></span></div>
+            <p id="maintenance-message" class="status-copy">Please try again shortly. This page will stay here until you choose to retry.</p>
+            <button id="maintenance-retry" class="maintenance-retry" type="button">{{ retry_label }}<span aria-hidden="true">↗</span></button>
+            <noscript><p class="status-copy">Refresh this page to try again.</p></noscript>
+        </div>
+    </main>
+
+    <p class="status-footnote">The page will not refresh or open automatically.</p>
+    <script src="{{ static_prefix }}/js/storage-maintenance.js?v=2" defer></script>
+</body>
+</html>

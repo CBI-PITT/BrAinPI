@@ -64,6 +64,7 @@ coverage.xml
 
 # Django stuff:
 *.log
+.brainpi-storage/
 local_settings.py
 
 # Flask instance folder

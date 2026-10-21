@@ -22,6 +22,7 @@ services:
       BRAINPI_SECRET_KEY: ${BRAINPI_SECRET_KEY:?Set BRAINPI_SECRET_KEY in .env}
       BRAINPI_CACHE_DIR: /var/cache/brainpi
       BRAINPI_PYRAMIDS_DIR: /var/lib/brainpi/pyramids
+      BRAINPI_PYRAMID_LIMIT_GB: ${BRAINPI_PYRAMID_LIMIT_GB:-}
       # Docker captures stdout. An explicit empty value disables the optional
       # application logfile while plain/native startup retains logfile.log.
       BRAINPI_LOG_FILE: ""

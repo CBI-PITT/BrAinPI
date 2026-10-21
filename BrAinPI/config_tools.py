@@ -76,6 +76,7 @@ def get_config(file='settings.ini',allow_no_value=True):
         "BRAINPI_PUBLIC_URL": ("app", "url"),
         "BRAINPI_NG_PUBLIC_URL": ("neuroglancer", "url"),
         "BRAINPI_CACHE_DIR": ("disk_cache", "location_unix"),
+        "BRAINPI_PYRAMID_LIMIT_GB": ("pyramid_store", "max_size_gb"),
     }
     for env_name, (section, option) in environment_overrides.items():
         value = os.environ.get(env_name)
@@ -84,9 +85,19 @@ def get_config(file='settings.ini',allow_no_value=True):
                 config.add_section(section)
             config.set(section, option, value)
 
-    pyramid_root = os.environ.get("BRAINPI_PYRAMIDS_DIR")
-    if pyramid_root:
+    pyramid_root = os.environ.get("BRAINPI_PYRAMIDS_DIR") or config.get(
+        "pyramid_store", "path", fallback=None
+    )
+    if pyramid_root and pyramid_root.strip():
+        pyramid_root = os.path.expanduser(pyramid_root.strip())
+        # Resolve relative roots against the settings file, not the working
+        # directory: brain_api_main changes cwd during application startup.
+        if not os.path.isabs(pyramid_root):
+            pyramid_root = os.path.join(os.path.dirname(file_path), pyramid_root)
         pyramid_root = os.path.abspath(pyramid_root)
+        if not config.has_section("pyramid_store"):
+            config.add_section("pyramid_store")
+        config.set("pyramid_store", "path", pyramid_root)
         pyramid_locations = {
             "tif_loader": os.path.join(pyramid_root, "tif"),
             "nifti_loader": os.path.join(pyramid_root, "nifti"),
@@ -96,6 +107,8 @@ def get_config(file='settings.ini',allow_no_value=True):
             if not config.has_section(section):
                 config.add_section(section)
             config.set(section, "pyramids_images_store", path)
+    elif config.has_option("pyramid_store", "path"):
+        raise ValueError("[pyramid_store] path must not be empty")
     return config
 
 
@@ -130,6 +143,22 @@ class config:
         self.settings = get_config('settings.ini')
         from cache_tools import get_cache
         self.cache = get_cache()
+        from pyramid_storage import PyramidStorage
+        self.pyramid_storage = PyramidStorage.from_settings(self.settings)
+
+    def close_datasets(self):
+        """Called only after the request barrier has drained this worker."""
+        from pyramid_storage import close_resources
+        for key, dataset in list(self.opendata.items()):
+            close = getattr(dataset, "close", None)
+            if callable(close):
+                close()
+            else:
+                close_resources(dataset)
+            del self.opendata[key]
+        self.opendata_set.clear()
+        with self._dataset_locks_guard:
+            self._dataset_locks.clear()
 
     def __del__(self):
             if self.cache is not None:
@@ -234,6 +263,7 @@ class config:
             import tiff_loader
             self.opendata[key] = tiff_loader.tiff_loader(
                 dataPath,
+                storage_manager=self.pyramid_storage,
                 pyramid_generation_allowed=True,
                 pyramids_images_allowed_generation_size_gb=self.settings.get(
                     "tif_loader", "pyramids_images_allowed_generation_size_gb"
@@ -258,6 +288,7 @@ class config:
             import nifti_loader
             self.opendata[key] = nifti_loader.nifti_zarr_loader(
                 dataPath,
+                storage_manager=self.pyramid_storage,
                 pyramid_generation_allowed=True,
                 pyramids_images_allowed_generation_size_gb=self.settings.get(
                     "nifti_loader", "pyramids_images_allowed_generation_size_gb"
@@ -274,6 +305,7 @@ class config:
             import jp2_loader
             self.opendata[key] = jp2_loader.jp2_loader(
                 dataPath,
+                storage_manager=self.pyramid_storage,
                 pyramid_generation_allowed=True,
                 pyramids_images_allowed_generation_size_gb=self.settings.get(
                     "jp2_loader", "pyramids_images_allowed_generation_size_gb"

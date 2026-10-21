@@ -4,8 +4,15 @@ BrAinPI documentation
 BrAinPI is a Flask service for browsing multiscale microscopy datasets and
 presenting them through Neuroglancer, OpenSeadragon, and virtual OME-Zarr v2
 endpoints. The repository `README
-<https://github.com/CBI-PITT/BrAinPI/blob/main/README.md>`_ contains installation,
-configuration, deployment, endpoint, cache, and validation guidance.
+<https://github.com/CBI-PITT/BrAinPI/blob/main/README.md>`_ contains installation
+and startup guidance. Detailed operational guides are available in the repository:
+
+* `Deployment and troubleshooting
+  <https://github.com/CBI-PITT/BrAinPI/blob/main/docs/deployment.md>`_
+* `Storage management
+  <https://github.com/CBI-PITT/BrAinPI/blob/main/docs/storage.md>`_
+* `Viewer and API reference
+  <https://github.com/CBI-PITT/BrAinPI/blob/main/docs/viewer-reference.md>`_
 
 Core modules
 ------------
